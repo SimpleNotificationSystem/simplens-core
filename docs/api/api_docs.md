@@ -1,6 +1,6 @@
 # Backend Notification Service API
 
-This document describes the Notification Service API for sending single and batch notifications (EMAIL and WHATSAPP) and the webhook format for delivery callbacks.
+This document describes the Notification Service API for sending single and batch notifications (email and whatsapp) and the webhook format for delivery callbacks.
 
 ---
 
@@ -11,7 +11,7 @@ This document describes the Notification Service API for sending single and batc
   ```
   Authorization: Bearer <api_key>
   ```
-- Channel enum: `EMAIL`, `WHATSAPP`
+- Channel enum: `email`, `whatsapp`
 - `webhook_url` is used to receive asynchronous delivery updates for each notification.
 
 ---
@@ -31,18 +31,18 @@ Request Body:
   "request_id": "unique_request_id",
   "client_id": "unique_client_id",
   "client_name": "client_name", // optional
-  "channel": ["EMAIL", "WHATSAPP"],
+  "channel": ["email", "whatsapp"],
   "recipient": {
     "user_id": "user_id",
-    "email": "user@example.com", // optional (required for EMAIL)
-    "phone": "+15552223333" // optional (required for WHATSAPP)
+    "email": "user@example.com", // optional (required for email)
+    "phone": "+15552223333" // optional (required for whatsapp)
   },
   "content": {
-    "email": { // required when the channel is EMAIL
+    "email": { // required when the channel is email
         "message": "html content",
         "subject": "email subject",
     },
-    "whatsapp": { // required when the channel is WHATSAPP
+    "whatsapp": { // required when the channel is whatsapp
         "message": "string"
     }
   },
@@ -56,17 +56,17 @@ Request Body:
 | `request_id` | Yes | Unique identifier for this notification request |
 | `client_id` | Yes | Unique identifier for the client |
 | `client_name` | No | Optional client name |
-| `channel` | Yes | Array of channels: `EMAIL`, `WHATSAPP` |
+| `channel` | Yes | Array of channels: `email`, `whatsapp` |
 | `recipient` | Yes | Recipient object |
 | `recipient.user_id` | Yes | User identifier for tracking |
-| `recipient.email` | Conditional | Required if channel includes EMAIL |
-| `recipient.phone` | Conditional | Required if channel includes WHATSAPP |
+| `recipient.email` | Conditional | Required if channel includes email |
+| `recipient.phone` | Conditional | Required if channel includes whatsapp |
 | `content` | Yes | Content object containing channel-specific message data |
-| `content.email` | Conditional | Required when channel includes EMAIL |
+| `content.email` | Conditional | Required when channel includes email |
 | `content.email.message` | Conditional | HTML content for the email body |
 | `content.email.subject` | Conditional | Subject line for the email |
-| `content.whatsapp` | Conditional | Required when channel includes WHATSAPP |
-| `content.whatsapp.message` | Conditional | Text content for the WhatsApp message |
+| `content.whatsapp` | Conditional | Required when channel includes whatsapp |
+| `content.whatsapp.message` | Conditional | Text content for the whatsapp message |
 | `scheduled_at` | No | ISO 8601 timestamp for scheduled delivery |
 | `webhook_url` | Yes | URL to receive delivery callbacks |
 
@@ -80,7 +80,7 @@ Responses:
 - 400 Bad Request — invalid payload (e.g., missing required fields, invalid email)
   ```json
   {
-    "message": "Validation error: recipient.email is required for channel EMAIL"
+    "message": "Validation error: recipient.email is required for channel email"
   }
   ```
 - 401 Unauthorized — invalid `api_key`
@@ -115,13 +115,13 @@ Request Body:
 {
   "client_id": "unique_client_id",
   "client_name": "client_name", // optional
-  "channel": ["EMAIL"], // ENUM: EMAIL, WHATSAPP — applies to all recipients
+  "channel": ["email"], // ENUM: email, whatsapp — applies to all recipients
   "content": {
-    "email": { // required when the channel is EMAIL
+    "email": { // required when the channel is email
         "message": "html content",
         "subject": "email subject",
     },
-    "whatsapp": { // required when the channel is WHATSAPP
+    "whatsapp": { // required when the channel is whatsapp
         "message": "string"
     }
   },
@@ -129,8 +129,8 @@ Request Body:
     {
       "request_id": "r-1", // unique per recipient for tracking
       "user_id": "user_id_1",
-      "email": "user1@example.com", // required for EMAIL
-      "phone": "+15551112222", // required for WHATSAPP
+      "email": "user1@example.com", // required for email
+      "phone": "+15551112222", // required for whatsapp
       "variables": { // variables will be injected into the template html content and whatsapp message
         "name": "Alice"
       }
@@ -153,18 +153,18 @@ Request Body:
 |-------|----------|-------------|
 | `client_id` | Yes | Unique identifier for the client |
 | `client_name` | No | Optional client name |
-| `channel` | Yes | Array of channels: `EMAIL`, `WHATSAPP` — applies to all recipients |
+| `channel` | Yes | Array of channels: `email`, `whatsapp` — applies to all recipients |
 | `content` | Yes | Content object containing channel-specific message data (shared by all recipients) |
-| `content.email` | Conditional | Required when channel includes EMAIL |
+| `content.email` | Conditional | Required when channel includes email |
 | `content.email.message` | Conditional | HTML content for the email body (supports variable injection) |
 | `content.email.subject` | Conditional | Subject line for the email |
-| `content.whatsapp` | Conditional | Required when channel includes WHATSAPP |
-| `content.whatsapp.message` | Conditional | Text content for the WhatsApp message (supports variable injection) |
+| `content.whatsapp` | Conditional | Required when channel includes whatsapp |
+| `content.whatsapp.message` | Conditional | Text content for the whatsapp message (supports variable injection) |
 | `recipients` | Yes | Array of recipient objects |
 | `recipients[].request_id` | Yes | Unique ID for tracking each recipient's notification |
 | `recipients[].user_id` | Yes | User identifier for tracking |
-| `recipients[].email` | Conditional | Required if channel includes EMAIL |
-| `recipients[].phone` | Conditional | Required if channel includes WHATSAPP |
+| `recipients[].email` | Conditional | Required if channel includes email |
+| `recipients[].phone` | Conditional | Required if channel includes whatsapp |
 | `recipients[].variables` | No | Key-value pairs to inject into the content template (e.g., `{"name": "Alice"}`) |
 | `scheduled_at` | No | ISO 8601 timestamp for scheduled delivery — applies to all recipients |
 | `webhook_url` | Yes | URL to receive delivery callbacks |
@@ -210,7 +210,7 @@ Webhook Request Body:
   "client_id": "unique_client_id",
   "notification_id": "unique id for each notification (created by the notification service)",
   "status": "DELIVERED", // ENUM: DELIVERED, FAILED
-  "channel": "EMAIL", // ENUM: EMAIL, WHATSAPP
+  "channel": "email", // ENUM: email, whatsapp
   "message": "Final delivery message (e.g., accepted by provider, or the error reason)",
   "occured_at": "timestamp of the actual event event"
 }
