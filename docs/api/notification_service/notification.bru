@@ -1,0 +1,44 @@
+meta {
+  name: notification
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/notification
+  body: json
+  auth: bearer
+}
+
+headers {
+  : 
+}
+
+auth:bearer {
+  token: {{NS_API_KEY}}
+}
+
+body:json {
+  {
+    "request_id": "b3a9e7c6-3c1f-4f4c-9a2e-6d9b1f4a8c21",
+    "client_id": "5f2c1d77-8a4b-4a5a-9b1c-2c3d4e5f6a7b",
+    "channel": ["email", "whatsapp"],
+    "recipient": {
+      "user_id": "user_12345",
+      "email": "user@example.com",
+      "phone": "+15551234567"
+    },
+    "content": {
+      "email": {
+        "subject": "Welcome to our service",
+        "message": "Hi there, thanks for signing up!"
+      },
+      "whatsapp": {
+        "message": "Thanks for signing up! Reply HELP for assistance."
+      }
+    },
+    "webhook_url": "https://yourapp.example.com/notifications/webhook",
+    "retry_count": 0,
+    "scheduled_at": "2025-12-05T10:30:00.000Z"
+  }
+}

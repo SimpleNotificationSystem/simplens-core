@@ -80,13 +80,15 @@ Responses:
 - 400 Bad Request — invalid payload (e.g., missing required fields, invalid email)
   ```json
   {
-    "message": "Validation error: recipient.email is required for channel email"
+    "message": "Validation error: recipient.email is required for channel email",
+    "error": Object
   }
   ```
 - 401 Unauthorized — invalid `api_key`
   ```json
   {
-    "message": "Unauthorized: invalid api_key"
+    "message": "Unauthorized: invalid api_key",
+
   }
   ```
 - 500 Internal Server Error — unexpected server error
@@ -98,7 +100,8 @@ Responses:
 
 Notes:
 - When the notification is processed and delivered (or fails), the service will POST a delivery callback to the provided `webhook_url` using the webhook format (see section 4).
-
+- When the scheduled date and time is in the past, it pushes the event to corresponding topics [email or whatsapp] rather than discarding the event
+- When the retry count is -ve or +ve, it always sets the retry_count to 0
 ---
 
 ## 3. POST /notification/batch (send same content to multiple recipients)
@@ -174,14 +177,13 @@ Responses:
   ```json
   {
     "message": "Batch accepted; notifications enqueued for processing",
-    "rejected_notifications": [] // array of request_ids that were rejected during validation
   }
   ```
 - 400 Bad Request — malformed request or validation errors. If possible, return the list of invalid notifications in `rejected_notifications`:
   ```json
   {
     "message": "Validation error: some notifications are invalid",
-    "rejected_notifications": ["request-id-1", "request-id-3"]
+    "error": Object
   }
   ```
 - 401 Unauthorized — invalid `api_key`
