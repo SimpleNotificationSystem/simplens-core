@@ -1,0 +1,55 @@
+meta {
+  name: batch notification
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/notification/batch
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{NS_API_KEY}}
+}
+
+body:json {
+  {
+    "client_id": "5f2c1d77-8a4b-4a5a-9b1c-2c3d4e5f6a7b",
+    "client_name": "Acme Corp",
+    "channel": ["email", "whatsapp"],
+    "content": {
+      "email": {
+        "subject": "Order Confirmation",
+        "message": "Your order has been confirmed."
+      },
+      "whatsapp": {
+        "message": "Your order confirmed! Reply TRACK to track your order."
+      }
+    },
+    "recipients": [
+      {
+        "request_id": "b3a9e7c6-3c1f-4f4c-9a2e-6d9b1f4a8c21",
+        "user_id": "user_001",
+        "email": "john@example.com",
+        "phone": "+15551234567",
+        "variables": { "order_id": "ORD123", "name": "John" }
+      },
+      {
+        "request_id": "c4b0f8d7-4d2g-5g5d-0b3d-3d4e5f6g7b8c",
+        "user_id": "user_002",
+        "email": "jane@example.com",
+        "phone": "+15559876543",
+        "variables": { "order_id": "ORD124", "name": "Jane" }
+      }
+    ],
+    "webhook_url": "https://yourapp.example.com/webhooks/notifications",
+    "scheduled_at": "2025-12-05T14:30:00.000Z"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -88,14 +88,13 @@ Responses:
   ```json
   {
     "message": "Unauthorized: invalid api_key",
-    "error": Object
+
   }
   ```
 - 500 Internal Server Error — unexpected server error
   ```json
   {
-    "message": "Internal Server Error. Please try again later.",
-    "error": Object
+    "message": "Internal Server Error. Please try again later."
   }
   ```
 
@@ -178,14 +177,13 @@ Responses:
   ```json
   {
     "message": "Batch accepted; notifications enqueued for processing",
-    "rejected_notifications": [] // array of request_ids that were rejected during validation
   }
   ```
 - 400 Bad Request — malformed request or validation errors. If possible, return the list of invalid notifications in `rejected_notifications`:
   ```json
   {
     "message": "Validation error: some notifications are invalid",
-    "rejected_notifications": ["request-id-1", "request-id-3"]
+    "error": Object
   }
   ```
 - 401 Unauthorized — invalid `api_key`

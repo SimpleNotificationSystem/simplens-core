@@ -10,6 +10,7 @@ import {
 } from "./types.js";
 import type { UUID } from "crypto";
 import {validate, version} from 'uuid';
+import { env } from "@src/config/env.config.js";
 
 const objectIdSchema = z.custom<mongoose.Types.ObjectId>(
     (val) => mongoose.Types.ObjectId.isValid(val as string),
@@ -231,6 +232,15 @@ export const batchNotificationRequestSchema = z.object({
         return true;
     },
     { message: "All recipients must have phone when whatsapp channel is specified", path: ["recipients"] }
+).refine(
+    (data)=>{
+        if(data.recipients && data.recipients.length*data.channel.length<=env.MAX_BATCH_REQ_LIMIT){
+            return true;
+        }
+    },
+    {
+        error: `Batch size exceeds limit (${env.MAX_BATCH_REQ_LIMIT})`, path: ["recipients"]
+    }
 );
 
 export const validateEmailNotification = (data: unknown) => emailNotificationSchema.parse(data);
