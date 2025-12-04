@@ -117,6 +117,9 @@ export const outboxSchema = z.object({
     topic: z.enum(OUTBOX_TOPICS),
     payload: z.union([emailNotificationSchema, whatsappNotificationSchema, delayedNotificationTopicSchema]),
     status: z.enum(OUTBOX_STATUS),
+    // Worker synchronization fields
+    claimed_by: z.string().nullable().optional(),
+    claimed_at: z.coerce.date().nullable().optional(),
     created_at: z.coerce.date().optional(),
     updated_at: z.coerce.date().optional(),
 });
