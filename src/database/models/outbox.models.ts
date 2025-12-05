@@ -27,6 +27,16 @@ const outbox_schema = new mongoose.Schema<outbox>({
       default: OUTBOX_STATUS.pending,
       index: true,
     },
+    // Worker synchronization fields
+    claimed_by: {
+      type: String,
+      default: null,
+      index: true,
+    },
+    claimed_at: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: {
@@ -35,8 +45,11 @@ const outbox_schema = new mongoose.Schema<outbox>({
     },
 });
 
+// Indexes for efficient querying
 outbox_schema.index({ status: 1, created_at: 1 });
 outbox_schema.index({ topic: 1, status: 1 });
+// Index for claiming stale entries (worker crash recovery)
+outbox_schema.index({ status: 1, claimed_at: 1 });
 
 const outbox_model = mongoose.model<outbox>('Outbox', outbox_schema);
 

@@ -38,6 +38,7 @@ export enum NOTIFICATION_STATUS_SF {
 
 export enum OUTBOX_STATUS {
     pending = "pending",
+    processing = "processing",
     published = "published"
 }
 

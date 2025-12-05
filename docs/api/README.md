@@ -14,6 +14,15 @@ This document describes the Notification Service API for sending single and batc
 - Channel enum: `email`, `whatsapp`
 - `webhook_url` is used to receive asynchronous delivery updates for each notification.
 
+### Idempotency
+- Duplicate requests with the same `request_id` and `channel` are automatically rejected if a notification with status `pending`, `processing`, or `delivered` already exists.
+- This ensures safe retries without creating duplicate notifications.
+- If the existing notification has status `failed`, a new notification with the same `request_id` and `channel` is allowed.
+
+### Rate Limits
+- Batch requests are limited to a maximum number of recipients (configured via `MAX_BATCH_REQ_LIMIT` environment variable).
+- Requests exceeding this limit will receive a `400 Bad Request` response.
+
 ---
 
 ## 2. POST /notification (send a single notification)
@@ -81,20 +90,27 @@ Responses:
   ```json
   {
     "message": "Validation error: recipient.email is required for channel email",
-    "error": Object
+    "errors": [{ "path": "recipient.email", "message": "Required" }]
   }
   ```
 - 401 Unauthorized — invalid `api_key`
   ```json
   {
-    "message": "Unauthorized: invalid api_key",
-
+    "message": "Unauthorized: invalid api_key"
+  }
+  ```
+- 409 Conflict — duplicate notification (same `request_id` and `channel` already exists with non-failed status)
+  ```json
+  {
+    "message": "Duplicate notification(s) already exist with non-failed status",
+    "duplicateCount": 1,
+    "duplicates": [{ "request_id": "...", "channel": "email" }]
   }
   ```
 - 500 Internal Server Error — unexpected server error
   ```json
   {
-    "message": "Internal Server Error. Please try again later."
+    "message": "Internal Server Error"
   }
   ```
 
@@ -176,14 +192,20 @@ Responses:
 - 202 Accepted — The batch was accepted and will be processed asynchronously.
   ```json
   {
-    "message": "Batch accepted; notifications enqueued for processing",
+    "message": "Notifications are being processed"
   }
   ```
-- 400 Bad Request — malformed request or validation errors. If possible, return the list of invalid notifications in `rejected_notifications`:
+- 400 Bad Request — malformed request, validation errors, or batch size exceeds limit:
   ```json
   {
     "message": "Validation error: some notifications are invalid",
-    "error": Object
+    "errors": [{ "path": "recipients.0.email", "message": "Required" }]
+  }
+  ```
+  Or if batch size exceeds limit:
+  ```json
+  {
+    "message": "Batch size (150) exceeds limit (100)."
   }
   ```
 - 401 Unauthorized — invalid `api_key`
@@ -192,10 +214,21 @@ Responses:
     "message": "Unauthorized: invalid api_key"
   }
   ```
+- 409 Conflict — some notifications are duplicates (same `request_id` and `channel` already exist with non-failed status)
+  ```json
+  {
+    "message": "Duplicate notification(s) already exist with non-failed status",
+    "duplicateCount": 2,
+    "duplicates": [
+      { "request_id": "r-1", "channel": "email" },
+      { "request_id": "r-2", "channel": "email" }
+    ]
+  }
+  ```
 - 500 Internal Server Error — unexpected server error
   ```json
   {
-    "message": "Internal Server Error. Please try again later."
+    "message": "Internal Server Error"
   }
   ```
 

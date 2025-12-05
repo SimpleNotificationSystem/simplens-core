@@ -164,18 +164,51 @@ export const to_delayed_notification_topic = (data: notification, notification_i
     };
 }
 
+export class DuplicateNotificationError extends Error {
+    public duplicateCount: number;
+    public duplicateKeys: { request_id: string; channel: string }[];
+
+    constructor(message: string, duplicateKeys: { request_id: string; channel: string }[] = []) {
+        super(message);
+        this.name = 'DuplicateNotificationError';
+        this.duplicateCount = duplicateKeys.length;
+        this.duplicateKeys = duplicateKeys;
+    }
+}
+
 export const process_notifications = async (notifications: notification[])=>{
     const session = await mongoose.startSession();
     try{
         await session.withTransaction(async()=>{
-        const created_notifications = await notification_model.insertMany(notifications, {session, ordered: true});
-        const outboxes = created_notifications.map((created)=>{
-            return convert_notification_schema_to_outbox_schema(created as notification, created._id as mongoose.Types.ObjectId);
+            const created_notifications = await notification_model.insertMany(notifications, {session, ordered: false});
+            const outboxes = created_notifications.map((created)=>{
+                return convert_notification_schema_to_outbox_schema(created as notification, created._id as mongoose.Types.ObjectId);
+            });
+            await outbox_model.insertMany(outboxes, {session, ordered: true});
         });
-        await outbox_model.insertMany(outboxes, {session, ordered: true});
-        });
-        console.log("Successfully added notifactions to MongoDB");
-    }catch(err){
+        console.log("Successfully added notifications to MongoDB");
+    } catch(err: any) {
+        if (err.code === 11000 || err.name === 'MongoBulkWriteError') {
+            console.warn("Duplicate notification(s) detected:", err.message);
+            
+            // Extract duplicate key info from the error if available
+            const duplicateKeys: { request_id: string; channel: string }[] = [];
+            if (err.writeErrors) {
+                for (const writeErr of err.writeErrors) {
+                    if (writeErr.err?.code === 11000 && writeErr.err?.op) {
+                        duplicateKeys.push({
+                            request_id: writeErr.err.op.request_id,
+                            channel: writeErr.err.op.channel
+                        });
+                    }
+                }
+            }
+            
+            throw new DuplicateNotificationError(
+                "Duplicate notification(s) already exist with non-failed status",
+                duplicateKeys
+            );
+        }
         console.error("Transaction failed:", err);
         throw new Error("Failed to create notifications");
     } finally {

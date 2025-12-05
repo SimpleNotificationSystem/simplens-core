@@ -8,6 +8,7 @@ import { auth_middleware } from './middlewares/auth_middleware.js';
 import http from 'http';
 import helmet from 'helmet';
 import cors from 'cors';
+import { createTopics } from '@src/config/kafka.config.js';
 
 const app = express();
 
@@ -32,6 +33,13 @@ const start_server = async ()=>{
     try{
         const db = await connectMongoDB();
         console.log("Sucessfully Connected to mongoDB");
+        // temporarily topic creation is performed here.
+        await createTopics([
+            { topic: 'email_notification', numPartitions: 2, replicationFactor: 1 },
+            { topic: 'whatsapp_notification', numPartitions: 2, replicationFactor: 1 },
+            { topic: 'delayed_notification', numPartitions: 2, replicationFactor: 1 },
+            { topic: 'notification_status', numPartitions: 2, replicationFactor: 1 }
+        ]);
         const server = http.createServer(app);
         server.listen(env.PORT, () => console.log(`Notification Service running at http://localhost:${env.PORT}`));
         server.on('error', (err) => {

@@ -91,7 +91,22 @@ const notification_schema = new mongoose.Schema<notification>(
   }
 );
 
-notification_schema.index({ client_id: 1, status: 1 });
+notification_schema.index(
+  { request_id: 1, channel: 1 },
+  {
+    unique: true,
+    // MongoDB partial index doesn't support $ne, so use $in with allowed statuses instead
+    partialFilterExpression: { 
+      status: { 
+        $in: [
+          NOTIFICATION_STATUS.pending, 
+          NOTIFICATION_STATUS.processing, 
+          NOTIFICATION_STATUS.delivered
+        ] 
+      } 
+    }
+  }
+);
 
 const notification_model = mongoose.model<notification>('Notification', notification_schema);
 
