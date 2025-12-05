@@ -1,11 +1,16 @@
 import { Consumer, EachMessagePayload } from "kafkajs";
 import { kafka } from "@src/config/kafka.config.js";
-import { TOPICS, NOTIFICATION_STATUS, NOTIFICATION_STATUS_SF } from "@src/types/types.js";
+import { TOPICS, NOTIFICATION_STATUS, NOTIFICATION_STATUS_SF, type notification_status_topic } from "@src/types/types.js";
 import { safeValidateNotificationStatusTopic } from "@src/types/schemas.js";
 import notification_model from "@src/database/models/notification.models.js";
 import { consumerLogger as logger } from "@src/workers/utils/logger.js";
 
 const CONSUMER_GROUP_ID = "notification-status-group";
+
+// Webhook configuration
+const WEBHOOK_TIMEOUT_MS = 30000; // 30 seconds
+const WEBHOOK_MAX_RETRIES = 3;
+const WEBHOOK_RETRY_DELAY_MS = 1000; // 1 second base delay
 
 // Consumer state management
 interface ConsumerState {
@@ -25,6 +30,94 @@ const mapToNotificationStatus = (externalStatus: NOTIFICATION_STATUS_SF): NOTIFI
     return externalStatus === NOTIFICATION_STATUS_SF.delivered
         ? NOTIFICATION_STATUS.delivered
         : NOTIFICATION_STATUS.failed;
+};
+
+/**
+ * Build webhook payload from status data
+ */
+const buildWebhookPayload = (data: notification_status_topic) => ({
+    request_id: data.request_id,
+    client_id: data.client_id,
+    notification_id: data.notification_id.toString(),
+    status: data.status === NOTIFICATION_STATUS_SF.delivered ? "DELIVERED" : "FAILED",
+    channel: data.channel,
+    message: data.message,
+    occurred_at: data.created_at.toISOString()
+});
+
+/**
+ * Sleep utility for retry delays
+ */
+const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Send webhook callback to client's webhook_url
+ * Implements retry logic with exponential backoff for 5xx errors
+ */
+const sendWebhookCallback = async (
+    webhookUrl: string,
+    payload: ReturnType<typeof buildWebhookPayload>,
+    notificationId: string
+): Promise<boolean> => {
+    for (let attempt = 1; attempt <= WEBHOOK_MAX_RETRIES; attempt++) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+
+            const response = await fetch(webhookUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Notification-ID': notificationId,
+                    'X-Attempt': attempt.toString()
+                },
+                body: JSON.stringify(payload),
+                signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            if (response.ok) {
+                logger.success(`Webhook delivered for ${notificationId} (attempt ${attempt})`);
+                return true;
+            }
+
+            // Retry on 5xx errors
+            if (response.status >= 500 && attempt < WEBHOOK_MAX_RETRIES) {
+                const delay = WEBHOOK_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+                logger.warn(`Webhook returned ${response.status} for ${notificationId}, retrying in ${delay}ms (attempt ${attempt}/${WEBHOOK_MAX_RETRIES})`);
+                await sleep(delay);
+                continue;
+            }
+
+            // Don't retry on 4xx errors
+            if (response.status >= 400 && response.status < 500) {
+                logger.error(`Webhook rejected for ${notificationId}: ${response.status} ${response.statusText}`);
+                return false;
+            }
+
+            logger.error(`Webhook failed for ${notificationId}: ${response.status} ${response.statusText}`);
+            return false;
+
+        } catch (err) {
+            if (err instanceof Error && err.name === 'AbortError') {
+                logger.error(`Webhook timeout for ${notificationId} (attempt ${attempt}/${WEBHOOK_MAX_RETRIES})`);
+            } else {
+                logger.error(`Webhook error for ${notificationId} (attempt ${attempt}/${WEBHOOK_MAX_RETRIES}):`, err);
+            }
+
+            // Retry on network errors
+            if (attempt < WEBHOOK_MAX_RETRIES) {
+                const delay = WEBHOOK_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+                await sleep(delay);
+                continue;
+            }
+
+            return false;
+        }
+    }
+
+    return false;
 };
 
 /**
@@ -67,11 +160,25 @@ const processStatusMessage = async ({ partition, message }: EachMessagePayload):
 
         if (result) {
             logger.success(`Updated notification ${data.notification_id} to status: ${newStatus}`);
+            
+            // Send webhook callback to notify client about status change
+            if (data.webhook_url) {
+                const webhookPayload = buildWebhookPayload(data);
+                const webhookSent = await sendWebhookCallback(
+                    data.webhook_url,
+                    webhookPayload,
+                    data.notification_id.toString()
+                );
+                
+                if (!webhookSent) {
+                    logger.warn(`Failed to deliver webhook for ${data.notification_id} after ${WEBHOOK_MAX_RETRIES} attempts`);
+                    // Note: We don't fail the status update if webhook fails
+                    // The notification status is already updated in MongoDB
+                }
+            }
         } else {
             logger.warn(`Notification ${data.notification_id} not found`);
         }
-
-        // TODO (future): Call webhook_url to notify client about status change
     } catch (err) {
         logger.error(`Error processing status message from partition ${partition}:`, err);
         // Don't throw - let the consumer continue processing other messages

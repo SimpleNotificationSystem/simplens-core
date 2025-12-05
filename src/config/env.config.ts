@@ -15,7 +15,7 @@ export const env = {
     
     // API Server
     PORT: <number>parseInt(process.env.PORT || "3000"),
-    NS_API_KEY: <string>process.env.NS_API_KEY || "4YCItWcuH2qJe3bXM9LbsbqefflWFlXlzvneMRSSQhU=",
+    NS_API_KEY: <string>(process.env.NS_API_KEY || ""),
     MAX_BATCH_REQ_LIMIT: <number>parseInt(process.env.MAX_BATCH_REQ_LIMIT || "1000"),
     
     // Kafka
@@ -45,4 +45,11 @@ export const env = {
     // Idempotency & Retry
     IDEMPOTENCY_TTL_SECONDS: <number>parseInt(process.env.IDEMPOTENCY_TTL_SECONDS || "86400"),
     MAX_RETRY_COUNT: <number>parseInt(process.env.MAX_RETRY_COUNT || "5"),
+    PROCESSING_TTL_SECONDS: <number>parseInt(process.env.PROCESSING_TTL_SECONDS || "120"),
+
+    // Delayed Worker
+    MAX_POLLER_RETRIES: <number>parseInt(process.env.MAX_POLLER_RETRIES || "3"),
+
+    DELAYED_POLL_INTERVAL_MS: <number>parseInt(process.env.DELAYED_POLL_INTERVAL_MS || "1000"),
+    DELAYED_BATCH_SIZE: <number>parseInt(process.env.DELAYED_BATCH_SIZE || "10"),
 }

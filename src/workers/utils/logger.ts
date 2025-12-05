@@ -12,6 +12,7 @@ const LOG_PREFIX = {
     worker: '🚀 [Worker]',
     emailProcessor: '📧 [EmailProcessor]',
     whatsappProcessor: '💬 [WhatsAppProcessor]',
+    delayedWorker: '⏰ [DelayedWorker]',
     redis: '🔴 [Redis]'
 } as const;
 
@@ -48,4 +49,5 @@ export const cronLogger = createLogger('cron');
 export const workerLogger = createLogger('worker');
 export const emailProcessorLogger = createLogger('emailProcessor');
 export const whatsappProcessorLogger = createLogger('whatsappProcessor');
+export const delayedWorkerLogger = createLogger('delayedWorker');
 export const redisLogger = createLogger('redis');

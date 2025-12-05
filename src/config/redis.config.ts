@@ -46,9 +46,16 @@ export const getRedisClient = (): RedisType => {
 
 /**
  * Connect to Redis
+ * Handles lazyConnect mode - only connects if not already connected
  */
 export const connectRedis = async (): Promise<RedisType> => {
     const client = getRedisClient();
+    
+    // Check if already connected or connecting
+    if (client.status === 'ready' || client.status === 'connecting') {
+        return client;
+    }
+    
     await client.connect();
     return client;
 };

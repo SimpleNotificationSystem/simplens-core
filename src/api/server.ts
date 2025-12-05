@@ -27,6 +27,15 @@ app.get("/", (req: Request, res: Response)=>{
     return;
 });
 
+// Health check endpoint for Docker/Kubernetes
+app.get("/health", (req: Request, res: Response)=>{
+    res.status(200).json({
+        status: "healthy",
+        timestamp: new Date().toISOString()
+    });
+    return;
+});
+
 app.use('/notification', auth_middleware, notification_router);
 
 const start_server = async ()=>{

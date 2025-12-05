@@ -1,4 +1,7 @@
 services:
+  # ============================================
+  # Infrastructure Services
+  # ============================================
   mongo:
     image: mongo:7.0
     container_name: mongo
@@ -49,6 +52,7 @@ services:
 
   kafka-ui:
     image: kafbat/kafka-ui:main
+    container_name: kafka-ui
     ports:
       - 8080:8080
     environment:
@@ -75,6 +79,159 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  # ============================================
+  # Application Services
+  # ============================================
+  
+  # API Server - Handles HTTP requests for /notification and /notification/batch
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ns-api
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      BROKERS: kafka:9093
+      NS_API_KEY: ${NS_API_KEY:-dev-api-key-change-in-production}
+      MAX_BATCH_REQ_LIMIT: 1000
+    command: ["node", "dist/api/server.js"]
+    depends_on:
+      mongo:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    networks:
+      - ns-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Background Worker - Polls outbox, publishes to Kafka, updates status in MongoDB
+  worker:
+    image: backend-notification-service-api:latest
+    container_name: ns-worker
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      BROKERS: kafka:9093
+      WORKER_ID: worker-1
+      OUTBOX_POLL_INTERVAL_MS: 5000
+      OUTBOX_BATCH_SIZE: 100
+      OUTBOX_CLAIM_TIMEOUT_MS: 30000
+    command: ["node", "dist/workers/worker.js"]
+    depends_on:
+      mongo:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    networks:
+      - ns-network
+    restart: unless-stopped
+
+  # Email Processor - Consumes from email_notification topic, sends emails via SMTP
+  email-processor:
+    image: backend-notification-service-api:latest
+    container_name: ns-email-processor
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      BROKERS: kafka:9093
+      WORKER_ID: email-processor-1
+      # Email SMTP Configuration (Gmail)
+      EMAIL_HOST: smtp.gmail.com
+      EMAIL_PORT: 587
+      EMAIL_USER: ${EMAIL_USER:-}
+      EMAIL_PASS: ${EMAIL_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      # Rate Limiting
+      EMAIL_RATE_LIMIT_TOKENS: 100
+      EMAIL_RATE_LIMIT_REFILL_RATE: 10
+      # Retry Configuration
+      MAX_RETRY_COUNT: 5
+      IDEMPOTENCY_TTL_SECONDS: 86400
+      PROCESSING_TTL_SECONDS: 120
+    command: ["node", "dist/processors/email/email.processor.js"]
+    depends_on:
+      mongo:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    networks:
+      - ns-network
+    restart: unless-stopped
+
+  # WhatsApp Processor - Consumes from whatsapp_notification topic, sends WhatsApp messages
+  whatsapp-processor:
+    image: backend-notification-service-api:latest
+    container_name: ns-whatsapp-processor
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      BROKERS: kafka:9093
+      WORKER_ID: whatsapp-processor-1
+      # Rate Limiting
+      WHATSAPP_RATE_LIMIT_TOKENS: 50
+      WHATSAPP_RATE_LIMIT_REFILL_RATE: 5
+      # Retry Configuration
+      MAX_RETRY_COUNT: 5
+      IDEMPOTENCY_TTL_SECONDS: 86400
+      PROCESSING_TTL_SECONDS: 120
+    command: ["node", "dist/processors/whatsapp/whatsapp.processor.js"]
+    depends_on:
+      mongo:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    networks:
+      - ns-network
+    restart: unless-stopped
+
+  # Delayed Processor - Handles scheduled notifications via Redis ZSET queue
+  delayed-processor:
+    image: backend-notification-service-api:latest
+    container_name: ns-delayed-processor
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      BROKERS: kafka:9093
+      WORKER_ID: delayed-processor-1
+      # Delayed Queue Configuration
+      DELAYED_POLL_INTERVAL_MS: 1000
+      DELAYED_BATCH_SIZE: 10
+      MAX_POLLER_RETRIES: 3
+    command: ["node", "dist/processors/delayed/delayed.processor.js"]
+    depends_on:
+      mongo:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    networks:
+      - ns-network
+    restart: unless-stopped
 
 volumes:
   mongo_data:

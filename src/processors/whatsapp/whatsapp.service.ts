@@ -82,7 +82,7 @@ export const sendWhatsApp = async (notification: whatsapp_notification): Promise
 
     if (isSuccess) {
         const mockMessageId = generateMockMessageId();
-        logger.success(`[MOCK] WhatsApp sent successfully: ${mockMessageId}`);
+        logger.success(`[MOCK] WhatsApp sent successfully`);
         
         return {
             success: true,
