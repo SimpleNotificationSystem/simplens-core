@@ -4,8 +4,6 @@
 
 SimpleNS (Simple Notification Service) is a lightweight, backend notification service for sending **EMAIL** and **WHATSAPP** messages. It supports single and batch notifications, scheduled deliveries, automatic retires, template variables, and webhook callbacks for delivery status updates.
 
-![Notification Service HLD](./assets/NotificationServiceHLD.png)
-
 ---
 
 ## Table of Contents
@@ -45,34 +43,7 @@ This service provides a REST HTTP API for accepting notifications (EMAIL and WHA
 ---
 
 ## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           NOTIFICATION SERVICE                               │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  ┌──────────┐     ┌─────────────┐     ┌─────────────┐     ┌──────────────┐ │
-│  │   API    │────▶│   MongoDB   │────▶│   Outbox    │────▶│    Kafka     │ │
-│  │  Server  │     │ (Transaction)│     │   Worker    │     │   Topics     │ │
-│  └──────────┘     └─────────────┘     └─────────────┘     └──────┬───────┘ │
-│                                                                   │         │
-│                          ┌────────────────────────────────────────┘         │
-│                          │                                                   │
-│            ┌─────────────┼─────────────┬─────────────────────┐              │
-│            ▼             ▼             ▼                     ▼              │
-│     ┌───────────┐ ┌───────────┐ ┌─────────────┐     ┌──────────────┐       │
-│     │  Email    │ │ WhatsApp  │ │  Delayed    │     │   Status     │       │
-│     │ Processor │ │ Processor │ │  Processor  │     │   Worker     │       │
-│     └─────┬─────┘ └─────┬─────┘ └──────┬──────┘     └──────┬───────┘       │
-│           │             │              │                    │               │
-│           ▼             ▼              ▼                    ▼               │
-│     ┌───────────┐ ┌───────────┐ ┌─────────────┐     ┌──────────────┐       │
-│     │   SMTP    │ │ WhatsApp  │ │    Redis    │     │   MongoDB    │       │
-│     │  Server   │ │    API    │ │ ZSET Queue  │     │   Update     │       │
-│     └───────────┘ └───────────┘ └─────────────┘     └──────────────┘       │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+![Notification Service HLD](./assets/NotificationServiceHLD.png)
 
 ### Components
 
