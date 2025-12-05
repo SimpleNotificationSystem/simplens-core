@@ -7,6 +7,9 @@ dotenv.config();
 const WORKER_ID = process.env.WORKER_ID || `worker-${randomUUID().slice(0, 8)}`;
 
 export const env = {
+    // Node Environment
+    NODE_ENV: <string>process.env.NODE_ENV || 'development',
+    
     // Database
     MONGO_URI: <string>process.env.MONGO_URI || "mongodb://127.0.0.1:27017/notification_service",
     
@@ -49,7 +52,11 @@ export const env = {
 
     // Delayed Worker
     MAX_POLLER_RETRIES: <number>parseInt(process.env.MAX_POLLER_RETRIES || "3"),
-
     DELAYED_POLL_INTERVAL_MS: <number>parseInt(process.env.DELAYED_POLL_INTERVAL_MS || "1000"),
     DELAYED_BATCH_SIZE: <number>parseInt(process.env.DELAYED_BATCH_SIZE || "10"),
+    
+    // Logging - Grafana Loki
+    LOKI_URL: <string>process.env.LOKI_URL || "",
+    LOG_LEVEL: <string>process.env.LOG_LEVEL || "info",
+    LOG_TO_FILE: process.env.LOG_TO_FILE === "true",
 }

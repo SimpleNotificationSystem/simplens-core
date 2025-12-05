@@ -4,8 +4,6 @@
 
 SimpleNS (Simple Notification Service) is a lightweight, backend notification service for sending **EMAIL** and **WHATSAPP** messages. It supports single and batch notifications, scheduled deliveries, automatic retires, template variables, and webhook callbacks for delivery status updates.
 
-![Notification Service HLD](./assets/NotificationServiceHLD.png)
-
 ---
 
 ## Table of Contents
@@ -45,34 +43,7 @@ This service provides a REST HTTP API for accepting notifications (EMAIL and WHA
 ---
 
 ## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           NOTIFICATION SERVICE                               │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  ┌──────────┐     ┌─────────────┐     ┌─────────────┐     ┌──────────────┐ │
-│  │   API    │────▶│   MongoDB   │────▶│   Outbox    │────▶│    Kafka     │ │
-│  │  Server  │     │ (Transaction)│     │   Worker    │     │   Topics     │ │
-│  └──────────┘     └─────────────┘     └─────────────┘     └──────┬───────┘ │
-│                                                                   │         │
-│                          ┌────────────────────────────────────────┘         │
-│                          │                                                   │
-│            ┌─────────────┼─────────────┬─────────────────────┐              │
-│            ▼             ▼             ▼                     ▼              │
-│     ┌───────────┐ ┌───────────┐ ┌─────────────┐     ┌──────────────┐       │
-│     │  Email    │ │ WhatsApp  │ │  Delayed    │     │   Status     │       │
-│     │ Processor │ │ Processor │ │  Processor  │     │   Worker     │       │
-│     └─────┬─────┘ └─────┬─────┘ └──────┬──────┘     └──────┬───────┘       │
-│           │             │              │                    │               │
-│           ▼             ▼              ▼                    ▼               │
-│     ┌───────────┐ ┌───────────┐ ┌─────────────┐     ┌──────────────┐       │
-│     │   SMTP    │ │ WhatsApp  │ │    Redis    │     │   MongoDB    │       │
-│     │  Server   │ │    API    │ │ ZSET Queue  │     │   Update     │       │
-│     └───────────┘ └───────────┘ └─────────────┘     └──────────────┘       │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+![Notification Service HLD](./assets/NotificationServiceHLD.png)
 
 ### Components
 
@@ -240,6 +211,8 @@ All configuration is done via environment variables. See [`.env.example`](./.env
 | `EMAIL_USER` | SMTP username | Required for email |
 | `EMAIL_PASS` | SMTP password/app password | Required for email |
 | `MAX_RETRY_COUNT` | Max delivery retries | `5` |
+| `LOKI_URL` | Grafana Loki URL for logging | `http://loki:3100` (Docker) |
+| `LOG_LEVEL` | Minimum log level | `info` |
 
 ### Gmail Setup
 
@@ -280,10 +253,45 @@ Authorization: Bearer YOUR_API_KEY
 | Email Processor | `ns-email-processor` | `npm run email-processor` | - |
 | WhatsApp Processor | `ns-whatsapp-processor` | `npm run whatsapp-processor` | - |
 | Delayed Processor | `ns-delayed-processor` | `npm run delayed-processor` | - |
+| Grafana | `grafana` | - | 3001 |
+| Loki | `loki` | - | 3100 |
+| Kafka UI | `kafka-ui` | - | 8080 |
 
 ### Monitoring
 
+- **Grafana Dashboard**: http://localhost:3001 — Log visualization and monitoring
+  - Default login: admin / admin
+  - Loki data source is auto-configured
+- **Grafana Loki**: http://localhost:3100 — Log aggregation (internal)
 - **Kafka UI**: http://localhost:8080 — Monitor Kafka topics and messages
 - **API Health**: http://localhost:3000/health — API health check
+
+#### Viewing Logs in Grafana
+
+1. Open Grafana at http://localhost:3001
+2. Go to **Explore** (compass icon in sidebar)
+3. Select **Loki** as the data source
+4. Use LogQL to query logs:
+   ```logql
+   # All logs from a specific service
+   {service="api"}
+   
+   # Filter by notification ID
+   {service="email-processor"} |= "notification_id"
+   
+   # Filter by log level
+   {service="worker"} | json | level="error"
+   
+   # Search across all services
+   {job="notification-service"} |= "failed"
+   ```
+
+#### Log Labels
+
+All logs are tagged with these labels:
+- `job`: `notification-service` (all services)
+- `service`: `api`, `worker`, `email-processor`, `whatsapp-processor`, `delayed-processor`
+- `environment`: `development` or `production`
+- `worker_id`: Unique identifier for each processor instance
 
 ---

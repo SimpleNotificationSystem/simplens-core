@@ -81,8 +81,8 @@ const registerShutdownHandlers = (): void => {
  * Main entry point
  */
 const main = async (): Promise<void> => {
+    logger.info('================================');
     logger.info('Starting Delayed Processor...');
-    console.log('================================');
 
     try {
         // 1. Connect to Redis (for delayed queue)
@@ -104,9 +104,9 @@ const main = async (): Promise<void> => {
         logger.info('Starting delayed poller...');
         startDelayedPoller();
 
-        console.log('================================');
+        logger.info('================================');
         logger.success('Delayed Processor is running!');
-        console.log('================================\n');
+        logger.info('================================');
 
         // Register shutdown handlers
         registerShutdownHandlers();

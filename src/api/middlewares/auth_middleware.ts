@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { env } from '@src/config/env.config.js';
 import crypto from 'crypto';
+import { apiLogger as logger } from '@src/workers/utils/logger.js';
 
 export const auth_middleware = (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -11,7 +12,7 @@ export const auth_middleware = (req: Request, res: Response, next: NextFunction)
         const api_key = authHeader.split(' ')[1];
 
         if (!env.NS_API_KEY || typeof env.NS_API_KEY !== 'string' || env.NS_API_KEY.length === 0) {
-            console.error('NS_API_KEY is not configured in the environment.');
+            logger.error('NS_API_KEY is not configured in the environment.');
             return res.status(500).json({ message: 'Server configuration error' });
         }
 
@@ -30,7 +31,7 @@ export const auth_middleware = (req: Request, res: Response, next: NextFunction)
         }
         return res.status(401).json({ message: "Invalid API KEY" });
     } catch (err: unknown) {
-        console.error(`Error in auth middleware: ${err}`);
+        logger.error(`Error in auth middleware`, err);
         return res.status(500).json({ message: "Internal Server Error" });
     }
 };

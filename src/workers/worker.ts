@@ -68,8 +68,8 @@ const registerShutdownHandlers = (): void => {
  * Main entry point for the background worker
  */
 const main = async (): Promise<void> => {
+    logger.info("================================");
     logger.info("Starting Background Worker...");
-    console.log("================================");
 
     try {
         // 1. Connect to MongoDB
@@ -89,9 +89,9 @@ const main = async (): Promise<void> => {
         logger.info("Starting cron jobs...");
         startCronJobs();
 
-        console.log("================================");
+        logger.info("================================");
         logger.success("Background Worker is running!");
-        console.log("================================\n");
+        logger.info("================================");
 
         // Register shutdown handlers
         registerShutdownHandlers();

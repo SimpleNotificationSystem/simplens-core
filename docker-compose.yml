@@ -81,6 +81,44 @@ services:
       retries: 5
 
   # ============================================
+  # Observability Services
+  # ============================================
+  
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - "loki_data:/loki"
+    networks:
+      - ns-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - "grafana_data:/var/lib/grafana"
+    depends_on:
+      loki:
+        condition: service_healthy
+    networks:
+      - ns-network
+
+  # ============================================
   # Application Services
   # ============================================
   
@@ -100,6 +138,8 @@ services:
       BROKERS: kafka:9093
       NS_API_KEY: ${NS_API_KEY:-dev-api-key-change-in-production}
       MAX_BATCH_REQ_LIMIT: 1000
+      LOKI_URL: http://loki:3100
+      LOG_LEVEL: info
     command: ["node", "dist/api/server.js"]
     depends_on:
       mongo:
@@ -107,6 +147,8 @@ services:
       kafka:
         condition: service_started
       redis:
+        condition: service_healthy
+      loki:
         condition: service_healthy
     networks:
       - ns-network
@@ -133,6 +175,8 @@ services:
       OUTBOX_POLL_INTERVAL_MS: 5000
       OUTBOX_BATCH_SIZE: 100
       OUTBOX_CLAIM_TIMEOUT_MS: 30000
+      LOKI_URL: http://loki:3100
+      LOG_LEVEL: info
     command: ["node", "dist/workers/worker.js"]
     depends_on:
       mongo:
@@ -140,6 +184,8 @@ services:
       kafka:
         condition: service_started
       redis:
+        condition: service_healthy
+      loki:
         condition: service_healthy
     networks:
       - ns-network
@@ -168,6 +214,9 @@ services:
       MAX_RETRY_COUNT: 5
       IDEMPOTENCY_TTL_SECONDS: 86400
       PROCESSING_TTL_SECONDS: 120
+      # Logging
+      LOKI_URL: http://loki:3100
+      LOG_LEVEL: info
     command: ["node", "dist/processors/email/email.processor.js"]
     depends_on:
       mongo:
@@ -175,6 +224,8 @@ services:
       kafka:
         condition: service_started
       redis:
+        condition: service_healthy
+      loki:
         condition: service_healthy
     networks:
       - ns-network
@@ -197,6 +248,9 @@ services:
       MAX_RETRY_COUNT: 5
       IDEMPOTENCY_TTL_SECONDS: 86400
       PROCESSING_TTL_SECONDS: 120
+      # Logging
+      LOKI_URL: http://loki:3100
+      LOG_LEVEL: info
     command: ["node", "dist/processors/whatsapp/whatsapp.processor.js"]
     depends_on:
       mongo:
@@ -204,6 +258,8 @@ services:
       kafka:
         condition: service_started
       redis:
+        condition: service_healthy
+      loki:
         condition: service_healthy
     networks:
       - ns-network
@@ -223,6 +279,9 @@ services:
       DELAYED_POLL_INTERVAL_MS: 1000
       DELAYED_BATCH_SIZE: 10
       MAX_POLLER_RETRIES: 3
+      # Logging
+      LOKI_URL: http://loki:3100
+      LOG_LEVEL: info
     command: ["node", "dist/processors/delayed/delayed.processor.js"]
     depends_on:
       mongo:
@@ -230,6 +289,8 @@ services:
       kafka:
         condition: service_started
       redis:
+        condition: service_healthy
+      loki:
         condition: service_healthy
     networks:
       - ns-network
@@ -240,6 +301,8 @@ volumes:
   mongo_config:
   kafka_data:
   redis_data:
+  loki_data:
+  grafana_data:
 
 networks:
   ns-network:
