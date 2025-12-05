@@ -28,9 +28,9 @@ FROM node:22-slim AS production
 
 WORKDIR /app
 
-# Create non-root user for security
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+# Create non-root user for security (Debian syntax for slim image)
+RUN groupadd --gid 1001 nodejs && \
+    useradd --uid 1001 --gid nodejs --shell /bin/sh --create-home nodejs
 
 # Copy package files
 COPY package*.json ./

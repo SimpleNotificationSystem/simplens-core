@@ -122,6 +122,8 @@ services:
   worker:
     image: backend-notification-service-api:latest
     container_name: ns-worker
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       NODE_ENV: production
       MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
