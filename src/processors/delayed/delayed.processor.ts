@@ -12,6 +12,7 @@
 
 import { connectRedis, disconnectRedis } from '@src/config/redis.config.js';
 import { initTargetProducer, disconnectTargetProducer } from './target.producer.js';
+import { initDLQStatusProducer, disconnectDLQStatusProducer } from './dlq.status.js';
 import { startDelayedConsumer, stopDelayedConsumer } from './delayed.consumer.js';
 import { startDelayedPoller, stopDelayedPoller } from './delayed.poller.js';
 import { delayedWorkerLogger as logger } from '@src/workers/utils/logger.js';
@@ -39,9 +40,12 @@ const gracefulShutdown = async (signal: string): Promise<void> => {
         logger.info('Stopping delayed consumer...');
         await stopDelayedConsumer();
 
-        // 3. Disconnect Kafka producer
+        // 2. Disconnect Kafka producers
         logger.info('Disconnecting target producer...');
         await disconnectTargetProducer();
+        
+        logger.info('Disconnecting DLQ status producer...');
+        await disconnectDLQStatusProducer();
 
         // 4. Disconnect Redis
         logger.info('Disconnecting Redis...');
@@ -85,9 +89,12 @@ const main = async (): Promise<void> => {
         logger.info('Connecting to Redis...');
         await connectRedis();
 
-        // 2. Initialize Kafka producer (for target topics)
+        // 2. Initialize Kafka producers
         logger.info('Initializing target producer...');
         await initTargetProducer();
+        
+        logger.info('Initializing DLQ status producer...');
+        await initDLQStatusProducer();
 
         // 3. Start delayed consumer (reads from delayed_notification topic)
         logger.info('Starting delayed consumer...');

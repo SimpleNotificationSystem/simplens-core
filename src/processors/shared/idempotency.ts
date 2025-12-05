@@ -1,11 +1,11 @@
 /**
  * Idempotency checking using Redis
  * Prevents duplicate processing of the same notification
+ * Uses atomic Lua scripts to prevent race conditions
  */
 
 import { getRedisClient } from '@src/config/redis.config.js';
 import { env } from '@src/config/env.config.js';
-import { NOTIFICATION_STATUS_SF } from '@src/types/types.js';
 
 // Redis key prefix for idempotency
 const IDEMPOTENCY_PREFIX = 'idempotency';
@@ -24,14 +24,78 @@ const buildKey = (notificationId: string): string => {
 };
 
 /**
- * Check if notification can be processed
- * Returns true if:
- * - No record exists (first time processing)
- * - Record exists with status='failed' (retry allowed)
+ * Lua script for atomic check-and-set to acquire processing lock
+ * Prevents race condition where two workers both pass canProcess() check
  * 
- * Returns false if:
- * - Record exists with status='delivered' (already successful)
- * - Record exists with status='processing' (currently being processed)
+ * Returns:
+ * - 1 if lock acquired (can process)
+ * - 0 if already delivered or processing (skip)
+ * - 2 if was failed (retry allowed, lock acquired)
+ */
+const ACQUIRE_PROCESSING_SCRIPT = `
+local key = KEYS[1]
+local processing_record = ARGV[1]
+local processing_ttl = tonumber(ARGV[2])
+
+local data = redis.call('GET', key)
+
+if data then
+    local record = cjson.decode(data)
+    if record.status == 'delivered' then
+        return 0  -- Already delivered, skip
+    elseif record.status == 'processing' then
+        return 0  -- Already being processed, skip
+    end
+    -- status == 'failed', allow retry
+end
+
+-- Acquire lock by setting status to 'processing'
+redis.call('SETEX', key, processing_ttl, processing_record)
+return data and 2 or 1  -- 2 = retry, 1 = first time
+`;
+
+/**
+ * Atomically check if notification can be processed and acquire processing lock
+ * This combines canProcess() and setProcessing() into a single atomic operation
+ * 
+ * Returns:
+ * - { canProcess: true, isRetry: false } - First time processing, lock acquired
+ * - { canProcess: true, isRetry: true } - Retry after failure, lock acquired
+ * - { canProcess: false } - Already delivered or being processed
+ */
+export const tryAcquireProcessingLock = async (notificationId: string): Promise<{
+    canProcess: boolean;
+    isRetry?: boolean;
+}> => {
+    const redis = getRedisClient();
+    const key = buildKey(notificationId);
+    
+    const processingRecord: IdempotencyRecord = {
+        status: 'processing',
+        updated_at: new Date().toISOString()
+    };
+    
+    const result = await redis.eval(
+        ACQUIRE_PROCESSING_SCRIPT,
+        1,
+        key,
+        JSON.stringify(processingRecord),
+        env.PROCESSING_TTL_SECONDS.toString()
+    ) as number;
+    
+    if (result === 0) {
+        return { canProcess: false };
+    }
+    
+    return { 
+        canProcess: true, 
+        isRetry: result === 2 
+    };
+};
+
+/**
+ * @deprecated Use tryAcquireProcessingLock() for atomic check-and-set
+ * Check if notification can be processed (non-atomic, kept for backward compatibility)
  */
 export const canProcess = async (notificationId: string): Promise<boolean> => {
     const redis = getRedisClient();
@@ -40,16 +104,13 @@ export const canProcess = async (notificationId: string): Promise<boolean> => {
     const data = await redis.get(key);
     
     if (!data) {
-        // No record exists - first time processing
         return true;
     }
     
     try {
         const record: IdempotencyRecord = JSON.parse(data);
-        // Only allow processing if previous attempt failed
         return record.status === 'failed';
     } catch {
-        // Invalid data in Redis - allow processing
         return true;
     }
 };
@@ -75,7 +136,8 @@ export const getIdempotencyStatus = async (notificationId: string): Promise<Idem
 };
 
 /**
- * Set status to 'processing' - prevents duplicate in-flight processing
+ * @deprecated Use tryAcquireProcessingLock() for atomic check-and-set
+ * Set status to 'processing' (non-atomic, kept for backward compatibility)
  */
 export const setProcessing = async (notificationId: string): Promise<void> => {
     const redis = getRedisClient();
@@ -86,8 +148,7 @@ export const setProcessing = async (notificationId: string): Promise<void> => {
         updated_at: new Date().toISOString()
     };
     
-    // Short TTL for processing status (in case processor crashes)
-    await redis.setex(key, 60, JSON.stringify(record));
+    await redis.setex(key, env.PROCESSING_TTL_SECONDS, JSON.stringify(record));
 };
 
 /**

@@ -1,11 +1,13 @@
 /**
  * Delayed Poller - Polls Redis queue for due events and publishes to target topics
  * Runs on an interval to fetch events where scheduled_at <= now
+ * Implements exponential backoff with max retries to prevent infinite loops
  */
 
 import { env } from '@src/config/env.config.js';
-import { fetchDueEvents, reAddToQueue, getDueEventCount } from './delayed.queue.js';
+import { fetchDueEvents, reAddToQueue, getDueEventCount, addToDeadLetterQueue } from './delayed.queue.js';
 import { publishToTarget } from './target.producer.js';
+import { publishDLQFailureStatus } from './dlq.status.js';
 import { delayedWorkerLogger as logger } from '@src/workers/utils/logger.js';
 import type { delayed_notification_topic } from '@src/types/types.js';
 
@@ -13,12 +15,52 @@ let pollerInterval: NodeJS.Timeout | null = null;
 let isPolling = false;
 
 /**
- * Process a single due event
- * Publishes to target topic, re-adds to queue on failure
+ * Extended event type with poller retry tracking
  */
-const processDueEvent = async (event: delayed_notification_topic): Promise<boolean> => {
+interface DelayedEventWithRetries extends delayed_notification_topic {
+    _pollerRetries?: number;
+}
+
+/**
+ * Calculate exponential backoff delay
+ * @param retryCount Current retry count
+ * @returns Delay in milliseconds (5s, 10s, 20s, 40s, capped at 60s)
+ */
+const calculateBackoff = (retryCount: number): number => {
+    const baseDelay = 5000; // 5 seconds
+    const maxDelay = 60000; // 60 seconds
+    return Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
+};
+
+/**
+ * Process a single due event
+ * Publishes to target topic, re-adds to queue on failure with exponential backoff
+ * Sends to dead letter queue after max retries exceeded
+ */
+const processDueEvent = async (event: DelayedEventWithRetries): Promise<boolean> => {
+    const pollerRetries = event._pollerRetries || 0;
+    
+    // Check if max poller retries exceeded
+    if (pollerRetries >= env.MAX_POLLER_RETRIES) {
+        const errorMessage = `Max poller retries exceeded after ${pollerRetries} attempts`;
+        logger.error(`Event ${event.notification_id} exceeded max poller retries (${env.MAX_POLLER_RETRIES}), sending to DLQ`);
+        
+        try {
+            // 1. Add to Redis DLQ for manual inspection
+            await addToDeadLetterQueue(event, errorMessage);
+            
+            // 2. Publish failure status to Kafka -> MongoDB update via status worker
+            await publishDLQFailureStatus(event, errorMessage);
+            
+            logger.info(`Published DLQ failure status for: ${event.notification_id}`);
+        } catch (dlqErr) {
+            logger.error(`Failed to process DLQ event:`, dlqErr);
+        }
+        return false;
+    }
+    
     try {
-        logger.info(`Processing due event: ${event.notification_id} -> ${event.target_topic}`);
+        logger.info(`Processing due event: ${event.notification_id} -> ${event.target_topic} (poller retry: ${pollerRetries})`);
 
         // Publish payload to the target topic
         await publishToTarget(event.target_topic, event.payload);
@@ -28,9 +70,17 @@ const processDueEvent = async (event: delayed_notification_topic): Promise<boole
     } catch (err) {
         logger.error(`Failed to publish event ${event.notification_id}:`, err);
 
-        // Re-add to queue with a delay for retry
+        // Re-add to queue with exponential backoff and incremented retry count
+        const newRetryCount = pollerRetries + 1;
+        const backoffDelay = calculateBackoff(newRetryCount);
+        
         try {
-            await reAddToQueue(event, 5000); // Retry after 5 seconds
+            const eventWithRetries: DelayedEventWithRetries = {
+                ...event,
+                _pollerRetries: newRetryCount
+            };
+            await reAddToQueue(eventWithRetries, backoffDelay);
+            logger.warn(`Re-added event to queue with ${backoffDelay}ms delay (retry ${newRetryCount}/${env.MAX_POLLER_RETRIES})`);
         } catch (reAddErr) {
             logger.error(`Failed to re-add event to queue:`, reAddErr);
         }

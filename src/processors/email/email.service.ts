@@ -70,6 +70,10 @@ export const initEmailTransporter = (): void => {
             user: env.EMAIL_USER,
             pass: env.EMAIL_PASS,
         },
+        // Timeout configuration to prevent hanging
+        connectionTimeout: 10000, // 10 seconds
+        greetingTimeout: 10000,   // 10 seconds
+        socketTimeout: 30000,     // 30 seconds
     });
 
     logger.success('Email transporter initialized');

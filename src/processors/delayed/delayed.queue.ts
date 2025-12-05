@@ -124,3 +124,55 @@ export const reAddToQueue = async (
     
     logger.warn(`Re-added event to delayed queue: ${event.notification_id} (retry in ${delayMs}ms)`);
 };
+
+// Dead Letter Queue key for failed events
+const DEAD_LETTER_QUEUE_KEY = 'delayed_queue:dlq';
+
+/**
+ * Dead Letter Queue entry with failure reason
+ */
+interface DeadLetterEntry {
+    event: delayed_notification_topic;
+    reason: string;
+    failed_at: string;
+}
+
+/**
+ * Add an event to the Dead Letter Queue
+ * Events that exceed max retries are stored here for manual inspection
+ */
+export const addToDeadLetterQueue = async (
+    event: delayed_notification_topic,
+    reason: string
+): Promise<void> => {
+    const redis = getRedisClient();
+    
+    const entry: DeadLetterEntry = {
+        event,
+        reason,
+        failed_at: new Date().toISOString()
+    };
+    
+    // Use RPUSH to add to a list (maintains order)
+    await redis.rpush(DEAD_LETTER_QUEUE_KEY, JSON.stringify(entry));
+    
+    logger.error(`Added event to DLQ: ${event.notification_id} - ${reason}`);
+};
+
+/**
+ * Get count of events in Dead Letter Queue
+ */
+export const getDeadLetterQueueSize = async (): Promise<number> => {
+    const redis = getRedisClient();
+    return redis.llen(DEAD_LETTER_QUEUE_KEY);
+};
+
+/**
+ * Fetch events from Dead Letter Queue (for manual processing)
+ */
+export const fetchFromDeadLetterQueue = async (count: number = 10): Promise<DeadLetterEntry[]> => {
+    const redis = getRedisClient();
+    const results = await redis.lrange(DEAD_LETTER_QUEUE_KEY, 0, count - 1);
+    
+    return results.map(r => JSON.parse(r) as DeadLetterEntry);
+};

@@ -19,7 +19,7 @@ import { whatsappProcessorLogger as logger } from '@src/workers/utils/logger.js'
 import { sendWhatsApp } from './whatsapp.service.js';
 
 // Shared utilities
-import { canProcess, setProcessing, setDelivered, setFailed } from '@src/processors/shared/idempotency.js';
+import { tryAcquireProcessingLock, setDelivered, setFailed } from '@src/processors/shared/idempotency.js';
 import { consumeToken } from '@src/processors/shared/rate-limiter.js';
 import { publishStatus } from '@src/processors/shared/status.producer.js';
 import { publishDelayed, buildDelayedPayloadFromWhatsapp } from '@src/processors/shared/delayed.producer.js';
@@ -64,17 +64,18 @@ const processWhatsAppMessage = async ({ partition, message }: EachMessagePayload
 
         logger.info(`Processing WhatsApp notification: ${notificationId} (retry: ${notification.retry_count})`);
 
-        // 3. Idempotency check
-        const canProceed = await canProcess(notificationId);
-        if (!canProceed) {
-            logger.info(`Skipping duplicate notification: ${notificationId} (already processed)`);
+        // 3. Atomic idempotency check and acquire processing lock
+        const lockResult = await tryAcquireProcessingLock(notificationId);
+        if (!lockResult.canProcess) {
+            logger.info(`Skipping duplicate notification: ${notificationId} (already processed or in progress)`);
             return;
         }
+        
+        if (lockResult.isRetry) {
+            logger.info(`Retrying previously failed notification: ${notificationId}`);
+        }
 
-        // 4. Set status to 'processing' to prevent duplicate in-flight
-        await setProcessing(notificationId);
-
-        // 5. Rate limit check
+        // 4. Rate limit check
         const rateLimitResult = await consumeToken(CHANNEL.whatsapp);
         
         if (!rateLimitResult.allowed) {
@@ -102,7 +103,12 @@ const processWhatsAppMessage = async ({ partition, message }: EachMessagePayload
 
         if (whatsappResult.success) {
             // 7a. Success - Update Redis and publish status
-            await setDelivered(notificationId);
+            // Handle Redis update failure gracefully - message was already sent
+            try {
+                await setDelivered(notificationId);
+            } catch (redisErr) {
+                logger.error(`Failed to update idempotency status, but message was sent: ${notificationId}`, redisErr);
+            }
             await publishSuccessStatus(notification);
             logger.success(`WhatsApp delivered: ${notificationId}`);
         } else {
@@ -141,7 +147,7 @@ const publishSuccessStatus = async (
         client_id: notification.client_id,
         channel: CHANNEL.whatsapp,
         status: NOTIFICATION_STATUS_SF.delivered,
-        message: 'WhatsApp message sent sucessfully',
+        message: 'WhatsApp message sent successfully',
         retry_count: notification.retry_count,
         webhook_url: notification.webhook_url,
         created_at: new Date()
