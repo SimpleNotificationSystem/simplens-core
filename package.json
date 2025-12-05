@@ -17,7 +17,9 @@
     "email-processor": "node dist/processors/email/email.processor.js",
     "email-processor:dev": "tsx watch src/processors/email/email.processor.ts",
     "whatsapp-processor": "node dist/processors/whatsapp/whatsapp.processor.js",
-    "whatsapp-processor:dev": "tsx watch src/processors/whatsapp/whatsapp.processor.ts"
+    "whatsapp-processor:dev": "tsx watch src/processors/whatsapp/whatsapp.processor.ts",
+    "delayed-processor": "node dist/processors/delayed/delayed.processor.js",
+    "delayed-processor:dev": "tsx watch src/processors/delayed/delayed.processor.ts"
   },
   "repository": {
     "type": "git",

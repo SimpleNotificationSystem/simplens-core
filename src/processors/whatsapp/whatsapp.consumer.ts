@@ -103,7 +103,7 @@ const processWhatsAppMessage = async ({ partition, message }: EachMessagePayload
         if (whatsappResult.success) {
             // 7a. Success - Update Redis and publish status
             await setDelivered(notificationId);
-            await publishSuccessStatus(notification, whatsappResult.messageId);
+            await publishSuccessStatus(notification);
             logger.success(`WhatsApp delivered: ${notificationId}`);
         } else {
             // 7b. Failure - Check retry count and push to delayed topic
@@ -133,8 +133,7 @@ const processWhatsAppMessage = async ({ partition, message }: EachMessagePayload
  * Build and publish success status
  */
 const publishSuccessStatus = async (
-    notification: whatsapp_notification,
-    messageId?: string
+    notification: whatsapp_notification
 ): Promise<void> => {
     const status: notification_status_topic = {
         notification_id: notification.notification_id,
@@ -142,7 +141,7 @@ const publishSuccessStatus = async (
         client_id: notification.client_id,
         channel: CHANNEL.whatsapp,
         status: NOTIFICATION_STATUS_SF.delivered,
-        message: messageId ? `WhatsApp sent: ${messageId}` : 'WhatsApp sent successfully',
+        message: 'WhatsApp message sent sucessfully',
         retry_count: notification.retry_count,
         webhook_url: notification.webhook_url,
         created_at: new Date()

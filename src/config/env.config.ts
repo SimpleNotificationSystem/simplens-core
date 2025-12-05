@@ -45,4 +45,8 @@ export const env = {
     // Idempotency & Retry
     IDEMPOTENCY_TTL_SECONDS: <number>parseInt(process.env.IDEMPOTENCY_TTL_SECONDS || "86400"),
     MAX_RETRY_COUNT: <number>parseInt(process.env.MAX_RETRY_COUNT || "5"),
+
+    // Delayed Worker
+    DELAYED_POLL_INTERVAL_MS: <number>parseInt(process.env.DELAYED_POLL_INTERVAL_MS || "1000"),
+    DELAYED_BATCH_SIZE: <number>parseInt(process.env.DELAYED_BATCH_SIZE || "10"),
 }
