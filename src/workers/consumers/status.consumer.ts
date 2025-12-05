@@ -59,8 +59,12 @@ const sendWebhookCallback = async (
     payload: ReturnType<typeof buildWebhookPayload>,
     notificationId: string
 ): Promise<boolean> => {
+    logger.info(`Sending webhook to ${webhookUrl} for ${notificationId}`);
+    
     for (let attempt = 1; attempt <= WEBHOOK_MAX_RETRIES; attempt++) {
         try {
+            logger.info(`Webhook attempt ${attempt}/${WEBHOOK_MAX_RETRIES} for ${notificationId}`);
+            
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
 
@@ -68,7 +72,6 @@ const sendWebhookCallback = async (
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Notification-ID': notificationId,
                     'X-Attempt': attempt.toString()
                 },
                 body: JSON.stringify(payload),
@@ -76,6 +79,8 @@ const sendWebhookCallback = async (
             });
 
             clearTimeout(timeoutId);
+
+            logger.info(`Webhook response status: ${response.status} for ${notificationId}`);
 
             if (response.ok) {
                 logger.success(`Webhook delivered for ${notificationId} (attempt ${attempt})`);
@@ -100,15 +105,19 @@ const sendWebhookCallback = async (
             return false;
 
         } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            const errorName = err instanceof Error ? err.name : 'Unknown';
+            
+            logger.error(`Webhook error for ${notificationId} (attempt ${attempt}/${WEBHOOK_MAX_RETRIES}): ${errorName} - ${errorMessage}`);
+            
             if (err instanceof Error && err.name === 'AbortError') {
-                logger.error(`Webhook timeout for ${notificationId} (attempt ${attempt}/${WEBHOOK_MAX_RETRIES})`);
-            } else {
-                logger.error(`Webhook error for ${notificationId} (attempt ${attempt}/${WEBHOOK_MAX_RETRIES}):`, err);
+                logger.error(`Webhook timeout after ${WEBHOOK_TIMEOUT_MS}ms for ${notificationId}`);
             }
 
             // Retry on network errors
             if (attempt < WEBHOOK_MAX_RETRIES) {
                 const delay = WEBHOOK_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+                logger.info(`Retrying webhook in ${delay}ms...`);
                 await sleep(delay);
                 continue;
             }
@@ -162,6 +171,8 @@ const processStatusMessage = async ({ partition, message }: EachMessagePayload):
             logger.success(`Updated notification ${data.notification_id} to status: ${newStatus}`);
             
             // Send webhook callback to notify client about status change
+            logger.info(`Webhook URL from status message: ${data.webhook_url || '(not provided)'}`);
+            
             if (data.webhook_url) {
                 const webhookPayload = buildWebhookPayload(data);
                 const webhookSent = await sendWebhookCallback(
@@ -175,6 +186,8 @@ const processStatusMessage = async ({ partition, message }: EachMessagePayload):
                     // Note: We don't fail the status update if webhook fails
                     // The notification status is already updated in MongoDB
                 }
+            } else {
+                logger.warn(`No webhook_url provided for notification ${data.notification_id}`);
             }
         } else {
             logger.warn(`Notification ${data.notification_id} not found`);

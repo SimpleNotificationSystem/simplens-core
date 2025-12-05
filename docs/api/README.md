@@ -401,6 +401,23 @@ Return `200 OK` to acknowledge receipt:
 - **Idempotency:** Webhooks may be delivered more than once — implement idempotent handling
 - **Timeouts:** Respond within 30 seconds
 
+### Webhook URL for Docker
+
+When running the notification service inside Docker containers and your webhook server is running on the host machine, use `host.docker.internal` instead of `localhost`:
+
+| Service Location | Webhook URL |
+|-----------------|-------------|
+| Both on host machine | `http://localhost:4000/webhook` |
+| Service in Docker, webhook on host | `http://host.docker.internal:4000/webhook` |
+| Both in Docker (same network) | `http://container-name:4000/webhook` |
+
+**Example:**
+```json
+{
+  "webhook_url": "http://host.docker.internal:4000/webhook"
+}
+```
+
 ---
 
 ## Error Responses
