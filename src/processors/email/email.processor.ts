@@ -72,8 +72,8 @@ const registerShutdownHandlers = (): void => {
  * Main entry point
  */
 const main = async (): Promise<void> => {
+    logger.info('================================');
     logger.info('Starting Email Processor...');
-    console.log('================================');
 
     try {
         // 1. Connect to Redis
@@ -96,9 +96,9 @@ const main = async (): Promise<void> => {
         logger.info('Starting email consumer...');
         await startEmailConsumer();
 
-        console.log('================================');
+        logger.info('================================');
         logger.success('Email Processor is running!');
-        console.log('================================\n');
+        logger.info('================================');
 
         // Register shutdown handlers
         registerShutdownHandlers();

@@ -9,6 +9,7 @@ import http from 'http';
 import helmet from 'helmet';
 import cors from 'cors';
 import { createTopics } from '@src/config/kafka.config.js';
+import { apiLogger as logger } from '@src/workers/utils/logger.js';
 
 const app = express();
 
@@ -41,7 +42,7 @@ app.use('/notification', auth_middleware, notification_router);
 const start_server = async ()=>{
     try{
         const db = await connectMongoDB();
-        console.log("Sucessfully Connected to mongoDB");
+        logger.success("Successfully connected to MongoDB");
         // temporarily topic creation is performed here.
         await createTopics([
             { topic: 'email_notification', numPartitions: 2, replicationFactor: 1 },
@@ -50,41 +51,41 @@ const start_server = async ()=>{
             { topic: 'notification_status', numPartitions: 2, replicationFactor: 1 }
         ]);
         const server = http.createServer(app);
-        server.listen(env.PORT, () => console.log(`Notification Service running at http://localhost:${env.PORT}`));
+        server.listen(env.PORT, () => logger.success(`Notification Service running at http://localhost:${env.PORT}`));
         server.on('error', (err) => {
-            console.error('Server error:', err);
+            logger.error('Server error:', err);
         });
         const gracefulShutdown = async (err?: Error, reason?: string) => {
-            console.error('Shutting down server', reason ?? '', err ?? '');
+            logger.error('Shutting down server', { reason: reason ?? '', error: err?.message ?? '' });
             try {
                 server?.close(() => {
-                console.log('HTTP server closed');
+                logger.info('HTTP server closed');
                 });
                 await db.disconnect();
             } catch (e) {
-                console.error('Error during graceful shutdown', e);
+                logger.error('Error during graceful shutdown', e);
             } finally {
                 process.exit(1);
             }
         };
 
         process.on('uncaughtException', (err) => {
-            console.error('Uncaught exception:', err);
+            logger.error('Uncaught exception:', err);
             gracefulShutdown(err, 'uncaughtException');
         });
 
         process.on('unhandledRejection', (reason) => {
-            console.error('Unhandled rejection:', reason);
+            logger.error('Unhandled rejection:', reason);
             gracefulShutdown(undefined, 'unhandledRejection');
         });
 
         server.on('error', (err) => {
-            console.error('Server error:', err);
+            logger.error('Server error:', err);
             gracefulShutdown(err, 'serverError');
         });
     }
     catch(err){
-        console.log(`Error in connecting to mongoDB: ${JSON.stringify(err)}`);
+        logger.error(`Error in connecting to MongoDB`, err);
         exit(1);
     }
 }

@@ -1,48 +1,217 @@
 /**
- * Simple logger utility for consistent logging across workers and processors
- * Can be replaced with a proper logging library (winston, pino) later
+ * Logger utility with Grafana Loki integration
+ * Logs to console, file, and Loki for centralized log aggregation
  */
 
-type LogLevel = 'info' | 'warn' | 'error' | 'debug';
+import winston from 'winston';
+import LokiTransport from 'winston-loki';
+import { env } from '@src/config/env.config.js';
 
-const LOG_PREFIX = {
-    producer: '📤 [Producer]',
-    consumer: '📥 [Consumer]',
-    cron: '⏰ [Cron]',
-    worker: '🚀 [Worker]',
-    emailProcessor: '📧 [EmailProcessor]',
-    whatsappProcessor: '💬 [WhatsAppProcessor]',
-    delayedWorker: '⏰ [DelayedWorker]',
-    redis: '🔴 [Redis]'
+// Service context types
+const SERVICE_LABELS = {
+    api: 'api-server',
+    producer: 'producer',
+    consumer: 'consumer',
+    cron: 'cron',
+    worker: 'background-worker',
+    emailProcessor: 'email-processor',
+    whatsappProcessor: 'whatsapp-processor',
+    delayedWorker: 'delayed-processor',
+    redis: 'redis'
 } as const;
 
-type LogContext = keyof typeof LOG_PREFIX;
+type ServiceContext = keyof typeof SERVICE_LABELS;
 
-const formatMessage = (context: LogContext, message: string): string => {
-    return `${LOG_PREFIX[context]} ${message}`;
+// Log metadata interface
+interface LogMeta {
+    notificationId?: string;
+    requestId?: string;
+    clientId?: string;
+    channel?: string;
+    workerId?: string;
+    topic?: string;
+    partition?: number;
+    [key: string]: unknown;
+}
+
+// Custom log levels including 'success'
+const customLevels = {
+    levels: {
+        error: 0,
+        warn: 1,
+        success: 2,
+        info: 3,
+        debug: 4
+    },
+    colors: {
+        error: 'red',
+        warn: 'yellow',
+        success: 'green',
+        info: 'blue',
+        debug: 'gray'
+    }
 };
 
-export const createLogger = (context: LogContext) => ({
-    info: (message: string, ...args: unknown[]) => {
-        console.log(formatMessage(context, message), ...args);
-    },
-    warn: (message: string, ...args: unknown[]) => {
-        console.warn(formatMessage(context, `⚠️ ${message}`), ...args);
-    },
-    error: (message: string, ...args: unknown[]) => {
-        console.error(formatMessage(context, `❌ ${message}`), ...args);
-    },
-    debug: (message: string, ...args: unknown[]) => {
-        if (process.env.DEBUG === 'true') {
-            console.debug(formatMessage(context, `🔍 ${message}`), ...args);
-        }
-    },
-    success: (message: string, ...args: unknown[]) => {
-        console.log(formatMessage(context, `✅ ${message}`), ...args);
-    }
-});
+// Add custom colors to winston
+winston.addColors(customLevels.colors);
 
-// Pre-configured loggers for each context
+// Emoji prefixes for console output
+const EMOJI_PREFIX: Record<string, string> = {
+    error: '❌',
+    warn: '⚠️',
+    success: '✅',
+    info: '📋',
+    debug: '🔍'
+};
+
+const SERVICE_EMOJI: Record<ServiceContext, string> = {
+    api: '🌐',
+    producer: '📤',
+    consumer: '📥',
+    cron: '⏰',
+    worker: '🚀',
+    emailProcessor: '📧',
+    whatsappProcessor: '💬',
+    delayedWorker: '⏰',
+    redis: '🔴'
+};
+
+/**
+ * Create console format with colors and emojis
+ */
+const consoleFormat = (service: ServiceContext) => winston.format.combine(
+    winston.format.timestamp({ format: 'HH:mm:ss.SSS' }),
+    winston.format.printf(({ level, message, timestamp, ...meta }) => {
+        const emoji = EMOJI_PREFIX[level] || '';
+        const serviceEmoji = SERVICE_EMOJI[service];
+        const serviceName = SERVICE_LABELS[service].toUpperCase();
+        const metaStr = Object.keys(meta).length > 0 
+            ? ` ${JSON.stringify(meta)}` 
+            : '';
+        return `${timestamp} ${serviceEmoji} [${serviceName}] ${emoji} ${message}${metaStr}`;
+    })
+);
+
+/**
+ * Create JSON format for file and Loki
+ */
+const jsonFormat = winston.format.combine(
+    winston.format.timestamp({ format: 'YYYY-MM-DDTHH:mm:ss.SSSZ' }),
+    winston.format.errors({ stack: true }),
+    winston.format.json()
+);
+
+/**
+ * Create a logger instance for a specific service context
+ */
+const createWinstonLogger = (service: ServiceContext) => {
+    const transports: winston.transport[] = [
+        // Console transport with colors
+        new winston.transports.Console({
+            format: winston.format.combine(
+                winston.format.colorize({ all: true }),
+                consoleFormat(service)
+            )
+        })
+    ];
+
+    // Add Loki transport if LOKI_URL is configured
+    if (env.LOKI_URL) {
+        transports.push(
+            new LokiTransport({
+                host: env.LOKI_URL,
+                labels: {
+                    job: 'notification-service',
+                    service: SERVICE_LABELS[service],
+                    workerId: env.WORKER_ID,
+                    environment: env.NODE_ENV
+                },
+                json: true,
+                batching: true,
+                interval: 5,
+                replaceTimestamp: true,
+                onConnectionError: (err: Error) => {
+                    console.error(`Loki connection error for ${service}:`, err.message);
+                }
+            })
+        );
+    }
+
+    // Add file transport in production
+    if (env.NODE_ENV === 'production' && env.LOG_TO_FILE) {
+        transports.push(
+            new winston.transports.File({
+                filename: `logs/${SERVICE_LABELS[service]}.log`,
+                format: jsonFormat,
+                maxsize: 10 * 1024 * 1024, // 10MB
+                maxFiles: 5
+            }),
+            new winston.transports.File({
+                filename: 'logs/error.log',
+                level: 'error',
+                format: jsonFormat,
+                maxsize: 10 * 1024 * 1024,
+                maxFiles: 5
+            })
+        );
+    }
+
+    return winston.createLogger({
+        levels: customLevels.levels,
+        level: env.LOG_LEVEL || 'info',
+        defaultMeta: {
+            service: SERVICE_LABELS[service],
+            workerId: env.WORKER_ID
+        },
+        transports
+    });
+};
+
+/**
+ * Logger interface matching our usage patterns
+ */
+interface Logger {
+    info: (message: string, meta?: LogMeta) => void;
+    warn: (message: string, meta?: LogMeta) => void;
+    error: (message: string, meta?: LogMeta | unknown) => void;
+    debug: (message: string, meta?: LogMeta) => void;
+    success: (message: string, meta?: LogMeta) => void;
+}
+
+/**
+ * Create a typed logger for a service context
+ */
+export const createLogger = (context: ServiceContext): Logger => {
+    const winstonLogger = createWinstonLogger(context);
+
+    return {
+        info: (message: string, meta?: LogMeta) => {
+            winstonLogger.info(message, meta);
+        },
+        warn: (message: string, meta?: LogMeta) => {
+            winstonLogger.warn(message, meta);
+        },
+        error: (message: string, meta?: LogMeta | unknown) => {
+            if (meta instanceof Error) {
+                winstonLogger.error(message, { 
+                    error: meta.message, 
+                    stack: meta.stack 
+                });
+            } else {
+                winstonLogger.error(message, meta as LogMeta);
+            }
+        },
+        debug: (message: string, meta?: LogMeta) => {
+            winstonLogger.debug(message, meta);
+        },
+        success: (message: string, meta?: LogMeta) => {
+            winstonLogger.log('success', message, meta);
+        }
+    };
+};
+
+// Pre-configured loggers for each service context
+export const apiLogger = createLogger('api');
 export const producerLogger = createLogger('producer');
 export const consumerLogger = createLogger('consumer');
 export const cronLogger = createLogger('cron');
@@ -51,3 +220,13 @@ export const emailProcessorLogger = createLogger('emailProcessor');
 export const whatsappProcessorLogger = createLogger('whatsappProcessor');
 export const delayedWorkerLogger = createLogger('delayedWorker');
 export const redisLogger = createLogger('redis');
+
+/**
+ * Graceful shutdown - flush all logs before exit
+ */
+export const flushLogs = async (): Promise<void> => {
+    // Winston-loki handles batching, give it time to flush
+    return new Promise((resolve) => {
+        setTimeout(resolve, 1000);
+    });
+};

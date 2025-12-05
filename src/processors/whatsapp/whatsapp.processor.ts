@@ -71,8 +71,8 @@ const registerShutdownHandlers = (): void => {
  * Main entry point
  */
 const main = async (): Promise<void> => {
+    logger.info('================================');
     logger.info('Starting WhatsApp Processor...');
-    console.log('================================');
 
     try {
         // 1. Connect to Redis
@@ -92,9 +92,9 @@ const main = async (): Promise<void> => {
         logger.info('Starting WhatsApp consumer...');
         await startWhatsAppConsumer();
 
-        console.log('================================');
+        logger.info('================================');
         logger.success('WhatsApp Processor is running!');
-        console.log('================================\n');
+        logger.info('================================');
 
         // Register shutdown handlers
         registerShutdownHandlers();

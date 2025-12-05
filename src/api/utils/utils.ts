@@ -4,6 +4,7 @@ import { CHANNEL, NOTIFICATION_STATUS, OUTBOX_TOPICS, OUTBOX_STATUS, DELAYED_TOP
 import mongoose from "mongoose";
 import notification_model from "@src/database/models/notification.models.js";
 import outbox_model from "@src/database/models/outbox.models.js";
+import { apiLogger as logger } from "@src/workers/utils/logger.js";
 
 export const convert_notification_request_to_notification_schema = (data: notification_request): notification[] => {
     const notifications: notification[] = [];
@@ -186,10 +187,10 @@ export const process_notifications = async (notifications: notification[])=>{
             });
             await outbox_model.insertMany(outboxes, {session, ordered: true});
         });
-        console.log("Successfully added notifications to MongoDB");
+        logger.info("Successfully added notifications to MongoDB");
     } catch(err: any) {
         if (err.code === 11000 || err.name === 'MongoBulkWriteError') {
-            console.warn("Duplicate notification(s) detected:", err.message);
+            logger.warn("Duplicate notification(s) detected:", { error: err.message });
             
             // Extract duplicate key info from the error if available
             const duplicateKeys: { request_id: string; channel: string }[] = [];
@@ -209,7 +210,7 @@ export const process_notifications = async (notifications: notification[])=>{
                 duplicateKeys
             );
         }
-        console.error("Transaction failed:", err);
+        logger.error("Transaction failed:", err);
         throw new Error("Failed to create notifications");
     } finally {
         await session.endSession();

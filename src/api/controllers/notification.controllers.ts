@@ -3,6 +3,7 @@ import { safeValidateNotificationRequest, safeValidateBatchNotificationRequest }
 import { convert_notification_request_to_notification_schema,  convert_batch_notification_schema_to_notification_schema, DuplicateNotificationError } from '../utils/utils.js';
 import { notification } from '@src/types/types.js';
 import { process_notifications } from '@src/api/utils/utils.js';
+import { apiLogger as logger } from '@src/workers/utils/logger.js';
 
 export const notification_controller = async (req: Request, res: Response)=>{
     try{
@@ -31,7 +32,7 @@ export const notification_controller = async (req: Request, res: Response)=>{
             });
             return;
         }
-        console.error(`Error in notification controller: ${err}`);
+        logger.error(`Error in notification controller`, err);
         res.status(500).json({
             message: "Internal Server Error"
         });
@@ -68,7 +69,7 @@ export const batch_notification_controller = async (req: Request, res: Response)
             });
             return;
         }
-        console.error(`Error in batch notification controller: ${err}`);
+        logger.error(`Error in batch notification controller`, err);
         res.status(500).json({
             message: "Internal Server Error"
         });

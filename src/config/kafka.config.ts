@@ -1,5 +1,6 @@
 import { Kafka, Admin, ITopicConfig} from "kafkajs";
 import { env } from "./env.config.js";
+import { producerLogger as logger } from "@src/workers/utils/logger.js";
 
 export const kafka = new Kafka({
     clientId: "notification-service",
@@ -11,13 +12,13 @@ export const createTopics = async (topics: ITopicConfig[]) => {
     
     try {
         await admin.connect();
-        console.log('Admin connected to Kafka');
+        logger.info('Admin connected to Kafka');
         const existingTopics = await admin.listTopics();
         const topicsToCreate = topics.filter(
             topic => !existingTopics.includes(topic.topic)
         );
         if (topicsToCreate.length === 0) {
-            console.log('All topics already exist');
+            logger.info('All topics already exist');
             return;
         }
         await admin.createTopics({
@@ -25,9 +26,9 @@ export const createTopics = async (topics: ITopicConfig[]) => {
             validateOnly: false,
             timeout: 30000
         });
-        console.log(`Created topics: ${topicsToCreate.map(t => t.topic).join(', ')}`);
+        logger.info(`Created topics: ${topicsToCreate.map(t => t.topic).join(', ')}`);
     } catch (err) {
-        console.error('Error creating topics:', err);
+        logger.error('Error creating topics:', err);
         throw err;
     } finally {
         await admin.disconnect();
