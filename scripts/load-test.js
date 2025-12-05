@@ -20,17 +20,12 @@ const CONCURRENCY = parseInt(process.argv[3] || '50');
 const createPayload = () => ({
   request_id: randomUUID(),
   client_id: "5f2c1d77-8a4b-4a5a-9b1c-2c3d4e5f6a7b",
-  channel: ["email", "whatsapp"],
+  channel: ["whatsapp"],
   recipient: {
     user_id: "user_12345",
-    email: "user@example.com",
     phone: "+15551234567"
   },
   content: {
-    email: {
-      subject: "Welcome to our service",
-      message: "Hi there, thanks for signing up!"
-    },
     whatsapp: {
       message: "Thanks for signing up! Reply HELP for assistance."
     }

@@ -1,5 +1,5 @@
 /**
- * Simple logger utility for consistent logging across workers
+ * Simple logger utility for consistent logging across workers and processors
  * Can be replaced with a proper logging library (winston, pino) later
  */
 
@@ -9,7 +9,10 @@ const LOG_PREFIX = {
     producer: '📤 [Producer]',
     consumer: '📥 [Consumer]',
     cron: '⏰ [Cron]',
-    worker: '🚀 [Worker]'
+    worker: '🚀 [Worker]',
+    emailProcessor: '📧 [EmailProcessor]',
+    whatsappProcessor: '💬 [WhatsAppProcessor]',
+    redis: '🔴 [Redis]'
 } as const;
 
 type LogContext = keyof typeof LOG_PREFIX;
@@ -43,3 +46,6 @@ export const producerLogger = createLogger('producer');
 export const consumerLogger = createLogger('consumer');
 export const cronLogger = createLogger('cron');
 export const workerLogger = createLogger('worker');
+export const emailProcessorLogger = createLogger('emailProcessor');
+export const whatsappProcessorLogger = createLogger('whatsappProcessor');
+export const redisLogger = createLogger('redis');

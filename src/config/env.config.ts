@@ -3,12 +3,15 @@ import { randomUUID } from 'crypto';
 
 dotenv.config();
 
-// Unique worker ID for this instance (used for distributed locking)
+// Unique worker/processor ID for this instance (used for distributed locking)
 const WORKER_ID = process.env.WORKER_ID || `worker-${randomUUID().slice(0, 8)}`;
 
 export const env = {
     // Database
     MONGO_URI: <string>process.env.MONGO_URI || "mongodb://127.0.0.1:27017/notification_service",
+    
+    // Redis
+    REDIS_URL: <string>process.env.REDIS_URL || "redis://localhost:6379",
     
     // API Server
     PORT: <number>parseInt(process.env.PORT || "3000"),
@@ -24,6 +27,22 @@ export const env = {
     OUTBOX_CLEANUP_INTERVAL_MS: <number>parseInt(process.env.OUTBOX_CLEANUP_INTERVAL_MS || "60000"),
     OUTBOX_BATCH_SIZE: <number>parseInt(process.env.OUTBOX_BATCH_SIZE || "100"),
     OUTBOX_RETENTION_MS: <number>parseInt(process.env.OUTBOX_RETENTION_MS || "300000"),
-    // Claim timeout: if a worker claims an event but crashes, another worker can reclaim after this time
     OUTBOX_CLAIM_TIMEOUT_MS: <number>parseInt(process.env.OUTBOX_CLAIM_TIMEOUT_MS || "30000"),
+    
+    // Email Configuration (Gmail SMTP)
+    EMAIL_HOST: <string>process.env.EMAIL_HOST || "smtp.gmail.com",
+    EMAIL_PORT: <number>parseInt(process.env.EMAIL_PORT || "587"),
+    EMAIL_USER: <string>process.env.EMAIL_USER || "",
+    EMAIL_PASS: <string>process.env.EMAIL_PASS || "",
+    EMAIL_FROM: <string>process.env.EMAIL_FROM || process.env.EMAIL_USER || "",
+    
+    // Rate Limiting - Token Bucket
+    EMAIL_RATE_LIMIT_TOKENS: <number>parseInt(process.env.EMAIL_RATE_LIMIT_TOKENS || "100"),
+    EMAIL_RATE_LIMIT_REFILL_RATE: <number>parseInt(process.env.EMAIL_RATE_LIMIT_REFILL_RATE || "10"),
+    WHATSAPP_RATE_LIMIT_TOKENS: <number>parseInt(process.env.WHATSAPP_RATE_LIMIT_TOKENS || "50"),
+    WHATSAPP_RATE_LIMIT_REFILL_RATE: <number>parseInt(process.env.WHATSAPP_RATE_LIMIT_REFILL_RATE || "5"),
+    
+    // Idempotency & Retry
+    IDEMPOTENCY_TTL_SECONDS: <number>parseInt(process.env.IDEMPOTENCY_TTL_SECONDS || "86400"),
+    MAX_RETRY_COUNT: <number>parseInt(process.env.MAX_RETRY_COUNT || "5"),
 }
