@@ -118,7 +118,8 @@ This service provides a REST HTTP API for accepting notifications (EMAIL and WHA
 3. **Start all services**
    ```bash
    # Start infrastructure + application services
-   docker-compose up -d --build
+   docker-compose build
+   docker compose up -d
    ```
 
 4. **Verify services are running**
