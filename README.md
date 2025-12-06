@@ -253,9 +253,47 @@ Authorization: Bearer YOUR_API_KEY
 | Email Processor | `ns-email-processor` | `npm run email-processor` | - |
 | WhatsApp Processor | `ns-whatsapp-processor` | `npm run whatsapp-processor` | - |
 | Delayed Processor | `ns-delayed-processor` | `npm run delayed-processor` | - |
+| **Admin Dashboard** | `ns-dashboard` | `cd dashboard && npm run start` | 3002 |
 | Grafana | `grafana` | - | 3001 |
 | Loki | `loki` | - | 3100 |
 | Kafka UI | `kafka-ui` | - | 8080 |
+
+---
+
+## Admin Dashboard
+
+The Admin Dashboard is a Next.js web application for monitoring and managing notifications.
+
+### Features
+
+- 📊 **Dashboard Overview** — Total, delivered, pending, and failed notification counts
+- 📋 **Events Explorer** — Paginated table with filtering and search
+- 🔴 **Failed Events Inspector** — View and batch-retry failed notifications
+- 📈 **Analytics** — Charts for status and channel distribution
+- 🔐 **Authentication** — Username/password login with session management
+
+### Access
+
+- **URL**: http://localhost:3002
+- **Default credentials** (configure via environment variables):
+  - Username: `admin`
+  - Password: `admin`
+
+### Dashboard Configuration
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `AUTH_SECRET` | NextAuth session encryption secret | Required |
+| `ADMIN_USERNAME` | Dashboard login username | `admin` |
+| `ADMIN_PASSWORD` | Dashboard login password | `admin` |
+
+### Local Development
+
+```bash
+cd dashboard
+npm install
+npm run dev
+```
 
 ### Monitoring
 

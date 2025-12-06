@@ -127,6 +127,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: simplens:latest
     container_name: ns-api
     ports:
       - "3000:3000"
@@ -162,7 +163,7 @@ services:
 
   # Background Worker - Polls outbox, publishes to Kafka, updates status in MongoDB
   worker:
-    image: backend-notification-service-api:latest
+    image: simplens:latest
     container_name: ns-worker
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -193,7 +194,7 @@ services:
 
   # Email Processor - Consumes from email_notification topic, sends emails via SMTP
   email-processor:
-    image: backend-notification-service-api:latest
+    image: simplens:latest
     container_name: ns-email-processor
     environment:
       NODE_ENV: production
@@ -233,7 +234,7 @@ services:
 
   # WhatsApp Processor - Consumes from whatsapp_notification topic, sends WhatsApp messages
   whatsapp-processor:
-    image: backend-notification-service-api:latest
+    image: simplens:latest
     container_name: ns-whatsapp-processor
     environment:
       NODE_ENV: production
@@ -267,7 +268,7 @@ services:
 
   # Delayed Processor - Handles scheduled notifications via Redis ZSET queue
   delayed-processor:
-    image: backend-notification-service-api:latest
+    image: simplens:latest
     container_name: ns-delayed-processor
     environment:
       NODE_ENV: production
@@ -291,6 +292,28 @@ services:
       redis:
         condition: service_healthy
       loki:
+        condition: service_healthy
+    networks:
+      - ns-network
+    restart: unless-stopped
+
+  # Admin Dashboard - Next.js web app for monitoring notifications
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: ns-dashboard
+    ports:
+      - "3002:3002"
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
+      AUTH_SECRET: ${AUTH_SECRET:-change-this-in-production}
+      AUTH_TRUST_HOST: "true"
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+    depends_on:
+      mongo:
         condition: service_healthy
     networks:
       - ns-network
