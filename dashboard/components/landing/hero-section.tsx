@@ -37,7 +37,7 @@ export function HeroSection() {
                         <Link href="/login" className="sm:ml-3">
                             <Button
                                 size="lg"
-                                className="text-base px-8 gap-2 bg-white text-black border-0"
+                                className="text-base px-8 gap-2 bg-white text-black border-0 hover:bg-white/50 hover:text-black"
                             >
                                 Get Started
                                 <ArrowRight className="h-4 w-4" />
