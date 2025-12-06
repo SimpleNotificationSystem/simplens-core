@@ -151,7 +151,7 @@ npm run dev
 
 5. **Send a test notification**
    ```bash
-   curl -X POST http://localhost:3000/notification \
+   curl -X POST http://localhost:3000/api/notification \
      -H "Content-Type: application/json" \
      -H "Authorization: Bearer YOUR_API_KEY" \
      -d '{
