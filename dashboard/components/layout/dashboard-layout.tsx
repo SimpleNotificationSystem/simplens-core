@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarThemeToggle } from "@/components/theme-toggle";
+import { LogoutButton } from "@/components/logout-button";
 
 const navItems = [
     {
@@ -108,6 +109,9 @@ function AppSidebar() {
                             ))}
                             <SidebarMenuItem>
                                 <SidebarThemeToggle />
+                            </SidebarMenuItem>
+                            <SidebarMenuItem>
+                                <LogoutButton />
                             </SidebarMenuItem>
                         </SidebarMenu>
                     </SidebarGroupContent>
