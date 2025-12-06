@@ -2,6 +2,8 @@
     <img src="./assets/SimpleNSLogo.png" alt="SimpleNS Logo" width="280" />
 </p>
 
+![SimpleNS Hero Section](./assets/Hero.png)
+
 SimpleNS (Simple Notification Service) is a lightweight, backend notification service for sending **EMAIL** and **WHATSAPP** messages. It supports single and batch notifications, scheduled deliveries, automatic retires, template variables, and webhook callbacks for delivery status updates.
 
 ---
