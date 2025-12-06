@@ -127,6 +127,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: simplens:latest
     container_name: ns-api
     ports:
       - "3000:3000"
@@ -162,7 +163,7 @@ services:
 
   # Background Worker - Polls outbox, publishes to Kafka, updates status in MongoDB
   worker:
-    image: backend-notification-service-api:latest
+    image: simplens:latest
     container_name: ns-worker
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -193,7 +194,7 @@ services:
 
   # Email Processor - Consumes from email_notification topic, sends emails via SMTP
   email-processor:
-    image: backend-notification-service-api:latest
+    image: simplens:latest
     container_name: ns-email-processor
     environment:
       NODE_ENV: production
@@ -233,7 +234,7 @@ services:
 
   # WhatsApp Processor - Consumes from whatsapp_notification topic, sends WhatsApp messages
   whatsapp-processor:
-    image: backend-notification-service-api:latest
+    image: simplens:latest
     container_name: ns-whatsapp-processor
     environment:
       NODE_ENV: production
@@ -267,7 +268,7 @@ services:
 
   # Delayed Processor - Handles scheduled notifications via Redis ZSET queue
   delayed-processor:
-    image: backend-notification-service-api:latest
+    image: simplens:latest
     container_name: ns-delayed-processor
     environment:
       NODE_ENV: production
