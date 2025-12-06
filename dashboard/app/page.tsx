@@ -1,25 +1,19 @@
 "use client";
 
-import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { StatsRowOne, StatsRowTwo } from "@/components/dashboard/stats-cards";
-import { RecentActivity } from "@/components/dashboard/recent-activity";
+import { LandingNavbar } from "@/components/landing/landing-navbar";
+import { HeroSection } from "@/components/landing/hero-section";
+import { FeatureSection } from "@/components/landing/feature-section";
+import { ArchitectureSection } from "@/components/landing/architecture-section";
+import { LandingFooter } from "@/components/landing/landing-footer";
 
-export default function DashboardPage() {
+export default function LandingPage() {
   return (
-    <DashboardLayout
-      title="Dashboard"
-      description="Overview of your notification service"
-    >
-      <div className="space-y-6">
-        {/* Row 1: Total Notifications | Delivered | Pending/Processing */}
-        <StatsRowOne />
-
-        {/* Row 2: Failed | Email | WhatsApp */}
-        <StatsRowTwo />
-
-        {/* Row 3: Recent Activity (full width) */}
-        <RecentActivity />
-      </div>
-    </DashboardLayout>
+    <main className="min-h-screen">
+      <LandingNavbar />
+      <HeroSection />
+      <FeatureSection />
+      <ArchitectureSection />
+      <LandingFooter />
+    </main>
   );
 }

@@ -40,14 +40,22 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         authorized({ auth, request: { nextUrl } }) {
             const isLoggedIn = !!auth?.user;
             const isOnLogin = nextUrl.pathname === "/login";
+            const isOnLanding = nextUrl.pathname === "/";
 
+            // Landing page is public
+            if (isOnLanding) {
+                return true;
+            }
+
+            // Login page: redirect logged-in users to dashboard
             if (isOnLogin) {
                 if (isLoggedIn) {
-                    return Response.redirect(new URL("/", nextUrl));
+                    return Response.redirect(new URL("/dashboard", nextUrl));
                 }
                 return true;
             }
 
+            // All other pages require authentication
             if (!isLoggedIn) {
                 return false;
             }
