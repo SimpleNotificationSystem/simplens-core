@@ -133,112 +133,111 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2">
-                {/* Left Column - Form */}
-                <div className="space-y-6">
-                    {/* Channels */}
-                    <Card>
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-medium">Channels</CardTitle>
-                        </CardHeader>
-                        <CardContent className="flex gap-4">
-                            <div className="flex items-center space-x-2">
-                                <Checkbox
-                                    id="email"
-                                    checked={channels.includes("email")}
-                                    onCheckedChange={() => toggleChannel("email")}
-                                />
-                                <Label htmlFor="email" className="flex items-center gap-2">
-                                    <Mail className="h-4 w-4" />
-                                    Email
-                                </Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                                <Checkbox
-                                    id="whatsapp"
-                                    checked={channels.includes("whatsapp")}
-                                    onCheckedChange={() => toggleChannel("whatsapp")}
-                                />
-                                <Label htmlFor="whatsapp" className="flex items-center gap-2">
-                                    <MessageCircle className="h-4 w-4" />
-                                    WhatsApp
-                                </Label>
-                            </div>
-                        </CardContent>
-                    </Card>
+        <form onSubmit={handleSubmit} className="w-full space-y-6">
+            {/* Form */}
+            <div className="space-y-6">
+                {/* Channels */}
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium">Channels</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex gap-4">
+                        <div className="flex items-center space-x-2">
+                            <Checkbox
+                                id="email"
+                                checked={channels.includes("email")}
+                                onCheckedChange={() => toggleChannel("email")}
+                            />
+                            <Label htmlFor="email" className="flex items-center gap-2">
+                                <Mail className="h-4 w-4" />
+                                Email
+                            </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <Checkbox
+                                id="whatsapp"
+                                checked={channels.includes("whatsapp")}
+                                onCheckedChange={() => toggleChannel("whatsapp")}
+                            />
+                            <Label htmlFor="whatsapp" className="flex items-center gap-2">
+                                <MessageCircle className="h-4 w-4" />
+                                WhatsApp
+                            </Label>
+                        </div>
+                    </CardContent>
+                </Card>
 
-                    {/* Recipient */}
-                    <Card>
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-medium">Recipient</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label htmlFor="requestId">Request ID (UUID format)</Label>
-                                    <div className="flex gap-2">
-                                        <Input
-                                            id="requestId"
-                                            placeholder="e.g. a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-                                            value={requestId}
-                                            onChange={(e) => setRequestId(e.target.value)}
-                                            className="font-mono text-xs"
-                                        />
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="icon"
-                                            onClick={regenerateRequestId}
-                                            title="Generate new UUID"
-                                        >
-                                            <RefreshCw className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="userId">User ID * (UUID format)</Label>
+                {/* Recipient */}
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium">Recipient</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div className="space-y-2">
+                                <Label htmlFor="requestId">Request ID (UUID format)</Label>
+                                <div className="flex gap-2">
                                     <Input
-                                        id="userId"
+                                        id="requestId"
                                         placeholder="e.g. a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-                                        value={userId}
-                                        onChange={(e) => setUserId(e.target.value)}
-                                        required
+                                        value={requestId}
+                                        onChange={(e) => setRequestId(e.target.value)}
                                         className="font-mono text-xs"
                                     />
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        onClick={regenerateRequestId}
+                                        title="Generate new UUID"
+                                    >
+                                        <RefreshCw className="h-4 w-4" />
+                                    </Button>
                                 </div>
                             </div>
-                            {channels.includes("email") && (
-                                <div className="space-y-2">
-                                    <Label htmlFor="email">Email Address * (e.g. user@example.com)</Label>
-                                    <Input
-                                        id="email"
-                                        type="email"
-                                        placeholder="e.g. john@example.com"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        required
-                                    />
-                                </div>
-                            )}
-                            {channels.includes("whatsapp") && (
-                                <div className="space-y-2">
-                                    <Label htmlFor="phone">Phone Number * (E.164 format: +CountryCode...)</Label>
-                                    <Input
-                                        id="phone"
-                                        type="tel"
-                                        placeholder="e.g. +15551234567 or +919876543210"
-                                        value={phone}
-                                        onChange={(e) => setPhone(e.target.value)}
-                                        required
-                                    />
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
+                            <div className="space-y-2">
+                                <Label htmlFor="userId">User ID * (string)</Label>
+                                <Input
+                                    id="userId"
+                                    placeholder="user123"
+                                    value={userId}
+                                    onChange={(e) => setUserId(e.target.value)}
+                                    required
+                                />
+                            </div>
+                        </div>
+                        {channels.includes("email") && (
+                            <div className="space-y-2">
+                                <Label htmlFor="email">Email Address * (e.g. user@example.com)</Label>
+                                <Input
+                                    id="email"
+                                    type="email"
+                                    placeholder="e.g. john@example.com"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    required
+                                />
+                            </div>
+                        )}
+                        {channels.includes("whatsapp") && (
+                            <div className="space-y-2">
+                                <Label htmlFor="phone">Phone Number * (E.164 format: +CountryCode...)</Label>
+                                <Input
+                                    id="phone"
+                                    type="tel"
+                                    placeholder="e.g. +15551234567 or +919876543210"
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value)}
+                                    required
+                                />
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
 
-                    {/* Email Content */}
-                    {channels.includes("email") && (
+                {/* Email Content */}
+                {channels.includes("email") && (
+                    <>
                         <Card>
                             <CardHeader className="pb-3">
                                 <CardTitle className="text-sm font-medium">Email Content</CardTitle>
@@ -268,74 +267,65 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                                 </div>
                             </CardContent>
                         </Card>
-                    )}
 
-                    {/* WhatsApp Content */}
-                    {channels.includes("whatsapp") && (
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <CardTitle className="text-sm font-medium">WhatsApp Content</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="space-y-2">
-                                    <Label htmlFor="whatsappMsg">Message *</Label>
-                                    <Textarea
-                                        id="whatsappMsg"
-                                        placeholder="Enter your WhatsApp message..."
-                                        value={whatsappMessage}
-                                        onChange={(e) => setWhatsappMessage(e.target.value)}
-                                        rows={4}
-                                        required
-                                    />
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
+                        {/* Email Preview - directly under email content */}
+                        {emailMessage && (
+                            <HtmlPreview html={emailMessage} />
+                        )}
+                    </>
+                )}
 
-                    {/* Schedule */}
+                {/* WhatsApp Content */}
+                {channels.includes("whatsapp") && (
                     <Card>
                         <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-medium">Schedule (Optional)</CardTitle>
-                            <CardDescription>Leave empty to send immediately</CardDescription>
+                            <CardTitle className="text-sm font-medium">WhatsApp Content</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <DateTimePicker
-                                value={scheduledDate}
-                                onChange={setScheduledDate}
-                                placeholder="Pick a date & time"
-                            />
+                            <div className="space-y-2">
+                                <Label htmlFor="whatsappMsg">Message *</Label>
+                                <Textarea
+                                    id="whatsappMsg"
+                                    placeholder="Enter your WhatsApp message..."
+                                    value={whatsappMessage}
+                                    onChange={(e) => setWhatsappMessage(e.target.value)}
+                                    rows={4}
+                                    required
+                                />
+                            </div>
                         </CardContent>
                     </Card>
+                )}
 
-                    {/* Submit */}
-                    <Button type="submit" className="w-full" disabled={isLoading}>
-                        {isLoading ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Sending...
-                            </>
-                        ) : (
-                            <>
-                                <Send className="mr-2 h-4 w-4" />
-                                Send Notification
-                            </>
-                        )}
-                    </Button>
-                </div>
+                {/* Schedule */}
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium">Schedule (Optional)</CardTitle>
+                        <CardDescription>Leave empty to send immediately</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <DateTimePicker
+                            value={scheduledDate}
+                            onChange={setScheduledDate}
+                            placeholder="Pick a date & time"
+                        />
+                    </CardContent>
+                </Card>
 
-                {/* Right Column - Preview */}
-                <div className="space-y-6">
-                    {channels.includes("email") && emailMessage && (
-                        <HtmlPreview html={emailMessage} />
+                {/* Submit */}
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                    {isLoading ? (
+                        <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Sending...
+                        </>
+                    ) : (
+                        <>
+                            <Send className="mr-2 h-4 w-4" />
+                            Send Notification
+                        </>
                     )}
-                    {!channels.includes("email") && (
-                        <Card>
-                            <CardContent className="pt-6 text-center text-muted-foreground">
-                                Select email channel to see preview
-                            </CardContent>
-                        </Card>
-                    )}
-                </div>
+                </Button>
             </div>
         </form>
     );

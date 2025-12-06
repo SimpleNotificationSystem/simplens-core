@@ -37,7 +37,7 @@ app.get("/health", (req: Request, res: Response)=>{
     return;
 });
 
-app.use('/notification', auth_middleware, notification_router);
+app.use('/api/notification', auth_middleware, notification_router);
 
 const start_server = async ()=>{
     try{

@@ -12,26 +12,32 @@ export default function SendPage() {
             title="Send Notification"
             description="Send single or batch notifications"
         >
-            <Tabs defaultValue="single" className="space-y-6">
-                <TabsList>
-                    <TabsTrigger value="single" className="flex items-center gap-2">
-                        <User className="h-4 w-4" />
-                        Single
-                    </TabsTrigger>
-                    <TabsTrigger value="batch" className="flex items-center gap-2">
-                        <Users className="h-4 w-4" />
-                        Batch
-                    </TabsTrigger>
-                </TabsList>
+            <div className="w-full sm:w-[80%] mx-auto">
+                <Tabs defaultValue="single" className=" w-fullspace-y-6">
+                    <TabsList className="w-full mb-4">
+                        <TabsTrigger value="single" className="flex items-center gap-2">
+                            <User className="h-4 w-4" />
+                            Single
+                        </TabsTrigger>
+                        <TabsTrigger value="batch" className="flex items-center gap-2">
+                            <Users className="h-4 w-4" />
+                            Batch
+                        </TabsTrigger>
+                    </TabsList>
 
-                <TabsContent value="single">
-                    <SingleNotificationForm />
-                </TabsContent>
+                    <TabsContent value="single">
+                        <div className="flex justify-center">
+                            <SingleNotificationForm />
+                        </div>
+                    </TabsContent>
 
-                <TabsContent value="batch">
-                    <BatchNotificationForm />
-                </TabsContent>
-            </Tabs>
+                    <TabsContent value="batch">
+                        <div className="flex justify-center">
+                            <BatchNotificationForm />
+                        </div>
+                    </TabsContent>
+                </Tabs>
+            </div>
         </DashboardLayout>
     );
 }
