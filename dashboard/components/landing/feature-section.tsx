@@ -18,14 +18,14 @@ const features = [
     {
         Icon: LayersIcon,
         name: "Multi-Channel Delivery",
-        description: "Send notifications through Email and WhatsApp with a unified REST API. Single integration, multiple delivery paths.",
+        description: "Single integration, multiple delivery paths.",
         background: <ChannelFlowBackground />,
         className: "lg:row-start-1 lg:row-end-4 lg:col-start-2 lg:col-end-3",
     },
     {
         Icon: RocketIcon,
         name: "Single & Batch Notifications",
-        description: "Scale from one recipient to thousands with the same API. Per-recipient template variables and individual tracking.",
+        description: "Scale from one recipient to thousands with the same API.",
         background: <BatchNotificationBackground />,
         className: "lg:col-start-1 lg:col-end-2 lg:row-start-1 lg:row-end-3",
     },
@@ -36,7 +36,7 @@ const features = [
         background: <ScheduleClockBackground />,
         className: "lg:col-start-1 lg:col-end-2 lg:row-start-3 lg:row-end-4",
     },
-    
+
     {
         Icon: CodeIcon,
         name: "Automatic Retries",
@@ -48,7 +48,7 @@ const features = [
 
 export function FeatureSection() {
     return (
-        <div className="w-full flex flex-col justify-center items-center p-5 gap-5">
+        <div id="features" className="w-full flex flex-col justify-center items-center p-5 gap-5 bg-black">
             <div className="mb-20 text-center relative z-10">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-900/20 border border-blue-500/20 text-blue-400 text-xs font-medium uppercase tracking-wider mb-4">
                     <Zap size={12} className="fill-blue-400" />
