@@ -23,18 +23,18 @@ export function HeroSection() {
                             priority
                         />
 
-                        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white mb-6 leading-tight sm:ml-3">
+                        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white mb-6 leading-tight">
                             Simple. Scalable.{" "}
                             <span className="bg-linear-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
                                 Notifications.
                             </span>
                         </h1>
 
-                        <p className="sm:ml-3 text-base sm:text-lg text-zinc-400 mb-8 leading-relaxed">
+                        <p className="text-base sm:text-lg text-zinc-400 mb-8 leading-relaxed">
                             A lightweight backend notification service for Email and WhatsApp with scheduled delivery, automatic retries, and real-time status updates.
                         </p>
 
-                        <Link href="/login" className="sm:ml-3">
+                        <Link href="/login">
                             <Button
                                 size="lg"
                                 className="text-base px-8 gap-2 bg-white text-black border-0 hover:bg-white/50 hover:text-black"

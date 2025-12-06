@@ -102,8 +102,7 @@ export function ArchitectureSection() {
                     <span>Architecture</span>
                 </div>
                 <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-white mb-6">
-                    How It <br className="hidden md:block" />
-                    <span className="text-transparent bg-clip-text bg-linear-to-r from-blue-300 to-blue-600">Works</span>
+                    How It <span className="text-transparent bg-clip-text bg-linear-to-r from-blue-300 to-blue-600">Works</span>
                 </h2>
                 <p className="max-w-2xl mx-auto text-lg text-slate-400">
                     A scalable event-driven architecture with Kafka for message routing, Redis for scheduling, and MongoDB for persistence.
