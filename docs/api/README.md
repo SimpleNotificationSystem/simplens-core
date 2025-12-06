@@ -15,8 +15,8 @@ Complete API reference for the Notification Service. This document covers all en
   - [Rate Limits](#rate-limits)
 - [Endpoints](#endpoints)
   - [Health Check](#health-check)
-  - [POST /notification](#post-notification)
-  - [POST /notification/batch](#post-notificationbatch)
+  - [POST /api/notification](#post-notification)
+  - [POST /api/notification/batch](#post-notificationbatch)
 - [Webhook Callbacks](#webhook-callbacks)
 - [Error Responses](#error-responses)
 
@@ -34,7 +34,7 @@ All requests and responses use JSON format.
 
 ## Authentication
 
-All `/notification` endpoints require authentication via Bearer token in the `Authorization` header:
+All `/api/notification` endpoints require authentication via Bearer token in the `Authorization` header:
 
 ```http
 Authorization: Bearer <your_api_key>
@@ -42,7 +42,7 @@ Authorization: Bearer <your_api_key>
 
 **Example:**
 ```bash
-curl -X POST http://localhost:3000/notification \
+curl -X POST http://localhost:3000/api/notification \
   -H "Authorization: Bearer my-secret-api-key" \
   -H "Content-Type: application/json" \
   -d '{ ... }'
@@ -165,12 +165,12 @@ GET /health
 
 ---
 
-### POST /notification
+### POST /api/notification
 
 Send a single notification to one recipient. Supports multiple channels per request.
 
 ```http
-POST /notification
+POST /api/notification
 Authorization: Bearer <api_key>
 Content-Type: application/json
 ```
@@ -258,12 +258,12 @@ Content-Type: application/json
 
 ---
 
-### POST /notification/batch
+### POST /api/notification/batch
 
 Send the same notification content to multiple recipients. Ideal for announcements, marketing campaigns, or bulk notifications. Use template variables to personalize each message.
 
 ```http
-POST /notification/batch
+POST /api/notification/batch
 Authorization: Bearer <api_key>
 Content-Type: application/json
 ```
@@ -451,7 +451,7 @@ All error responses follow this format:
 ### Send Welcome Email
 
 ```bash
-curl -X POST http://localhost:3000/notification \
+curl -X POST http://localhost:3000/api/notification \
   -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -475,7 +475,7 @@ curl -X POST http://localhost:3000/notification \
 ### Send Scheduled Batch with Variables
 
 ```bash
-curl -X POST http://localhost:3000/notification/batch \
+curl -X POST http://localhost:3000/api/notification/batch \
   -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
   -d '{

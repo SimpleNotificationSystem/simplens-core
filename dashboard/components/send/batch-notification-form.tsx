@@ -174,107 +174,107 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2">
-                {/* Left Column - Form */}
-                <div className="space-y-6">
-                    {/* Channels */}
-                    <Card>
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-medium">Channels</CardTitle>
-                        </CardHeader>
-                        <CardContent className="flex gap-4">
-                            <div className="flex items-center space-x-2">
-                                <Checkbox
-                                    id="batch-email"
-                                    checked={channels.includes("email")}
-                                    onCheckedChange={() => toggleChannel("email")}
-                                />
-                                <Label htmlFor="batch-email" className="flex items-center gap-2">
-                                    <Mail className="h-4 w-4" />
-                                    Email
-                                </Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                                <Checkbox
-                                    id="batch-whatsapp"
-                                    checked={channels.includes("whatsapp")}
-                                    onCheckedChange={() => toggleChannel("whatsapp")}
-                                />
-                                <Label htmlFor="batch-whatsapp" className="flex items-center gap-2">
-                                    <MessageCircle className="h-4 w-4" />
-                                    WhatsApp
-                                </Label>
-                            </div>
-                        </CardContent>
-                    </Card>
+        <form onSubmit={handleSubmit} className="space-y-6 w-full">
+            {/* Form */}
+            <div className="space-y-6">
+                {/* Channels */}
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium">Channels</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex gap-4">
+                        <div className="flex items-center space-x-2">
+                            <Checkbox
+                                id="batch-email"
+                                checked={channels.includes("email")}
+                                onCheckedChange={() => toggleChannel("email")}
+                            />
+                            <Label htmlFor="batch-email" className="flex items-center gap-2">
+                                <Mail className="h-4 w-4" />
+                                Email
+                            </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <Checkbox
+                                id="batch-whatsapp"
+                                checked={channels.includes("whatsapp")}
+                                onCheckedChange={() => toggleChannel("whatsapp")}
+                            />
+                            <Label htmlFor="batch-whatsapp" className="flex items-center gap-2">
+                                <MessageCircle className="h-4 w-4" />
+                                WhatsApp
+                            </Label>
+                        </div>
+                    </CardContent>
+                </Card>
 
-                    {/* Recipients */}
-                    <Card>
-                        <CardHeader className="pb-3">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <CardTitle className="text-sm font-medium">Recipients</CardTitle>
-                                    <CardDescription>Add multiple recipients with template variables</CardDescription>
-                                </div>
-                                <Button type="button" variant="outline" size="sm" onClick={addRecipient}>
-                                    <Plus className="h-4 w-4 mr-1" />
-                                    Add
-                                </Button>
+                {/* Recipients */}
+                <Card>
+                    <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle className="text-sm font-medium">Recipients</CardTitle>
+                                <CardDescription>Add multiple recipients with template variables</CardDescription>
                             </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            {recipients.map((recipient, index) => (
-                                <div key={recipient.id} className="border rounded-lg p-4 space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-sm font-medium">Recipient {index + 1}</span>
-                                        {recipients.length > 1 && (
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => removeRecipient(recipient.id)}
-                                            >
-                                                <Trash2 className="h-4 w-4 text-destructive" />
-                                            </Button>
-                                        )}
-                                    </div>
-                                    <Input
-                                        placeholder="User ID * (UUID: e.g. a1b2c3d4-e5f6-7890-abcd-ef1234567890)"
-                                        value={recipient.user_id}
-                                        onChange={(e) => updateRecipient(recipient.id, "user_id", e.target.value)}
-                                        className="font-mono text-xs"
-                                    />
-                                    <div className="grid gap-3 md:grid-cols-2">
-                                        {channels.includes("email") && (
-                                            <Input
-                                                placeholder="Email * (e.g. user@example.com)"
-                                                type="email"
-                                                value={recipient.email}
-                                                onChange={(e) => updateRecipient(recipient.id, "email", e.target.value)}
-                                            />
-                                        )}
-                                        {channels.includes("whatsapp") && (
-                                            <Input
-                                                placeholder="Phone * (E.164: +15551234567)"
-                                                value={recipient.phone}
-                                                onChange={(e) => updateRecipient(recipient.id, "phone", e.target.value)}
-                                            />
-                                        )}
-                                    </div>
-                                    <Input
-                                        placeholder='Variables (optional): {"name": "Alice", "promo_code": "SUMMER20"}'
-                                        value={recipient.variables === "{}" ? "" : recipient.variables}
-                                        onChange={(e) => updateRecipient(recipient.id, "variables", e.target.value || "{}")}
-                                        className="font-mono text-xs"
-                                    />
+                            <Button type="button" variant="outline" size="sm" onClick={addRecipient}>
+                                <Plus className="h-4 w-4 mr-1" />
+                                Add
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {recipients.map((recipient, index) => (
+                            <div key={recipient.id} className="border rounded-lg p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium">Recipient {index + 1}</span>
+                                    {recipients.length > 1 && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => removeRecipient(recipient.id)}
+                                        >
+                                            <Trash2 className="h-4 w-4 text-destructive" />
+                                        </Button>
+                                    )}
                                 </div>
-                            ))}
-                        </CardContent>
-                    </Card>
+                                <Input
+                                    placeholder="User ID * (string: e.g. user123)"
+                                    value={recipient.user_id}
+                                    onChange={(e) => updateRecipient(recipient.id, "user_id", e.target.value)}
+                                    className="font-mono text-xs"
+                                />
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    {channels.includes("email") && (
+                                        <Input
+                                            placeholder="Email * (e.g. user@example.com)"
+                                            type="email"
+                                            value={recipient.email}
+                                            onChange={(e) => updateRecipient(recipient.id, "email", e.target.value)}
+                                        />
+                                    )}
+                                    {channels.includes("whatsapp") && (
+                                        <Input
+                                            placeholder="Phone * (E.164: +15551234567)"
+                                            value={recipient.phone}
+                                            onChange={(e) => updateRecipient(recipient.id, "phone", e.target.value)}
+                                        />
+                                    )}
+                                </div>
+                                <Input
+                                    placeholder='Variables (optional): {"name": "Alice", "promo_code": "SUMMER20"}'
+                                    value={recipient.variables === "{}" ? "" : recipient.variables}
+                                    onChange={(e) => updateRecipient(recipient.id, "variables", e.target.value || "{}")}
+                                    className="font-mono text-xs"
+                                />
+                            </div>
+                        ))}
+                    </CardContent>
+                </Card>
 
-                    {/* Email Content */}
-                    {channels.includes("email") && (
+                {/* Email Content */}
+                {channels.includes("email") && (
+                    <>
                         <Card>
                             <CardHeader className="pb-3">
                                 <CardTitle className="text-sm font-medium">Email Template</CardTitle>
@@ -305,71 +305,61 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                                 </div>
                             </CardContent>
                         </Card>
-                    )}
 
-                    {/* WhatsApp Content */}
-                    {channels.includes("whatsapp") && (
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <CardTitle className="text-sm font-medium">WhatsApp Template</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <Textarea
-                                    placeholder="Hi {{name}}, your code is {{code}}."
-                                    value={whatsappMessage}
-                                    onChange={(e) => setWhatsappMessage(e.target.value)}
-                                    rows={4}
-                                    required
-                                />
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {/* Schedule */}
+                        {/* Email Preview - directly under email template */}
+                        {emailMessage && (
+                            <HtmlPreview html={emailMessage} variables={previewVariables} />
+                        )}
+                    </>
+                )}
+                {/* WhatsApp Content */}
+                {channels.includes("whatsapp") && (
                     <Card>
                         <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-medium">Schedule (Optional)</CardTitle>
-                            <CardDescription>Leave empty to send immediately</CardDescription>
+                            <CardTitle className="text-sm font-medium">WhatsApp Template</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <DateTimePicker
-                                value={scheduledDate}
-                                onChange={setScheduledDate}
-                                placeholder="Pick a date & time"
+                            <Textarea
+                                placeholder="Hi {{name}}, your code is {{code}}."
+                                value={whatsappMessage}
+                                onChange={(e) => setWhatsappMessage(e.target.value)}
+                                rows={4}
+                                required
                             />
                         </CardContent>
                     </Card>
+                )}
 
-                    {/* Submit */}
-                    <Button type="submit" className="w-full" disabled={isLoading}>
-                        {isLoading ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Sending...
-                            </>
-                        ) : (
-                            <>
-                                <Send className="mr-2 h-4 w-4" />
-                                Send Batch ({recipients.length} recipient{recipients.length > 1 ? "s" : ""})
-                            </>
-                        )}
-                    </Button>
-                </div>
+                {/* Schedule */}
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium">Schedule (Optional)</CardTitle>
+                        <CardDescription>Leave empty to send immediately</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <DateTimePicker
+                            value={scheduledDate}
+                            onChange={setScheduledDate}
+                            placeholder="Pick a date & time"
+                        />
+                    </CardContent>
+                </Card>
 
-                {/* Right Column - Preview */}
-                <div className="space-y-6">
-                    {channels.includes("email") && emailMessage && (
-                        <HtmlPreview html={emailMessage} variables={previewVariables} />
+                {/* Submit */}
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                    {isLoading ? (
+                        <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Sending...
+                        </>
+                    ) : (
+                        <>
+                            <Send className="mr-2 h-4 w-4" />
+                            Send Batch ({recipients.length} recipient{recipients.length > 1 ? "s" : ""})
+                        </>
                     )}
-                    {!channels.includes("email") && (
-                        <Card>
-                            <CardContent className="pt-6 text-center text-muted-foreground">
-                                Select email channel to see preview
-                            </CardContent>
-                        </Card>
-                    )}
-                </div>
+                </Button>
             </div>
-        </form>
+        </form >
     );
 }

@@ -38,8 +38,8 @@ export async function POST(request: Request) {
 
         // Determine endpoint based on type
         const endpoint = type === "batch"
-            ? `${API_BASE_URL}/notification/batch`
-            : `${API_BASE_URL}/notification`;
+            ? `${API_BASE_URL}/api/notification/batch`
+            : `${API_BASE_URL}/api/notification`;
 
         // Forward request to notification service
         const response = await fetch(endpoint, {

@@ -8,6 +8,7 @@ SimpleNS (Simple Notification Service) is a lightweight, backend notification se
 
 ## Table of Contents
 - [Overview](#overview)
+- [Admin Dashboard](#admin-dashboard)
 - [Key Features](#key-features)
 - [Architecture](#architecture)
 - [Getting Started](#getting-started)
@@ -17,6 +18,7 @@ SimpleNS (Simple Notification Service) is a lightweight, backend notification se
 - [Configuration](#configuration)
 - [API Documentation](#api-documentation)
 - [Service Components](#service-components)
+- [Monitoring](#monitoring)
 
 ---
 
@@ -39,6 +41,45 @@ This service provides a REST HTTP API for accepting notifications (EMAIL and WHA
 - ✅ **Rate Limiting** — Token bucket algorithm to prevent provider throttling
 - ✅ **Horizontal Scaling** — Scale processors independently
 - ✅ **Dead Letter Queue** — Failed messages preserved for inspection
+
+---
+
+## Admin Dashboard
+
+The Admin Dashboard is a Next.js web application for monitoring and managing notifications.
+
+![Admin Dashboard](./assets/DashboardUI.png)
+
+### Dashboard Features
+
+- 📊 **Dashboard Overview** — Total, delivered, pending, and failed notification counts
+- 📋 **Events Explorer** — Paginated table with filtering and search
+- 🔴 **Failed Events Inspector** — View and batch-retry failed notifications
+- 📈 **Analytics** — Charts for status and channel distribution
+- 🔐 **Authentication** — Username/password login with session management
+
+### Access
+
+- **URL**: http://localhost:3002
+- **Default credentials** (configure via environment variables):
+  - Username: `admin`
+  - Password: `admin`
+
+### Dashboard Configuration
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `AUTH_SECRET` | NextAuth session encryption secret | Required |
+| `ADMIN_USERNAME` | Dashboard login username | `admin` |
+| `ADMIN_PASSWORD` | Dashboard login password | `admin` |
+
+### Dashboard Local Development
+
+```bash
+cd dashboard
+npm install
+npm run dev
+```
 
 ---
 
@@ -260,42 +301,7 @@ Authorization: Bearer YOUR_API_KEY
 
 ---
 
-## Admin Dashboard
-
-The Admin Dashboard is a Next.js web application for monitoring and managing notifications.
-
-### Features
-
-- 📊 **Dashboard Overview** — Total, delivered, pending, and failed notification counts
-- 📋 **Events Explorer** — Paginated table with filtering and search
-- 🔴 **Failed Events Inspector** — View and batch-retry failed notifications
-- 📈 **Analytics** — Charts for status and channel distribution
-- 🔐 **Authentication** — Username/password login with session management
-
-### Access
-
-- **URL**: http://localhost:3002
-- **Default credentials** (configure via environment variables):
-  - Username: `admin`
-  - Password: `admin`
-
-### Dashboard Configuration
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `AUTH_SECRET` | NextAuth session encryption secret | Required |
-| `ADMIN_USERNAME` | Dashboard login username | `admin` |
-| `ADMIN_PASSWORD` | Dashboard login password | `admin` |
-
-### Local Development
-
-```bash
-cd dashboard
-npm install
-npm run dev
-```
-
-### Monitoring
+## Monitoring
 
 - **Grafana Dashboard**: http://localhost:3001 — Log visualization and monitoring
   - Default login: admin / admin
@@ -304,7 +310,7 @@ npm run dev
 - **Kafka UI**: http://localhost:8080 — Monitor Kafka topics and messages
 - **API Health**: http://localhost:3000/health — API health check
 
-#### Viewing Logs in Grafana
+### Viewing Logs in Grafana
 
 1. Open Grafana at http://localhost:3001
 2. Go to **Explore** (compass icon in sidebar)
@@ -324,7 +330,7 @@ npm run dev
    {job="notification-service"} |= "failed"
    ```
 
-#### Log Labels
+### Log Labels
 
 All logs are tagged with these labels:
 - `job`: `notification-service` (all services)
