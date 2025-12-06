@@ -1,5 +1,8 @@
+"use client";
+
 import { LandingNavbar } from "@/components/landing/landing-navbar";
 import { HeroSection } from "@/components/landing/hero-section";
+import { FeatureSection } from "@/components/landing/feature-section";
 import { LandingFooter } from "@/components/landing/landing-footer";
 
 export default function LandingPage() {
@@ -7,6 +10,7 @@ export default function LandingPage() {
     <main className="min-h-screen">
       <LandingNavbar />
       <HeroSection />
+      <FeatureSection />
       <LandingFooter />
     </main>
   );
