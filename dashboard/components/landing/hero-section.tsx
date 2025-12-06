@@ -9,7 +9,7 @@ import { ArrowRight } from "lucide-react";
 export function HeroSection() {
     return (
         <section className="relative w-full bg-[#030303] overflow-hidden">
-            <div className="flex flex-col lg:flex-row min-h-screen">
+            <div className="flex flex-col lg:flex-row lg:min-h-screen">
 
                 {/* Left Side - Content (40%) */}
                 <div className="w-full lg:w-[40%] flex items-center justify-center lg:justify-start px-6 sm:px-10 lg:pl-20 py-20 lg:py-0 relative z-20">
@@ -17,24 +17,24 @@ export function HeroSection() {
                         <Image
                             src="/SimpleNSLogo.png"
                             alt="SimpleNS"
-                            width={220}
+                            width={320}
                             height={80}
                             className="mb-8 mx-auto lg:mx-0"
                             priority
                         />
 
-                        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white mb-6 leading-tight">
+                        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white mb-6 leading-tight sm:ml-3">
                             Simple. Scalable.{" "}
                             <span className="bg-linear-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
                                 Notifications.
                             </span>
                         </h1>
 
-                        <p className="text-base sm:text-lg text-zinc-400 mb-8 leading-relaxed">
+                        <p className="sm:ml-3 text-base sm:text-lg text-zinc-400 mb-8 leading-relaxed">
                             A lightweight backend notification service for Email and WhatsApp with scheduled delivery, automatic retries, and real-time status updates.
                         </p>
 
-                        <Link href="/login">
+                        <Link href="/login" className="sm:ml-3">
                             <Button
                                 size="lg"
                                 className="text-base px-8 gap-2 bg-white text-black border-0"
@@ -57,15 +57,15 @@ export function HeroSection() {
                             color="#1652b3"
                             flowSpeed={0.4}
                             fogIntensity={0.6}
-                            wispDensity={1.2}
+                            wispDensity={5}
                             verticalSizing={1.0}
-                            horizontalSizing={0.8}
+                            horizontalSizing={1.3}
                             className="w-full h-full"
                         />
                     </div>
 
                     {/* Dashboard Preview - Aligned to bottom of right side */}
-                    <div className="relative z-10 w-[90%] max-w-2xl mb-[-10%] lg:mb-20">
+                    <div className="relative z-10 w-[90%] max-w-2xl mb-[-10%] lg:mb-20 rounded-xl">
                         <div
                             className="rounded-xl overflow-hidden relative"
                         >
