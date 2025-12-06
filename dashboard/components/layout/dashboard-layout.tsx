@@ -9,6 +9,7 @@ import {
     AlertTriangle,
     BarChart3,
     Settings,
+    Send,
 } from "lucide-react";
 import {
     Sidebar,
@@ -33,6 +34,11 @@ const navItems = [
         title: "Dashboard",
         href: "/",
         icon: LayoutDashboard,
+    },
+    {
+        title: "Send",
+        href: "/send",
+        icon: Send,
     },
     {
         title: "Events",

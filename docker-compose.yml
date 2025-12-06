@@ -312,9 +312,16 @@ services:
       AUTH_TRUST_HOST: "true"
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      # For sending notifications
+      API_BASE_URL: http://ns-api:3000
+      NS_API_KEY: ${NS_API_KEY:-dev-api-key-change-in-production}
+      WEBHOOK_HOST: host.docker.internal
+      WEBHOOK_PORT: "3002"
     depends_on:
       mongo:
         condition: service_healthy
+      api:
+        condition: service_started
     networks:
       - ns-network
     restart: unless-stopped
