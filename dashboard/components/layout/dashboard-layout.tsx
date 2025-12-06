@@ -15,8 +15,8 @@ import {
     SidebarContent,
     SidebarGroup,
     SidebarGroupContent,
-    SidebarGroupLabel,
     SidebarHeader,
+    SidebarFooter,
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
@@ -77,7 +77,6 @@ function AppSidebar() {
             </SidebarHeader>
             <SidebarContent>
                 <SidebarGroup>
-                    <SidebarGroupLabel>Navigation</SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
                             {navItems.map((item) => (
@@ -93,30 +92,27 @@ function AppSidebar() {
                         </SidebarMenu>
                     </SidebarGroupContent>
                 </SidebarGroup>
-                <SidebarGroup>
-                    <SidebarGroupLabel>System</SidebarGroupLabel>
-                    <SidebarGroupContent>
-                        <SidebarMenu>
-                            {settingsItems.map((item) => (
-                                <SidebarMenuItem key={item.href}>
-                                    <SidebarMenuButton asChild isActive={pathname === item.href}>
-                                        <Link href={item.href}>
-                                            <item.icon className="h-4 w-4" />
-                                            <span>{item.title}</span>
-                                        </Link>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            ))}
-                            <SidebarMenuItem>
-                                <SidebarThemeToggle />
-                            </SidebarMenuItem>
-                            <SidebarMenuItem>
-                                <LogoutButton />
-                            </SidebarMenuItem>
-                        </SidebarMenu>
-                    </SidebarGroupContent>
-                </SidebarGroup>
             </SidebarContent>
+            <SidebarFooter>
+                <SidebarMenu>
+                    {settingsItems.map((item) => (
+                        <SidebarMenuItem key={item.href}>
+                            <SidebarMenuButton asChild isActive={pathname === item.href}>
+                                <Link href={item.href}>
+                                    <item.icon className="h-4 w-4" />
+                                    <span>{item.title}</span>
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                    ))}
+                    <SidebarMenuItem>
+                        <SidebarThemeToggle />
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                        <LogoutButton />
+                    </SidebarMenuItem>
+                </SidebarMenu>
+            </SidebarFooter>
         </Sidebar>
     );
 }

@@ -50,26 +50,6 @@ export default function SettingsPage() {
                             It supports single and batch notifications, scheduled deliveries, automatic retries,
                             template variables, and webhook callbacks for delivery status updates.
                         </p>
-                        <Separator />
-                        <div className="flex items-center gap-4 text-sm">
-                            <a
-                                href="https://github.com/Adhish-Krishna/backend-notification-service"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary hover:underline"
-                            >
-                                GitHub Repository
-                            </a>
-                            <span className="text-muted-foreground">•</span>
-                            <a
-                                href="http://localhost:3000/health"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary hover:underline"
-                            >
-                                API Health Check
-                            </a>
-                        </div>
                     </CardContent>
                 </Card>
             </div>

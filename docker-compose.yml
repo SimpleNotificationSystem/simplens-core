@@ -297,6 +297,28 @@ services:
       - ns-network
     restart: unless-stopped
 
+  # Admin Dashboard - Next.js web app for monitoring notifications
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: ns-dashboard
+    ports:
+      - "3002:3002"
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
+      AUTH_SECRET: ${AUTH_SECRET:-change-this-in-production}
+      AUTH_TRUST_HOST: "true"
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - ns-network
+    restart: unless-stopped
+
 volumes:
   mongo_data:
   mongo_config:
