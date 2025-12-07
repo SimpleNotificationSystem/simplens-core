@@ -132,7 +132,7 @@ services:
       dockerfile: Dockerfile
     image: simplens:latest
     ports:
-      - "6012:3000"
+      - "3000:3000"
     environment:
       NODE_ENV: production
       PORT: 3000
