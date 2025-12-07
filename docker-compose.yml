@@ -130,6 +130,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: api
     image: simplens:latest
     ports:
       - "3000:3000"
@@ -322,7 +323,7 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
       # For sending notifications
-      API_BASE_URL: http://ns-api:3000
+      API_BASE_URL: http://api:3000
       NS_API_KEY: ${NS_API_KEY:-dev-api-key-change-in-production}
       WEBHOOK_HOST: ns-dashboard
       WEBHOOK_PORT: "3002"
