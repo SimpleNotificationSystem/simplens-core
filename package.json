@@ -8,7 +8,11 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
     "build": "tsc && tsc-alias",
     "start": "node dist/api/server.js",
     "dev": "tsx watch src/api/server.ts",
@@ -19,7 +23,8 @@
     "whatsapp-processor": "node dist/processors/whatsapp/whatsapp.processor.js",
     "whatsapp-processor:dev": "tsx watch src/processors/whatsapp/whatsapp.processor.ts",
     "delayed-processor": "node dist/processors/delayed/delayed.processor.js",
-    "delayed-processor:dev": "tsx watch src/processors/delayed/delayed.processor.ts"
+    "delayed-processor:dev": "tsx watch src/processors/delayed/delayed.processor.ts",
+    "prepare": "husky"
   },
   "repository": {
     "type": "git",
@@ -42,10 +47,17 @@
     "@types/mongoose": "^5.11.96",
     "@types/node": "^24.10.1",
     "@types/nodemailer": "^7.0.4",
+    "@types/supertest": "^6.0.3",
     "@types/uuid": "^10.0.0",
+    "@vitest/coverage-v8": "^4.0.15",
+    "husky": "^9.1.7",
+    "ioredis-mock": "^8.13.1",
+    "mongodb-memory-server": "^10.4.1",
+    "supertest": "^7.1.4",
     "tsc-alias": "^1.8.16",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.15"
   },
   "dependencies": {
     "axios": "^1.13.2",

@@ -1,0 +1,313 @@
+/**
+ * Unit Tests for API Utility Functions
+ * Tests conversion functions and error handling
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { randomUUID } from 'crypto';
+import mongoose from 'mongoose';
+import { CHANNEL, NOTIFICATION_STATUS, TOPICS, DELAYED_TOPICS } from '../../../src/types/types.js';
+import type { notification_request, batch_notification_request, notification } from '../../../src/types/types.js';
+
+// We need to mock the database models before importing utils
+vi.mock('../../../src/database/models/notification.models.js', () => ({
+    default: {
+        insertMany: vi.fn(),
+    },
+}));
+
+vi.mock('../../../src/database/models/outbox.models.js', () => ({
+    default: {
+        insertMany: vi.fn(),
+    },
+}));
+
+vi.mock('../../../src/workers/utils/logger.js', () => ({
+    apiLogger: {
+        info: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+        success: vi.fn(),
+        debug: vi.fn(),
+    },
+}));
+
+describe('API Utility Functions', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    describe('convert_notification_request_to_notification_schema', () => {
+        it('should convert a single-channel request to notifications array', async () => {
+            // Dynamic import after mocks are set up
+            const { convert_notification_request_to_notification_schema } = await import('../../../src/api/utils/utils.js');
+
+            const request: notification_request = {
+                request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                channel: [CHANNEL.email],
+                recipient: {
+                    user_id: 'user-123',
+                    email: 'test@example.com',
+                },
+                content: {
+                    email: {
+                        subject: 'Test Subject',
+                        message: 'Test message',
+                    },
+                },
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const notifications = convert_notification_request_to_notification_schema(request);
+
+            expect(notifications).toHaveLength(1);
+            expect(notifications[0].channel).toBe(CHANNEL.email);
+            expect(notifications[0].request_id).toBe(request.request_id);
+            expect(notifications[0].recipient.email).toBe('test@example.com');
+            expect(notifications[0].status).toBe(NOTIFICATION_STATUS.pending);
+        });
+
+        it('should create multiple notifications for multi-channel request', async () => {
+            const { convert_notification_request_to_notification_schema } = await import('../../../src/api/utils/utils.js');
+
+            const request: notification_request = {
+                request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                channel: [CHANNEL.email, CHANNEL.whatsapp],
+                recipient: {
+                    user_id: 'user-123',
+                    email: 'test@example.com',
+                    phone: '+1234567890',
+                },
+                content: {
+                    email: {
+                        subject: 'Test Subject',
+                        message: 'Email message',
+                    },
+                    whatsapp: {
+                        message: 'WhatsApp message',
+                    },
+                },
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const notifications = convert_notification_request_to_notification_schema(request);
+
+            expect(notifications).toHaveLength(2);
+            expect(notifications.map(n => n.channel).sort()).toEqual([CHANNEL.email, CHANNEL.whatsapp].sort());
+        });
+
+        it('should preserve scheduled_at for delayed notifications', async () => {
+            const { convert_notification_request_to_notification_schema } = await import('../../../src/api/utils/utils.js');
+
+            const futureDate = new Date(Date.now() + 60000);
+            const request: notification_request = {
+                request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                channel: [CHANNEL.email],
+                recipient: {
+                    user_id: 'user-123',
+                    email: 'test@example.com',
+                },
+                content: {
+                    email: {
+                        subject: 'Scheduled',
+                        message: 'Scheduled message',
+                    },
+                },
+                webhook_url: 'https://webhook.example.com/callback',
+                scheduled_at: futureDate,
+            };
+
+            const notifications = convert_notification_request_to_notification_schema(request);
+
+            expect(notifications[0].scheduled_at).toEqual(futureDate);
+        });
+    });
+
+    describe('convert_batch_notification_schema_to_notification_schema', () => {
+        it('should convert batch request to multiple notifications', async () => {
+            const { convert_batch_notification_schema_to_notification_schema } = await import('../../../src/api/utils/utils.js');
+
+            const request: batch_notification_request = {
+                client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                channel: [CHANNEL.email],
+                content: {
+                    email: {
+                        subject: 'Batch Subject',
+                        message: 'Hello {{name}}',
+                    },
+                },
+                recipients: [
+                    { request_id: randomUUID(), user_id: 'user-1', email: 'user1@example.com', variables: { name: 'User 1' } },
+                    { request_id: randomUUID(), user_id: 'user-2', email: 'user2@example.com', variables: { name: 'User 2' } },
+                    { request_id: randomUUID(), user_id: 'user-3', email: 'user3@example.com', variables: { name: 'User 3' } },
+                ],
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const notifications = convert_batch_notification_schema_to_notification_schema(request);
+
+            expect(notifications).toHaveLength(3);
+            expect(notifications[0].recipient.email).toBe('user1@example.com');
+            expect(notifications[1].recipient.email).toBe('user2@example.com');
+            expect(notifications[2].recipient.email).toBe('user3@example.com');
+        });
+
+        it('should create notifications for each channel per recipient', async () => {
+            const { convert_batch_notification_schema_to_notification_schema } = await import('../../../src/api/utils/utils.js');
+
+            const request: batch_notification_request = {
+                client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                channel: [CHANNEL.email, CHANNEL.whatsapp],
+                content: {
+                    email: {
+                        subject: 'Test',
+                        message: 'Email message',
+                    },
+                    whatsapp: {
+                        message: 'WhatsApp message',
+                    },
+                },
+                recipients: [
+                    { request_id: randomUUID(),user_id: 'user-1', email: 'user1@example.com', phone: '+1111111111' },
+                    { request_id: randomUUID(),user_id: 'user-2', email: 'user2@example.com', phone: '+2222222222' },
+                ],
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const notifications = convert_batch_notification_schema_to_notification_schema(request);
+
+            // 2 recipients x 2 channels = 4 notifications
+            expect(notifications).toHaveLength(4);
+        });
+    });
+
+    describe('DuplicateNotificationError', () => {
+        it('should create error with correct properties', async () => {
+            const { DuplicateNotificationError } = await import('../../../src/api/utils/utils.js');
+
+            const duplicates = [
+                { request_id: randomUUID(), channel: CHANNEL.email },
+                { request_id: randomUUID(), channel: CHANNEL.whatsapp },
+            ];
+
+            const error = new DuplicateNotificationError('Duplicate found', duplicates);
+
+            expect(error.name).toBe('DuplicateNotificationError');
+            expect(error.duplicateCount).toBe(2);
+            expect(error.duplicateKeys).toEqual(duplicates);
+            expect(error.message).toBe('Duplicate found');
+        });
+
+        it('should handle empty duplicates array', async () => {
+            const { DuplicateNotificationError } = await import('../../../src/api/utils/utils.js');
+
+            const error = new DuplicateNotificationError('No duplicates');
+
+            expect(error.duplicateCount).toBe(0);
+            expect(error.duplicateKeys).toEqual([]);
+        });
+    });
+
+    describe('to_email_notification', () => {
+        it('should convert notification to email format', async () => {
+            const { to_email_notification } = await import('../../../src/api/utils/utils.js');
+
+            const notification: notification = {
+                request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                channel: CHANNEL.email,
+                recipient: {
+                    user_id: 'user-123',
+                    email: 'test@example.com',
+                },
+                content: {
+                    email: {
+                        subject: 'Test Subject',
+                        message: 'Test message',
+                    },
+                },
+                variables: { name: 'Test User' },
+                webhook_url: 'https://webhook.example.com/callback',
+                status: NOTIFICATION_STATUS.pending,
+                retry_count: 0,
+            };
+
+            const notificationId = new mongoose.Types.ObjectId();
+            const emailNotification = to_email_notification(notification, notificationId);
+
+            expect(emailNotification.notification_id).toEqual(notificationId);
+            expect(emailNotification.channel).toBe(CHANNEL.email);
+            expect(emailNotification.content.subject).toBe('Test Subject');
+            expect(emailNotification.content.message).toBe('Test message');
+            expect(emailNotification.recipient.email).toBe('test@example.com');
+        });
+    });
+
+    describe('to_whatsapp_notification', () => {
+        it('should convert notification to whatsapp format', async () => {
+            const { to_whatsapp_notification } = await import('../../../src/api/utils/utils.js');
+
+            const notification: notification = {
+                request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                channel: CHANNEL.whatsapp,
+                recipient: {
+                    user_id: 'user-123',
+                    phone: '+1234567890',
+                },
+                content: {
+                    whatsapp: {
+                        message: 'WhatsApp message',
+                    },
+                },
+                webhook_url: 'https://webhook.example.com/callback',
+                status: NOTIFICATION_STATUS.pending,
+                retry_count: 0,
+            };
+
+            const notificationId = new mongoose.Types.ObjectId();
+            const whatsappNotification = to_whatsapp_notification(notification, notificationId);
+
+            expect(whatsappNotification.notification_id).toEqual(notificationId);
+            expect(whatsappNotification.channel).toBe(CHANNEL.whatsapp);
+            expect(whatsappNotification.content.message).toBe('WhatsApp message');
+            expect(whatsappNotification.recipient.phone).toBe('+1234567890');
+        });
+    });
+
+    describe('to_delayed_notification_topic', () => {
+        it('should convert notification to delayed format', async () => {
+            const { to_delayed_notification_topic } = await import('../../../src/api/utils/utils.js');
+
+            const scheduledAt = new Date(Date.now() + 60000);
+            const notification: notification = {
+                request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                channel: CHANNEL.email,
+                recipient: {
+                    user_id: 'user-123',
+                    email: 'test@example.com',
+                },
+                content: {
+                    email: {
+                        subject: 'Scheduled',
+                        message: 'Scheduled message',
+                    },
+                },
+                webhook_url: 'https://webhook.example.com/callback',
+                status: NOTIFICATION_STATUS.pending,
+                retry_count: 0,
+                scheduled_at: scheduledAt,
+            };
+
+            const notificationId = new mongoose.Types.ObjectId();
+            const delayedNotification = to_delayed_notification_topic(notification, notificationId);
+
+            expect(delayedNotification.notification_id).toEqual(notificationId);
+            expect(delayedNotification.scheduled_at).toEqual(scheduledAt);
+            expect(delayedNotification.target_topic).toBe(DELAYED_TOPICS.email_notification);
+        });
+    });
+});
