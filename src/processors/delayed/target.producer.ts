@@ -21,7 +21,7 @@ export const initTargetProducer = async (): Promise<void> => {
 
     producer = kafka.producer({
         createPartitioner: Partitioners.LegacyPartitioner,
-        allowAutoTopicCreation: true,
+        allowAutoTopicCreation: false,
     });
 
     await producer.connect();
@@ -41,7 +41,7 @@ export const publishToTarget = async (
     }
 
     const notificationId = payload.notification_id.toString();
-    
+
     await producer.send({
         topic: targetTopic,
         messages: [

@@ -161,7 +161,7 @@ const createWinstonLogger = (service: ServiceContext) => {
         level: env.LOG_LEVEL || 'info',
         defaultMeta: {
             service: SERVICE_LABELS[service],
-            workerId: env.WORKER_ID
+            workerId: "worker-default"
         },
         transports
     });
@@ -193,9 +193,9 @@ export const createLogger = (context: ServiceContext): Logger => {
         },
         error: (message: string, meta?: LogMeta | unknown) => {
             if (meta instanceof Error) {
-                winstonLogger.error(message, { 
-                    error: meta.message, 
-                    stack: meta.stack 
+                winstonLogger.error(message, {
+                    error: meta.message,
+                    stack: meta.stack
                 });
             } else {
                 winstonLogger.error(message, meta as LogMeta);

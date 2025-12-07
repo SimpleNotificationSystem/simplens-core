@@ -20,6 +20,10 @@ export const env = {
     PORT: <number>parseInt(process.env.PORT || "3000"),
     NS_API_KEY: <string>(process.env.NS_API_KEY || ""),
     MAX_BATCH_REQ_LIMIT: <number>parseInt(process.env.MAX_BATCH_REQ_LIMIT || "1000"),
+    EMAIL_PARTITION:<number>parseInt(process.env.EMAIL_PARTITION || "1"),
+    WHATSAPP_PARTITION:<number>parseInt(process.env.WHATSAPP_PARTITION || "1"),
+    DELAYED_PARTITION:<number>parseInt(process.env.DELAYED_PARTITION || "1"),
+    NOTIFICATION_STATUS_PARTITION:<number>parseInt(process.env.NOTIFICATION_STATUS_PARTITION || "1"),
     
     // Kafka
     BROKERS: <string[]>(process.env.BROKERS?.trim().split(',') || ["localhost:9092"]),

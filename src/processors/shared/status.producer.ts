@@ -18,7 +18,7 @@ export const initStatusProducer = async (): Promise<void> => {
 
     producer = kafka.producer({
         createPartitioner: Partitioners.LegacyPartitioner,
-        allowAutoTopicCreation: true,
+        allowAutoTopicCreation: false,
     });
 
     await producer.connect();

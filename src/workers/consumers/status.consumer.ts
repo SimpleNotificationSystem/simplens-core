@@ -153,6 +153,7 @@ const processStatusMessage = async ({ partition, message }: EachMessagePayload):
         const newStatus = mapToNotificationStatus(data.status);
         const updateData: Record<string, unknown> = {
             status: newStatus,
+            retry_count: data.retry_count,
             updated_at: new Date()
         };
 

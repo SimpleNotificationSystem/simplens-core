@@ -151,7 +151,7 @@ npm run dev
 
 5. **Send a test notification**
    ```bash
-   curl -X POST http://localhost:3000/notification \
+   curl -X POST http://localhost:3000/api/notification \
      -H "Content-Type: application/json" \
      -H "Authorization: Bearer YOUR_API_KEY" \
      -d '{
@@ -232,6 +232,9 @@ docker-compose up -d --scale email-processor=3
 
 # Scale WhatsApp processor to 2 instances
 docker-compose up -d --scale whatsapp-processor=2
+
+#Scale multiple services using the same command
+docker-compose up -d --scale <service_name>=<count> --scale <service_name>=<count> ...
 ```
 
 ---

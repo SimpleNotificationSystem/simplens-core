@@ -6,7 +6,8 @@ import { SidebarMenuButton } from "@/components/ui/sidebar";
 
 export function LogoutButton() {
     const handleLogout = async () => {
-        await signOut({ callbackUrl: "/login" });
+        await signOut({ redirect: false });
+        window.location.href = "/login";
     };
 
     return (
