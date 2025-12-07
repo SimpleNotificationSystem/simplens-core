@@ -61,7 +61,7 @@ export function ElegantShape({
                         "bg-linear-to-r to-transparent",
                         gradient,
                         "backdrop-blur-[1px]",
-                        "ring-1 ring-white/[0.03] dark:ring-white/[0.02]",
+                        "ring-1 ring-white/3 dark:ring-white/2",
                         "shadow-[0_2px_16px_-2px_rgba(255,255,255,0.04)]",
                         "after:absolute after:inset-0",
                         "after:bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.12),transparent_70%)]",

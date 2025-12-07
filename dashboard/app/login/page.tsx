@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { AlertTriangle, Loader2, Lock, User } from "lucide-react";
+import { AlertTriangle, Eye, EyeOff, Loader2, Lock, User } from "lucide-react";
 import { ElegantShape } from "@/components/elegant-shape";
 
 export default function LoginPage() {
@@ -18,6 +18,7 @@ export default function LoginPage() {
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -47,7 +48,7 @@ export default function LoginPage() {
     return (
         <div className="relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-white dark:bg-[#030303]">
             {/* Subtle gradient overlay */}
-            <div className="absolute inset-0 bg-linear-to-br from-indigo-500/[0.02] via-transparent to-rose-500/[0.02] dark:from-indigo-500/[0.05] dark:via-transparent dark:to-rose-500/[0.05] blur-3xl" />
+            <div className="absolute inset-0 bg-linear-to-br from-indigo-500/2transparent to-rose-500/2:from-indigo-500/[0.05] dark:via-transparent dark:dark:to-rose-500/5-3xl" />
 
             {/* Animated shapes background */}
             <div className="absolute inset-0 overflow-hidden">
@@ -164,14 +165,26 @@ export default function LoginPage() {
                                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                     <Input
                                         id="password"
-                                        type="password"
+                                        type={showPassword ? "text" : "password"}
                                         placeholder="Password"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         required
                                         disabled={isLoading}
-                                        className="pl-10 h-11 bg-background/50"
+                                        className="pl-10 pr-10 h-11 bg-background/50"
                                     />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                                        tabIndex={-1}
+                                    >
+                                        {showPassword ? (
+                                            <Eye className="h-4 w-4" />
+                                        ) : (
+                                            <EyeOff className="h-4 w-4" />
+                                        )}
+                                    </button>
                                 </div>
                             </div>
 

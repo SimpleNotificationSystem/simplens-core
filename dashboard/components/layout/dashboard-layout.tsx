@@ -10,6 +10,7 @@ import {
     BarChart3,
     Settings,
     Send,
+    Book,
 } from "lucide-react";
 import {
     Sidebar,
@@ -55,6 +56,11 @@ const navItems = [
         href: "/analytics",
         icon: BarChart3,
     },
+    {
+        title: "Docs",
+        href: "/docs",
+        icon: Book,
+    }
 ];
 
 const settingsItems = [
@@ -71,7 +77,7 @@ function AppSidebar() {
     return (
         <Sidebar>
             <SidebarHeader>
-                <div className="flex items-center gap-3 px-2 py-2">
+                <Link href="/" className="flex items-center gap-3 px-2 py-2">
                     <Image
                         src="/SimpleNSLogo.png"
                         alt="SimpleNS Logo"
@@ -79,7 +85,7 @@ function AppSidebar() {
                         height={120}
                         className="rounded-lg"
                     />
-                </div>
+                </Link>
             </SidebarHeader>
             <SidebarContent>
                 <SidebarGroup>
