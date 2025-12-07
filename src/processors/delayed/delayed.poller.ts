@@ -5,7 +5,7 @@
  */
 
 import { env } from '@src/config/env.config.js';
-import { fetchDueEvents, reAddToQueue, getDueEventCount, addToDeadLetterQueue } from './delayed.queue.js';
+import { fetchDueEvents, reAddToQueue, getDueEventCount } from './delayed.queue.js';
 import { publishToTarget } from './target.producer.js';
 import { publishDLQFailureStatus } from './dlq.status.js';
 import { delayedWorkerLogger as logger } from '@src/workers/utils/logger.js';
@@ -39,26 +39,22 @@ const calculateBackoff = (retryCount: number): number => {
  */
 const processDueEvent = async (event: DelayedEventWithRetries): Promise<boolean> => {
     const pollerRetries = event._pollerRetries || 0;
-    
+
     // Check if max poller retries exceeded
     if (pollerRetries >= env.MAX_POLLER_RETRIES) {
         const errorMessage = `Max poller retries exceeded after ${pollerRetries} attempts`;
-        logger.error(`Event ${event.notification_id} exceeded max poller retries (${env.MAX_POLLER_RETRIES}), sending to DLQ`);
-        
+        logger.error(`Event ${event.notification_id} exceeded max poller retries (${env.MAX_POLLER_RETRIES}), marking as failed`);
+
         try {
-            // 1. Add to Redis DLQ for manual inspection
-            await addToDeadLetterQueue(event, errorMessage);
-            
-            // 2. Publish failure status to Kafka -> MongoDB update via status worker
+            // Publish failure status to Kafka -> MongoDB update via status worker
             await publishDLQFailureStatus(event, errorMessage);
-            
-            logger.info(`Published DLQ failure status for: ${event.notification_id}`);
-        } catch (dlqErr) {
-            logger.error(`Failed to process DLQ event:`, dlqErr);
+            logger.info(`Published failure status for: ${event.notification_id}`);
+        } catch (statusErr) {
+            logger.error(`Failed to publish failure status:`, statusErr);
         }
         return false;
     }
-    
+
     try {
         logger.info(`Processing due event: ${event.notification_id} -> ${event.target_topic} (poller retry: ${pollerRetries})`);
 
@@ -73,7 +69,7 @@ const processDueEvent = async (event: DelayedEventWithRetries): Promise<boolean>
         // Re-add to queue with exponential backoff and incremented retry count
         const newRetryCount = pollerRetries + 1;
         const backoffDelay = calculateBackoff(newRetryCount);
-        
+
         try {
             const eventWithRetries: DelayedEventWithRetries = {
                 ...event,

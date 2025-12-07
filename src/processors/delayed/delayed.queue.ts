@@ -16,13 +16,13 @@ const DELAYED_QUEUE_KEY = 'delayed_queue';
  */
 export const addToDelayedQueue = async (event: delayed_notification_topic): Promise<void> => {
     const redis = getRedisClient();
-    
+
     // Use scheduled_at timestamp as score (milliseconds for precision)
     const score = new Date(event.scheduled_at).getTime();
     const member = JSON.stringify(event);
-    
+
     await redis.zadd(DELAYED_QUEUE_KEY, score, member);
-    
+
     logger.info(`Added event to delayed queue: ${event.notification_id} scheduled for ${event.scheduled_at}`);
 };
 
@@ -58,7 +58,7 @@ return events
 export const fetchDueEvents = async (limit: number): Promise<delayed_notification_topic[]> => {
     const redis = getRedisClient();
     const now = Date.now();
-    
+
     const results = await redis.eval(
         FETCH_DUE_EVENTS_SCRIPT,
         1,
@@ -66,13 +66,13 @@ export const fetchDueEvents = async (limit: number): Promise<delayed_notificatio
         now.toString(),
         limit.toString()
     ) as string[];
-    
+
     if (results.length === 0) {
         return [];
     }
-    
+
     logger.info(`Fetched ${results.length} due events from delayed queue`);
-    
+
     // Parse JSON strings back to objects
     const events: delayed_notification_topic[] = [];
     for (const result of results) {
@@ -83,7 +83,7 @@ export const fetchDueEvents = async (limit: number): Promise<delayed_notificatio
             logger.error('Failed to parse delayed event:', err);
         }
     }
-    
+
     return events;
 };
 
@@ -111,68 +111,18 @@ export const getDueEventCount = async (): Promise<number> => {
  * Adds a small delay to prevent immediate retry loops
  */
 export const reAddToQueue = async (
-    event: delayed_notification_topic, 
+    event: delayed_notification_topic,
     delayMs: number = 5000
 ): Promise<void> => {
     const redis = getRedisClient();
-    
+
     // Schedule for now + delay
     const score = Date.now() + delayMs;
     const member = JSON.stringify(event);
-    
+
     await redis.zadd(DELAYED_QUEUE_KEY, score, member);
-    
+
     logger.warn(`Re-added event to delayed queue: ${event.notification_id} (retry in ${delayMs}ms)`);
 };
 
-// Dead Letter Queue key for failed events
-const DEAD_LETTER_QUEUE_KEY = 'delayed_queue:dlq';
 
-/**
- * Dead Letter Queue entry with failure reason
- */
-interface DeadLetterEntry {
-    event: delayed_notification_topic;
-    reason: string;
-    failed_at: string;
-}
-
-/**
- * Add an event to the Dead Letter Queue
- * Events that exceed max retries are stored here for manual inspection
- */
-export const addToDeadLetterQueue = async (
-    event: delayed_notification_topic,
-    reason: string
-): Promise<void> => {
-    const redis = getRedisClient();
-    
-    const entry: DeadLetterEntry = {
-        event,
-        reason,
-        failed_at: new Date().toISOString()
-    };
-    
-    // Use RPUSH to add to a list (maintains order)
-    await redis.rpush(DEAD_LETTER_QUEUE_KEY, JSON.stringify(entry));
-    
-    logger.error(`Added event to DLQ: ${event.notification_id} - ${reason}`);
-};
-
-/**
- * Get count of events in Dead Letter Queue
- */
-export const getDeadLetterQueueSize = async (): Promise<number> => {
-    const redis = getRedisClient();
-    return redis.llen(DEAD_LETTER_QUEUE_KEY);
-};
-
-/**
- * Fetch events from Dead Letter Queue (for manual processing)
- */
-export const fetchFromDeadLetterQueue = async (count: number = 10): Promise<DeadLetterEntry[]> => {
-    const redis = getRedisClient();
-    const results = await redis.lrange(DEAD_LETTER_QUEUE_KEY, 0, count - 1);
-    
-    return results.map(r => JSON.parse(r) as DeadLetterEntry);
-};

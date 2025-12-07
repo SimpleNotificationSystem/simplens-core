@@ -10,7 +10,6 @@ import { createMockDelayedNotification } from '../../../utils/mocks.js';
 const mockFetchDueEvents = vi.fn();
 const mockReAddToQueue = vi.fn();
 const mockGetDueEventCount = vi.fn();
-const mockAddToDeadLetterQueue = vi.fn();
 const mockPublishToTarget = vi.fn();
 const mockPublishDLQFailureStatus = vi.fn();
 
@@ -18,7 +17,6 @@ vi.mock('@src/processors/delayed/delayed.queue.js', () => ({
     fetchDueEvents: mockFetchDueEvents,
     reAddToQueue: mockReAddToQueue,
     getDueEventCount: mockGetDueEventCount,
-    addToDeadLetterQueue: mockAddToDeadLetterQueue,
 }));
 
 vi.mock('@src/processors/delayed/target.producer.js', () => ({
@@ -59,7 +57,6 @@ describe('Delayed Poller', () => {
         mockGetDueEventCount.mockResolvedValue(0);
         mockPublishToTarget.mockResolvedValue(undefined);
         mockReAddToQueue.mockResolvedValue(undefined);
-        mockAddToDeadLetterQueue.mockResolvedValue(undefined);
         mockPublishDLQFailureStatus.mockResolvedValue(undefined);
 
         delayedPoller = await import('../../../../src/processors/delayed/delayed.poller.js');
@@ -171,7 +168,7 @@ describe('Delayed Poller', () => {
             expect(mockReAddToQueue).toHaveBeenCalled();
         });
 
-        it('should send to DLQ after max retries', async () => {
+        it('should publish failure status after max retries', async () => {
             const event = {
                 ...createMockDelayedNotification(),
                 notification_id: 'test-notification-id',
@@ -183,7 +180,6 @@ describe('Delayed Poller', () => {
 
             await vi.advanceTimersByTimeAsync(50);
 
-            expect(mockAddToDeadLetterQueue).toHaveBeenCalled();
             expect(mockPublishDLQFailureStatus).toHaveBeenCalled();
         });
 

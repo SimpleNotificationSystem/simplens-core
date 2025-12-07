@@ -41,9 +41,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             const isLoggedIn = !!auth?.user;
             const isOnLogin = nextUrl.pathname === "/login";
             const isOnLanding = nextUrl.pathname === "/";
+            const isOnDocs = nextUrl.pathname.startsWith("/docs");
 
-            // Landing page is public
-            if (isOnLanding) {
+            // Landing page and docs are public
+            if (isOnLanding || isOnDocs) {
                 return true;
             }
 
