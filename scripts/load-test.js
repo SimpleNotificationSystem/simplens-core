@@ -30,14 +30,14 @@ const createPayload = () => ({
       message: "Thanks for signing up! Reply HELP for assistance."
     }
   },
-  webhook_url: "https://yourapp.example.com/notifications/webhook",
+  webhook_url: "http://host.docker.internal:4000/webhook",
   retry_count: 0
 });
 
 const sendRequest = async (index) => {
     const start = Date.now();
     try {
-        const response = await fetch(`${BASE_URL}/notification`, {
+        const response = await fetch(`${BASE_URL}/api/notification`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

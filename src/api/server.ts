@@ -45,10 +45,10 @@ const start_server = async ()=>{
         logger.success("Successfully connected to MongoDB");
         // temporarily topic creation is performed here.
         await createTopics([
-            { topic: 'email_notification', numPartitions: 2, replicationFactor: 1 },
-            { topic: 'whatsapp_notification', numPartitions: 2, replicationFactor: 1 },
-            { topic: 'delayed_notification', numPartitions: 2, replicationFactor: 1 },
-            { topic: 'notification_status', numPartitions: 2, replicationFactor: 1 }
+            { topic: 'email_notification', numPartitions: env.EMAIL_PARTITION, replicationFactor: 1 },
+            { topic: 'whatsapp_notification', numPartitions: env.WHATSAPP_PARTITION, replicationFactor: 1 },
+            { topic: 'delayed_notification', numPartitions: env.DELAYED_PARTITION, replicationFactor: 1 },
+            { topic: 'notification_status', numPartitions: env.NOTIFICATION_STATUS_PARTITION, replicationFactor: 1 }
         ]);
         const server = http.createServer(app);
         server.listen(env.PORT, () => logger.success(`Notification Service running at http://localhost:${env.PORT}`));

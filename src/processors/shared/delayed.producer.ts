@@ -4,8 +4,8 @@
 
 import { Producer, Partitioners } from 'kafkajs';
 import { kafka } from '@src/config/kafka.config.js';
-import { 
-    TOPICS, 
+import {
+    TOPICS,
     DELAYED_TOPICS,
     type delayed_notification_topic,
     type email_notification,
@@ -24,7 +24,7 @@ export const initDelayedProducer = async (): Promise<void> => {
 
     producer = kafka.producer({
         createPartitioner: Partitioners.LegacyPartitioner,
-        allowAutoTopicCreation: true,
+        allowAutoTopicCreation: false,
     });
 
     await producer.connect();
@@ -46,7 +46,7 @@ export const buildDelayedPayloadFromEmail = (
     newRetryCount: number
 ): delayed_notification_topic => {
     const delaySeconds = calculateBackoffDelay(newRetryCount);
-    
+
     return {
         notification_id: notification.notification_id,
         request_id: notification.request_id,
@@ -69,7 +69,7 @@ export const buildDelayedPayloadFromWhatsapp = (
     newRetryCount: number
 ): delayed_notification_topic => {
     const delaySeconds = calculateBackoffDelay(newRetryCount);
-    
+
     return {
         notification_id: notification.notification_id,
         request_id: notification.request_id,

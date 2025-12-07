@@ -5,8 +5,8 @@
 
 import { Producer, Partitioners } from 'kafkajs';
 import { kafka } from '@src/config/kafka.config.js';
-import { 
-    TOPICS, 
+import {
+    TOPICS,
     CHANNEL,
     NOTIFICATION_STATUS_SF,
     DELAYED_TOPICS,
@@ -27,7 +27,7 @@ export const initDLQStatusProducer = async (): Promise<void> => {
 
     producer = kafka.producer({
         createPartitioner: Partitioners.LegacyPartitioner,
-        allowAutoTopicCreation: true,
+        allowAutoTopicCreation: false,
     });
 
     await producer.connect();
@@ -47,8 +47,8 @@ export const publishDLQFailureStatus = async (
     }
 
     // Determine channel from target_topic
-    const channel = event.target_topic === DELAYED_TOPICS.email_notification 
-        ? CHANNEL.email 
+    const channel = event.target_topic === DELAYED_TOPICS.email_notification
+        ? CHANNEL.email
         : CHANNEL.whatsapp;
 
     const status: notification_status_topic = {

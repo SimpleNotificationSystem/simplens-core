@@ -232,6 +232,9 @@ docker-compose up -d --scale email-processor=3
 
 # Scale WhatsApp processor to 2 instances
 docker-compose up -d --scale whatsapp-processor=2
+
+#Scale multiple services using the same command
+docker-compose up -d --scale <service_name>=<count> --scale <service_name>=<count> ...
 ```
 
 ---
