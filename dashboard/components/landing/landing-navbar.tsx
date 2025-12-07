@@ -13,6 +13,7 @@ export function LandingNavbar() {
     const navLinks = [
         { href: "#features", label: "Features" },
         { href: "#architecture", label: "Architecture" },
+        { href: "/docs", label: "Docs" },
     ];
 
     return (

@@ -344,3 +344,8 @@ All logs are tagged with these labels:
 - `worker_id`: Unique identifier for each processor instance
 
 ---
+
+### Features to be implemented:
+
+- Integration of a Whatsapp Messaging Service
+- Validation of requests for whatsapp channel 

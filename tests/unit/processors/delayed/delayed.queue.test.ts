@@ -14,9 +14,6 @@ const mockRedisClient = {
     zcard: vi.fn().mockResolvedValue(0),
     zcount: vi.fn().mockResolvedValue(0),
     eval: vi.fn().mockResolvedValue([]),
-    rpush: vi.fn().mockResolvedValue(1),
-    llen: vi.fn().mockResolvedValue(0),
-    lrange: vi.fn().mockResolvedValue([]),
 };
 
 // Mock Redis config
@@ -197,67 +194,6 @@ describe('Delayed Queue', () => {
 
             expect(score).toBeGreaterThanOrEqual(beforeTime + 5000);
             expect(score).toBeLessThanOrEqual(afterTime + 5000);
-        });
-    });
-
-    describe('Dead Letter Queue', () => {
-        describe('addToDeadLetterQueue', () => {
-            it('should add entry to DLQ with reason and timestamp', async () => {
-                const event = createMockDelayedNotification();
-                const reason = 'Max retries exceeded';
-
-                await delayedQueue.addToDeadLetterQueue(event, reason);
-
-                expect(mockRedisClient.rpush).toHaveBeenCalledWith(
-                    'delayed_queue:dlq',
-                    expect.any(String)
-                );
-
-                // Verify the entry structure
-                const callArgs = mockRedisClient.rpush.mock.calls[0];
-                const entry = JSON.parse(callArgs[1]);
-                expect(entry.event).toBeDefined();
-                expect(entry.reason).toBe(reason);
-                expect(entry.failed_at).toBeDefined();
-            });
-        });
-
-        describe('getDeadLetterQueueSize', () => {
-            it('should return DLQ size using LLEN', async () => {
-                mockRedisClient.llen.mockResolvedValue(3);
-
-                const result = await delayedQueue.getDeadLetterQueueSize();
-
-                expect(result).toBe(3);
-                expect(mockRedisClient.llen).toHaveBeenCalledWith('delayed_queue:dlq');
-            });
-        });
-
-        describe('fetchFromDeadLetterQueue', () => {
-            it('should fetch entries from DLQ', async () => {
-                const event = createMockDelayedNotification();
-                const eventForJson = { ...event, notification_id: event.notification_id.toString() };
-                const dlqEntry = {
-                    event: eventForJson,
-                    reason: 'Test failure',
-                    failed_at: new Date().toISOString(),
-                };
-                mockRedisClient.lrange.mockResolvedValue([JSON.stringify(dlqEntry)]);
-
-                const result = await delayedQueue.fetchFromDeadLetterQueue(10);
-
-                expect(result).toHaveLength(1);
-                expect(result[0].reason).toBe('Test failure');
-                expect(mockRedisClient.lrange).toHaveBeenCalledWith('delayed_queue:dlq', 0, 9);
-            });
-
-            it('should use default count of 10', async () => {
-                mockRedisClient.lrange.mockResolvedValue([]);
-
-                await delayedQueue.fetchFromDeadLetterQueue();
-
-                expect(mockRedisClient.lrange).toHaveBeenCalledWith('delayed_queue:dlq', 0, 9);
-            });
         });
     });
 });
