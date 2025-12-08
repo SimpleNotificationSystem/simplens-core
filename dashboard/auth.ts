@@ -40,13 +40,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         authorized({ auth, request: { nextUrl } }) {
             const isLoggedIn = !!auth?.user;
             const isOnLogin = nextUrl.pathname === "/login";
-            const isOnLanding = nextUrl.pathname === "/";
-            const isOnDocs = nextUrl.pathname.startsWith("/docs");
-
-            // Landing page and docs are public
-            if (isOnLanding || isOnDocs) {
-                return true;
-            }
 
             // Login page: redirect logged-in users to dashboard
             if (isOnLogin) {

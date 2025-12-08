@@ -1,10 +1,4 @@
-import {
-    ClockIcon,
-    RocketIcon,
-    CodeIcon,
-    LayersIcon,
-} from "@radix-ui/react-icons"
-import { Zap } from "lucide-react"
+import { Clock, Rocket, Code, Layers, Zap } from "lucide-react"
 
 import { BentoCard, BentoGrid } from "../../components/ui/bento-grid"
 import {
@@ -16,21 +10,21 @@ import {
 
 const features = [
     {
-        Icon: LayersIcon,
+        Icon: Layers,
         name: "Multi-Channel Delivery",
         description: "Single integration, multiple delivery paths.",
         background: <ChannelFlowBackground />,
         className: "lg:row-start-1 lg:row-end-4 lg:col-start-2 lg:col-end-3",
     },
     {
-        Icon: RocketIcon,
+        Icon: Rocket,
         name: "Single & Batch Notifications",
         description: "Scale from one recipient to thousands with the same API.",
         background: <BatchNotificationBackground />,
         className: "lg:col-start-1 lg:col-end-2 lg:row-start-1 lg:row-end-3",
     },
     {
-        Icon: ClockIcon,
+        Icon: Clock,
         name: "Scheduled Delivery",
         description: "Schedule notifications for future delivery with precision timing.",
         background: <ScheduleClockBackground />,
@@ -38,7 +32,7 @@ const features = [
     },
 
     {
-        Icon: CodeIcon,
+        Icon: Code,
         name: "Automatic Retries",
         description: "Exponential backoff retries ensure maximum delivery success.",
         background: <RetryFlowBackground />,

@@ -56,11 +56,6 @@ const navItems = [
         href: "/analytics",
         icon: BarChart3,
     },
-    {
-        title: "Docs",
-        href: "/docs",
-        icon: Book,
-    }
 ];
 
 const settingsItems = [
