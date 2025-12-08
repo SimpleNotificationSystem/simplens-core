@@ -6,7 +6,8 @@ import {
     Layers,
     Zap,
     LayoutDashboard,
-    BookOpen
+    BookOpen,
+    Github
 } from "lucide-react";
 
 export function LandingFooter() {
@@ -25,9 +26,9 @@ export function LandingFooter() {
 
     const quickLinks = [
         {
-            icon: <LayoutDashboard className="h-4 w-4" />,
-            label: "Dashboard",
-            href: "/dashboard",
+            icon: <Github className="h-4 w-4" />,
+            label: "Github",
+            href: process.env.GITHUB_URL || "https://github.com",
         },
         {
             icon: <BookOpen className="h-4 w-4" />,

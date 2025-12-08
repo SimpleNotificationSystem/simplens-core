@@ -33,11 +33,6 @@ export function DocsNavbar({ onMenuClick }: DocsNavbarProps) {
 
                 <nav className="flex items-center gap-2">
                     <ThemeToggle />
-                    <Link href="/login">
-                        <Button size="sm">
-                            Dashboard
-                        </Button>
-                    </Link>
                 </nav>
             </div>
         </header>

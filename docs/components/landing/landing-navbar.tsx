@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { Menu, X } from "lucide-react";
+import { Menu, X, Github } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function LandingNavbar() {
@@ -42,8 +42,11 @@ export function LandingNavbar() {
                                 {link.label}
                             </a>
                         ))}
-                        <Link href="/login">
-                            <Button>Get Started</Button>
+                        <Link href={process.env.GITHUB_URL || "https://github.com"} target="_blank" rel="noopener noreferrer">
+                            <Button className="gap-2">
+                                <Github className="h-4 w-4" />
+                                GitHub
+                            </Button>
                         </Link>
                     </div>
 
@@ -80,8 +83,11 @@ export function LandingNavbar() {
                             {link.label}
                         </a>
                     ))}
-                    <Link href="/login" onClick={() => setIsMenuOpen(false)}>
-                        <Button className="w-full">Get Started</Button>
+                    <Link href="https://github.com/Adhish-Krishna/SimpleNS" target="_blank" rel="noopener noreferrer" onClick={() => setIsMenuOpen(false)}>
+                        <Button className="w-full gap-2">
+                            <Github className="h-4 w-4" />
+                            GitHub
+                        </Button>
                     </Link>
                 </div>
             </div>

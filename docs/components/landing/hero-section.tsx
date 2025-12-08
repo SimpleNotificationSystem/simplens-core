@@ -34,12 +34,12 @@ export function HeroSection() {
                             A lightweight backend notification service for Email and WhatsApp with scheduled delivery, automatic retries, and real-time status updates.
                         </p>
 
-                        <Link href="/login">
+                        <Link href={process.env.GITHUB_URL || "https://github.com"} target="_blank" rel="noopener noreferrer">
                             <Button
                                 size="lg"
                                 className="text-base px-8 gap-2 bg-white text-black border-0 hover:bg-white/50 hover:text-black"
                             >
-                                Get Started
+                                Start on GitHub
                                 <ArrowRight className="h-4 w-4" />
                             </Button>
                         </Link>
