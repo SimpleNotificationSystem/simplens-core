@@ -28,7 +28,7 @@ export function LandingFooter() {
         {
             icon: <Github className="h-4 w-4" />,
             label: "Github",
-            href: process.env.GITHUB_URL || "https://github.com",
+            href: process.env.NEXT_PUBLIC_GITHUB_URL || "https://github.com",
         },
         {
             icon: <BookOpen className="h-4 w-4" />,
