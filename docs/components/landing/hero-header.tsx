@@ -51,9 +51,8 @@ export function HeroHeader() {
                         <Image
                             src="/SimpleNSLogo.png"
                             alt="SimpleNS Logo"
-                            width={32}
-                            height={32}
-                            className="w-auto h-8"
+                            width={120}
+                            height={120}
                         />
                     </Link>
 
