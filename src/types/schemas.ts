@@ -6,10 +6,12 @@ import {
     OUTBOX_STATUS,
     DELAYED_TOPICS,
     NOTIFICATION_STATUS_SF,
-    OUTBOX_TOPICS
+    OUTBOX_TOPICS,
+    ALERT_TYPE,
+    ALERT_SEVERITY,
 } from "./types.js";
 import type { UUID } from "crypto";
-import {validate, version} from 'uuid';
+import { validate, version } from 'uuid';
 import { env } from "@src/config/env.config.js";
 
 const objectIdSchema = z.custom<mongoose.Types.ObjectId>(
@@ -18,8 +20,8 @@ const objectIdSchema = z.custom<mongoose.Types.ObjectId>(
 );
 
 const UUIDV4Schema = z.custom<UUID>(
-    (val)=> validate(val)&&(version(val as string)==4),
-    {error: "Invalid UUIDV4"}
+    (val) => validate(val) && (version(val as string) == 4),
+    { error: "Invalid UUIDV4" }
 )
 
 const variablesSchema = z.record(z.string(), z.string());
@@ -146,7 +148,7 @@ export const notificationRequestSchema = z.object({
     scheduled_at: z.coerce.date().optional(),
     webhook_url: z.url()
 }).refine(
-    (data)=>{
+    (data) => {
         if (data.channel.includes(CHANNEL.email)) {
             return data.content.email !== undefined && data.content.email.message.length > 0;
         }
@@ -236,8 +238,8 @@ export const batchNotificationRequestSchema = z.object({
     },
     { message: "All recipients must have phone when whatsapp channel is specified", path: ["recipients"] }
 ).refine(
-    (data)=>{
-        if(data.recipients && data.recipients.length*data.channel.length<=env.MAX_BATCH_REQ_LIMIT){
+    (data) => {
+        if (data.recipients && data.recipients.length * data.channel.length <= env.MAX_BATCH_REQ_LIMIT) {
             return true;
         }
     },
@@ -246,6 +248,28 @@ export const batchNotificationRequestSchema = z.object({
     }
 );
 
+export const alertSchema = z.object({
+    type: z.enum([
+        ALERT_TYPE.stuck_processing,
+        ALERT_TYPE.ghost_delivery,
+        ALERT_TYPE.orphaned_pending,
+        ALERT_TYPE.recovery_error
+    ]),
+    notification_id: objectIdSchema.optional(),
+    message: z.string(),
+    severity: z.enum([
+        ALERT_SEVERITY.warning,
+        ALERT_SEVERITY.error,
+        ALERT_SEVERITY.critical
+    ]),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    resolved: z.boolean().default(false),
+    resolved_at: z.coerce.date().optional(),
+    resolved_by: z.string().optional(),
+    created_at: z.coerce.date().optional(),
+    updated_at: z.coerce.date().optional(),
+});
+
 export const validateEmailNotification = (data: unknown) => emailNotificationSchema.parse(data);
 export const validateWhatsappNotification = (data: unknown) => whatsappNotificationSchema.parse(data);
 export const validateDelayedNotificationTopic = (data: unknown) => delayedNotificationTopicSchema.parse(data);
@@ -253,7 +277,8 @@ export const validateNotificationStatusTopic = (data: unknown) => notificationSt
 export const validateNotification = (data: unknown) => notificationSchema.parse(data);
 export const validateOutbox = (data: unknown) => outboxSchema.parse(data);
 export const validateNotificationRequest = (data: unknown) => notificationRequestSchema.parse(data);
-export const validateBatchNotificationRequest = (data: unknown)=>batchNotificationRequestSchema.parse(data);
+export const validateBatchNotificationRequest = (data: unknown) => batchNotificationRequestSchema.parse(data);
+export const validateAlert = (data: unknown) => alertSchema.parse(data);
 
 export const safeValidateEmailNotification = (data: unknown) => emailNotificationSchema.safeParse(data);
 export const safeValidateWhatsappNotification = (data: unknown) => whatsappNotificationSchema.safeParse(data);
@@ -262,4 +287,4 @@ export const safeValidateNotificationStatusTopic = (data: unknown) => notificati
 export const safeValidateNotification = (data: unknown) => notificationSchema.safeParse(data);
 export const safeValidateOutbox = (data: unknown) => outboxSchema.safeParse(data);
 export const safeValidateNotificationRequest = (data: unknown) => notificationRequestSchema.safeParse(data);
-export const safeValidateBatchNotificationRequest = (data: unknown)=>batchNotificationRequestSchema.safeParse(data);
+export const safeValidateBatchNotificationRequest = (data: unknown) => batchNotificationRequestSchema.safeParse(data);

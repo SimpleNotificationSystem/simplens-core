@@ -81,6 +81,8 @@ describe('Status Producer', () => {
                         value: JSON.stringify(mockStatus),
                     },
                 ],
+                acks: -1,
+                timeout: 30000,
             });
         });
 

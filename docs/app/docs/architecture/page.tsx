@@ -31,6 +31,7 @@ export default function ArchitecturePage() {
                     { id: "status-webhooks", label: "Status Updates & Webhooks" },
                     { id: "kafka-topics", label: "Kafka Topics" },
                     { id: "graceful-shutdown", label: "Graceful Shutdown" },
+                    { id: "recovery-cron", label: "Recovery Cron & Alerts" },
                 ]}
             />
 
@@ -283,7 +284,7 @@ export default function ArchitecturePage() {
                 <h3 className="text-lg font-semibold mb-3">Processor Level Idempotency (Redis)</h3>
                 <p className="text-muted-foreground mb-4">
                     Even with API-level protection, Kafka may redeliver messages (e.g., consumer crash before offset commit).
-                    Redis-based processing locks prevent re-processing.
+                    The <code className="px-1.5 py-0.5 bg-muted rounded">tryAcquireProcessingLock</code> function uses an atomic Redis Lua script to prevent re-processing.
                 </p>
                 <div className="flex flex-wrap items-center gap-2 mb-4">
                     <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 text-sm font-medium">processing</span>
@@ -291,16 +292,23 @@ export default function ArchitecturePage() {
                     <span className="px-3 py-1 rounded-full bg-red-500/20 text-red-600 dark:text-red-400 text-sm font-medium">failed</span>
                 </div>
                 <ul className="list-disc list-inside space-y-2 text-muted-foreground mb-4">
-                    <li>If key doesn&apos;t exist → Acquire lock, proceed with processing</li>
+                    <li>If key doesn&apos;t exist → Atomically acquire lock with TTL, proceed with processing</li>
                     <li>If status is <code className="px-1.5 py-0.5 bg-muted rounded">delivered</code> → Skip (already completed)</li>
                     <li>If status is <code className="px-1.5 py-0.5 bg-muted rounded">processing</code> → Skip (another worker handling)</li>
                     <li>If status is <code className="px-1.5 py-0.5 bg-muted rounded">failed</code> → Acquire lock, proceed (retry allowed)</li>
                 </ul>
 
-                <DocsCallout type="note" title="Atomic Operations">
-                    The check-and-set operation uses a Redis Lua script for atomicity. This prevents race
-                    conditions where two processors might simultaneously check and both find the key missing.
+                <DocsCallout type="important" title="Atomic Lua Script">
+                    All check-and-set operations use atomic Redis Lua scripts. This prevents race conditions
+                    where two processors might simultaneously check and both find the key missing. The script
+                    returns the current status so consumers know whether to skip or proceed.
                 </DocsCallout>
+
+                <h3 className="text-lg font-semibold mb-3 mt-4">Manual Kafka Offset Commits</h3>
+                <p className="text-muted-foreground mb-4">
+                    Consumers use <code className="px-1.5 py-0.5 bg-muted rounded">autoCommit: false</code> and manually commit offsets
+                    only after successful processing. This ensures messages are redelivered if a consumer crashes mid-processing.
+                </p>
 
                 <h3 className="text-lg font-semibold mb-3 mt-4">Configuration</h3>
                 <DocsTable
@@ -405,31 +413,40 @@ export default function ArchitecturePage() {
                     <li><strong>Retry handling:</strong> Failed notifications are rescheduled with backoff delay</li>
                 </ul>
 
-                <h3 className="text-lg font-semibold mb-3">Two-Phase Architecture</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <h3 className="text-lg font-semibold mb-3">Two-Phase Claim/Confirm Architecture</h3>
+                <p className="text-muted-foreground mb-4">
+                    The delayed queue uses a two-phase processing pattern to prevent message loss:
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     <div className="p-4 rounded-lg border bg-card">
-                        <h4 className="font-semibold mb-2">Phase 1: Consumer</h4>
+                        <h4 className="font-semibold mb-2">1. Consumer</h4>
                         <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                            <li>Listens to <code className="px-1 py-0.5 bg-muted rounded text-xs">delayed_notification</code> Kafka topic</li>
+                            <li>Consumes from <code className="px-1 py-0.5 bg-muted rounded text-xs">delayed_notification</code> topic</li>
                             <li>Stores event in Redis ZSET</li>
-                            <li>Uses <code className="px-1 py-0.5 bg-muted rounded text-xs">scheduled_at</code> timestamp as score</li>
-                            <li>ZSET automatically orders by time</li>
+                            <li>Uses <code className="px-1 py-0.5 bg-muted rounded text-xs">scheduled_at</code> as score</li>
                         </ul>
                     </div>
                     <div className="p-4 rounded-lg border bg-card">
-                        <h4 className="font-semibold mb-2">Phase 2: Poller</h4>
+                        <h4 className="font-semibold mb-2">2. Claim</h4>
                         <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                            <li>Runs every <code className="px-1 py-0.5 bg-muted rounded text-xs">DELAYED_POLL_INTERVAL_MS</code></li>
-                            <li>Fetches events where score ≤ current time</li>
-                            <li>Atomic fetch-and-remove (prevents duplicates)</li>
-                            <li>Publishes to target channel topic</li>
+                            <li>Poller calls <code className="px-1 py-0.5 bg-muted rounded text-xs">claimDueEvents</code></li>
+                            <li>Atomically sets claim lock with TTL</li>
+                            <li>Events remain in ZSET until confirmed</li>
+                        </ul>
+                    </div>
+                    <div className="p-4 rounded-lg border bg-card">
+                        <h4 className="font-semibold mb-2">3. Confirm</h4>
+                        <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                            <li>After Kafka publish succeeds</li>
+                            <li>Calls <code className="px-1 py-0.5 bg-muted rounded text-xs">confirmProcessed</code></li>
+                            <li>Atomically removes from ZSET</li>
                         </ul>
                     </div>
                 </div>
 
-                <DocsCallout type="note" title="Multi-Worker Safe">
-                    The fetch-and-remove operation uses a Redis Lua script for atomicity. Multiple Delayed
-                    Processors can run in parallel without picking up the same events.
+                <DocsCallout type="important" title="Crash Recovery">
+                    If a worker crashes after claiming but before confirming, the claim TTL expires and
+                    another worker can re-claim the event. Events are only removed after successful Kafka publish.
                 </DocsCallout>
 
                 <h3 className="text-lg font-semibold mb-3 mt-4">Poller Failure Handling</h3>
@@ -437,8 +454,8 @@ export default function ArchitecturePage() {
                     If publishing to the target Kafka topic fails:
                 </p>
                 <ol className="list-decimal list-inside space-y-2 text-muted-foreground mb-4">
-                    <li>Increment <code className="px-1.5 py-0.5 bg-muted rounded">_pollerRetries</code> counter (separate from processor retry_count)</li>
-                    <li>Re-add to queue with exponential backoff</li>
+                    <li>Call <code className="px-1.5 py-0.5 bg-muted rounded">releaseClaim</code> to allow immediate re-processing</li>
+                    <li>Increment <code className="px-1.5 py-0.5 bg-muted rounded">_pollerRetries</code> counter</li>
                     <li>If <code className="px-1.5 py-0.5 bg-muted rounded">_pollerRetries &gt; MAX_POLLER_RETRIES</code> → Send to Dead Letter handling</li>
                 </ol>
             </section>
@@ -589,6 +606,89 @@ export default function ArchitecturePage() {
                     A shutdown flag prevents duplicate shutdown attempts if multiple signals arrive.
                     Once shutdown begins, subsequent signals are ignored.
                 </DocsCallout>
+            </section>
+
+            {/* Recovery Cron & Alerts */}
+            <section id="recovery-cron">
+                <h2 className="text-2xl font-bold mb-4">Recovery Cron &amp; System Alerts</h2>
+                <p className="text-muted-foreground mb-6">
+                    Even with exactly-once delivery guarantees, edge cases can occur. The recovery cron
+                    detects and reconciles inconsistencies between MongoDB and Redis states.
+                </p>
+
+                <h3 className="text-lg font-semibold mb-3">Detection Scenarios</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div className="p-4 rounded-lg border bg-card">
+                        <h4 className="font-semibold mb-2 text-yellow-600 dark:text-yellow-400">Ghost Deliveries</h4>
+                        <p className="text-sm text-muted-foreground">
+                            Redis idempotency shows <code className="px-1 py-0.5 bg-muted rounded text-xs">delivered</code> but MongoDB
+                            is stuck in <code className="px-1 py-0.5 bg-muted rounded text-xs">processing</code>.
+                            The notification was sent but the status update to MongoDB was lost.
+                        </p>
+                        <p className="text-xs text-green-600 dark:text-green-400 mt-2">
+                            Auto-reconciled: MongoDB updated + status re-published
+                        </p>
+                    </div>
+                    <div className="p-4 rounded-lg border bg-card">
+                        <h4 className="font-semibold mb-2 text-orange-600 dark:text-orange-400">Stuck Processing</h4>
+                        <p className="text-sm text-muted-foreground">
+                            Both Redis and MongoDB show <code className="px-1 py-0.5 bg-muted rounded text-xs">processing</code> for
+                            longer than 2× the processing TTL. Worker may have crashed mid-send.
+                        </p>
+                        <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2">
+                            Flagged for manual review
+                        </p>
+                    </div>
+                    <div className="p-4 rounded-lg border bg-card">
+                        <h4 className="font-semibold mb-2 text-red-600 dark:text-red-400">Orphaned Pending</h4>
+                        <p className="text-sm text-muted-foreground">
+                            Multiple notifications stuck in <code className="px-1 py-0.5 bg-muted rounded text-xs">pending</code> state
+                            for over 5 minutes. Outbox polling may have stopped.
+                        </p>
+                        <p className="text-xs text-red-600 dark:text-red-400 mt-2">
+                            Critical if count &gt; 10
+                        </p>
+                    </div>
+                </div>
+
+                <h3 className="text-lg font-semibold mb-3">Dashboard Alerts</h3>
+                <p className="text-muted-foreground mb-4">
+                    When issues are detected, the recovery cron creates alerts visible in the Admin Dashboard:
+                </p>
+                <DocsTable
+                    headers={["Alert Type", "Severity", "Action"]}
+                    rows={[
+                        [
+                            <code key="ghost" className="text-xs">ghost_delivery</code>,
+                            <span key="ghost-sev" className="text-yellow-600 dark:text-yellow-400">warning</span>,
+                            "Auto-reconciled: MongoDB updated to delivered, status re-published"
+                        ],
+                        [
+                            <code key="stuck" className="text-xs">stuck_processing</code>,
+                            <span key="stuck-sev" className="text-orange-600 dark:text-orange-400">warning/error</span>,
+                            "Flagged for manual review (error if stuck > 30 min)"
+                        ],
+                        [
+                            <code key="orphan" className="text-xs">orphaned_pending</code>,
+                            <span key="orphan-sev" className="text-red-600 dark:text-red-400">warning/critical</span>,
+                            "Alert created when ≥5 orphaned (critical if > 10)"
+                        ],
+                    ]}
+                />
+
+                <DocsCallout type="note" title="Automatic Recovery">
+                    Ghost deliveries are automatically reconciled by updating MongoDB and re-publishing
+                    the status message. For stuck processing, notifications with Redis status
+                    <code className="mx-1">failed</code> or no status are reset to pending with a new outbox entry.
+                </DocsCallout>
+
+                <h3 className="text-lg font-semibold mb-3 mt-4">Configuration</h3>
+                <DocsTable
+                    headers={["Variable", "Default", "Description"]}
+                    rows={[
+                        [<code key="interval" className="text-xs">PROCESSING_TTL_SECONDS</code>, "120", "Base TTL; stuck threshold is 2× this value"],
+                    ]}
+                />
             </section>
 
             {/* Continue Learning */}

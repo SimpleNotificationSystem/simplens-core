@@ -28,7 +28,7 @@ SimpleNS (Simple Notification Service) is a lightweight, backend notification se
 
 This service provides a REST HTTP API for accepting notifications (EMAIL and WHATSAPP) and delivers them asynchronously using pluggable providers. It uses an event-driven architecture with Kafka for message routing, Redis for rate limiting and scheduled delivery, and MongoDB for persistence.
 
-**For detailed API documentation, see [`docs/api/README.md`](./docs/api/README.md)**
+**For detailed API documentation, see [API Documentation](https://simplens-docs.vercel.app/docs/api-reference)**
 
 ---
 
@@ -220,6 +220,9 @@ npm run dev
    
    # Terminal 5: Delayed Processor
    npm run delayed-processor:dev
+
+   # Terminal 6: Recovery Service
+   npm run recovery:dev
    ```
 
 ### Scaling Processors
@@ -296,6 +299,7 @@ Authorization: Bearer YOUR_API_KEY
 |---------|-----------------|------------|------|
 | API Server | `ns-api` | `npm run start` | 3000 |
 | Background Worker | `ns-worker` | `npm run worker` | - |
+| Recovery Service | `ns-recovery` | `npm run recovery` | - |
 | Email Processor | `ns-email-processor` | `npm run email-processor` | - |
 | WhatsApp Processor | `ns-whatsapp-processor` | `npm run whatsapp-processor` | - |
 | Delayed Processor | `ns-delayed-processor` | `npm run delayed-processor` | - |

@@ -92,12 +92,15 @@ export const publishDelayed = async (payload: delayed_notification_topic): Promi
         throw new Error('Delayed producer not initialized. Call initDelayedProducer() first.');
     }
 
+    // Use acks: -1 for durability - wait for all in-sync replicas
     await producer.send({
         topic: TOPICS.delayed_notification,
         messages: [{
             key: payload.notification_id.toString(),
             value: JSON.stringify(payload)
-        }]
+        }],
+        acks: -1,  // Wait for all replicas to acknowledge
+        timeout: 30000
     });
 };
 

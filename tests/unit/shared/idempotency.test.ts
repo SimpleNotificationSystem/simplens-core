@@ -160,45 +160,4 @@ describe('Idempotency Module', () => {
         });
     });
 
-    describe('canProcess (deprecated)', () => {
-        it('should return true when no record exists', async () => {
-            const { canProcess } = await import('../../../src/processors/shared/idempotency.js');
-
-            mockRedisClient.get.mockResolvedValue(null);
-
-            const result = await canProcess('notification-123');
-
-            expect(result).toBe(true);
-        });
-
-        it('should return true when status is failed', async () => {
-            const { canProcess } = await import('../../../src/processors/shared/idempotency.js');
-
-            mockRedisClient.get.mockResolvedValue(JSON.stringify({ status: 'failed' }));
-
-            const result = await canProcess('notification-123');
-
-            expect(result).toBe(true);
-        });
-
-        it('should return false when status is delivered', async () => {
-            const { canProcess } = await import('../../../src/processors/shared/idempotency.js');
-
-            mockRedisClient.get.mockResolvedValue(JSON.stringify({ status: 'delivered' }));
-
-            const result = await canProcess('notification-123');
-
-            expect(result).toBe(false);
-        });
-
-        it('should return false when status is processing', async () => {
-            const { canProcess } = await import('../../../src/processors/shared/idempotency.js');
-
-            mockRedisClient.get.mockResolvedValue(JSON.stringify({ status: 'processing' }));
-
-            const result = await canProcess('notification-123');
-
-            expect(result).toBe(false);
-        });
-    });
 });

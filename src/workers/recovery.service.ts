@@ -1,8 +1,16 @@
+/**
+ * Recovery Service Entry Point
+ * 
+ * Standalone service that runs the recovery cron to detect and reconcile
+ * stuck/inconsistent notification states. This runs as a single instance
+ * to avoid race conditions when workers are scaled horizontally.
+ */
+
 import { connectMongoDB } from "@src/config/db.config.js";
+import { connectRedis, disconnectRedis } from "@src/config/redis.config.js";
+import { startRecoveryCron, stopRecoveryCron } from "@src/workers/cron/recovery.cron.js";
 import { initProducer, disconnectProducer } from "@src/workers/producers/background.producer.js";
-import { startCronJobs, stopCronJobs } from "@src/workers/cron/background.cron.js";
-import { startStatusConsumer, stopStatusConsumer } from "@src/workers/consumers/status.consumer.js";
-import { workerLogger as logger } from "@src/workers/utils/logger.js";
+import { recoveryServiceLogger as logger } from "@src/workers/utils/logger.js";
 
 let isShuttingDown = false;
 let dbConnection: Awaited<ReturnType<typeof connectMongoDB>> | null = null;
@@ -20,17 +28,17 @@ const gracefulShutdown = async (signal: string): Promise<void> => {
     logger.info(`Received ${signal}. Starting graceful shutdown...`);
 
     try {
-        // 1. Stop cron jobs first (stop producing new work)
-        logger.info("Stopping cron jobs...");
-        await stopCronJobs();
+        // 1. Stop recovery cron
+        logger.info("Stopping recovery cron...");
+        await stopRecoveryCron();
 
-        // 2. Stop the status consumer
-        logger.info("Stopping status consumer...");
-        await stopStatusConsumer();
-
-        // 3. Disconnect Kafka producer
+        // 2. Disconnect Kafka producer (used for status publishing)
         logger.info("Disconnecting Kafka producer...");
         await disconnectProducer();
+
+        // 3. Disconnect Redis
+        logger.info("Disconnecting Redis...");
+        await disconnectRedis();
 
         // 4. Disconnect MongoDB
         if (dbConnection) {
@@ -65,14 +73,11 @@ const registerShutdownHandlers = (): void => {
 };
 
 /**
- * Main entry point for the background worker
- * 
- * Note: Recovery cron runs as a separate service (recovery.service.ts)
- * to avoid race conditions when workers are scaled horizontally.
+ * Main entry point for the recovery service
  */
 const main = async (): Promise<void> => {
     logger.info("================================");
-    logger.info("Starting Background Worker...");
+    logger.info("Starting Recovery Service...");
 
     try {
         // 1. Connect to MongoDB
@@ -80,30 +85,31 @@ const main = async (): Promise<void> => {
         dbConnection = await connectMongoDB();
         logger.success("MongoDB connected");
 
-        // 2. Initialize Kafka producer
+        // 2. Connect to Redis (for idempotency checks)
+        logger.info("Connecting to Redis...");
+        await connectRedis();
+        logger.success("Redis connected");
+
+        // 3. Initialize Kafka producer (for status publishing during reconciliation)
         logger.info("Initializing Kafka producer...");
         await initProducer();
+        logger.success("Kafka producer initialized");
 
-        // 3. Start status consumer
-        logger.info("Starting status consumer...");
-        await startStatusConsumer();
-
-        // 4. Start cron jobs (poll + cleanup)
-        logger.info("Starting cron jobs...");
-        startCronJobs();
+        // 4. Start recovery cron
+        logger.info("Starting recovery cron...");
+        startRecoveryCron();
 
         logger.info("================================");
-        logger.success("Background Worker is running!");
+        logger.success("Recovery Service is running!");
         logger.info("================================");
 
         // Register shutdown handlers
         registerShutdownHandlers();
     } catch (err) {
-        logger.error("Failed to start background worker:", err);
+        logger.error("Failed to start recovery service:", err);
         process.exit(1);
     }
 };
 
-// Run the worker
+// Run the service
 main();
-

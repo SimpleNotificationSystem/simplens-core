@@ -153,6 +153,8 @@ describe('Delayed Producer', () => {
                         value: JSON.stringify(payload),
                     },
                 ],
+                acks: -1,
+                timeout: 30000,
             });
         });
     });

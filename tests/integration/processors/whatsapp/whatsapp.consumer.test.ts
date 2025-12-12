@@ -22,6 +22,7 @@ const mockConsumerRun = vi.fn();
 const mockConsumerStop = vi.fn();
 const mockConsumerDisconnect = vi.fn();
 const mockConsumerConnect = vi.fn();
+const mockCommitOffsets = vi.fn();
 
 const mockConsumer = {
     connect: mockConsumerConnect,
@@ -29,6 +30,7 @@ const mockConsumer = {
     run: mockConsumerRun,
     stop: mockConsumerStop,
     disconnect: mockConsumerDisconnect,
+    commitOffsets: mockCommitOffsets,
 };
 
 vi.mock('@src/config/kafka.config.js', () => ({
@@ -159,6 +161,7 @@ describe('WhatsApp Consumer', () => {
                     : notification.created_at,
             };
             return {
+                topic: 'whatsapp_notification',
                 partition: 0,
                 message: {
                     offset: '0',
@@ -186,6 +189,7 @@ describe('WhatsApp Consumer', () => {
 
         it('should skip empty messages', async () => {
             const kafkaMessage = {
+                topic: 'whatsapp_notification',
                 partition: 0,
                 message: {
                     offset: '0',
@@ -201,6 +205,7 @@ describe('WhatsApp Consumer', () => {
 
         it('should skip messages that fail schema validation', async () => {
             const kafkaMessage = {
+                topic: 'whatsapp_notification',
                 partition: 0,
                 message: {
                     offset: '0',
@@ -303,6 +308,7 @@ describe('WhatsApp Consumer', () => {
 
         it('should handle JSON parse errors gracefully', async () => {
             const kafkaMessage = {
+                topic: 'whatsapp_notification',
                 partition: 0,
                 message: {
                     offset: '0',

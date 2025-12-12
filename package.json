@@ -18,6 +18,8 @@
     "dev": "tsx watch src/api/server.ts",
     "worker": "node dist/workers/worker.js",
     "worker:dev": "tsx watch src/workers/worker.ts",
+    "recovery": "node dist/workers/recovery.service.js",
+    "recovery:dev": "tsx watch src/workers/recovery.service.ts",
     "email-processor": "node dist/processors/email/email.processor.js",
     "email-processor:dev": "tsx watch src/processors/email/email.processor.ts",
     "whatsapp-processor": "node dist/processors/whatsapp/whatsapp.processor.js",

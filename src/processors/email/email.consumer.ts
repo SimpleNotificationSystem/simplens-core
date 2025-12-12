@@ -4,8 +4,8 @@
 
 import { Consumer, EachMessagePayload } from 'kafkajs';
 import { kafka } from '@src/config/kafka.config.js';
-import { 
-    TOPICS, 
+import {
+    TOPICS,
     CHANNEL,
     NOTIFICATION_STATUS_SF,
     type email_notification,
@@ -39,15 +39,17 @@ const state: ConsumerState = {
 
 /**
  * Process a single email notification message
+ * Returns true if processing completed successfully (commit offset)
+ * Returns false if processing failed critically and should NOT commit (will be redelivered)
  */
-const processEmailMessage = async ({ partition, message }: EachMessagePayload): Promise<void> => {
+const processEmailMessage = async ({ partition, message }: EachMessagePayload): Promise<boolean> => {
     const messageOffset = message.offset;
-    
+
     try {
         // 1. Parse message
         if (!message.value) {
             logger.warn(`Empty message at partition ${partition}, offset ${messageOffset}`);
-            return;
+            return true; // Skip empty messages, commit offset
         }
 
         const rawData = JSON.parse(message.value.toString());
@@ -56,7 +58,7 @@ const processEmailMessage = async ({ partition, message }: EachMessagePayload): 
         const validationResult = safeValidateEmailNotification(rawData);
         if (!validationResult.success) {
             logger.error(`Invalid email notification schema at offset ${messageOffset}:`, validationResult.error.issues);
-            return;
+            return true; // Skip invalid messages, commit offset (don't retry bad data)
         }
 
         const notification = validationResult.data;
@@ -68,26 +70,26 @@ const processEmailMessage = async ({ partition, message }: EachMessagePayload): 
         const lockResult = await tryAcquireProcessingLock(notificationId);
         if (!lockResult.canProcess) {
             logger.info(`Skipping duplicate notification: ${notificationId} (already processed or in progress)`);
-            return;
+            return true; // Already handled, commit offset
         }
-        
+
         if (lockResult.isRetry) {
             logger.info(`Retrying previously failed notification: ${notificationId}`);
         }
 
         // 4. Rate limit check
         const rateLimitResult = await consumeToken(CHANNEL.email);
-        
+
         if (!rateLimitResult.allowed) {
             logger.warn(`Rate limited for notification: ${notificationId}, retry after ${rateLimitResult.retryAfterMs}ms`);
-            
+
             // Check max retry count
             const newRetryCount = notification.retry_count + 1;
             if (newRetryCount > env.MAX_RETRY_COUNT) {
                 logger.error(`Max retries exceeded for notification: ${notificationId}`);
                 await setFailed(notificationId);
                 await publishFinalFailure(notification, 'Max retry count exceeded due to rate limiting');
-                return;
+                return true; // Final state reached, commit offset
             }
 
             // Push to delayed_notification topic for retry
@@ -95,31 +97,42 @@ const processEmailMessage = async ({ partition, message }: EachMessagePayload): 
             const delayedPayload = buildDelayedPayloadFromEmail(notification, newRetryCount);
             await publishDelayed(delayedPayload);
             logger.info(`Pushed to delayed queue: ${notificationId} (retry ${newRetryCount})`);
-            return;
+            return true; // Successfully queued for retry, commit offset
         }
 
-        // 6. Send email via Nodemailer
+        // 5. Send email via Nodemailer
         const emailResult = await sendEmail(notification);
 
         if (emailResult.success) {
-            // 7a. Success - Update Redis and publish status
-            // Handle Redis update failure gracefully - email was already sent
+            // 6a. Success - Update Redis and publish status
+            // CRITICAL: Update idempotency status IMMEDIATELY after send
             try {
                 await setDelivered(notificationId);
             } catch (redisErr) {
+                // Redis failed but email was sent - log but continue
+                // This is a "ghost delivery" scenario - recovery job will handle it
                 logger.error(`Failed to update idempotency status, but email was sent: ${notificationId}`, redisErr);
             }
-            await publishSuccessStatus(notification);
+
+            // Publish status to Kafka
+            try {
+                await publishSuccessStatus(notification);
+            } catch (kafkaErr) {
+                // Status publish failed - log but commit offset since email was sent
+                logger.error(`Failed to publish success status: ${notificationId}`, kafkaErr);
+            }
+
             logger.success(`Email delivered: ${notificationId}`);
+            return true; // Email sent, commit offset
         } else {
-            // 7b. Failure - Check retry count and push to delayed topic
+            // 6b. Failure - Check retry count and push to delayed topic
             const newRetryCount = notification.retry_count + 1;
-            
+
             if (newRetryCount > env.MAX_RETRY_COUNT) {
                 logger.error(`Max retries exceeded for notification: ${notificationId}`);
                 await setFailed(notificationId);
                 await publishFinalFailure(notification, emailResult.error || 'Max retry count exceeded');
-                return;
+                return true; // Final state reached, commit offset
             }
 
             // Push to delayed_notification topic for retry
@@ -127,11 +140,14 @@ const processEmailMessage = async ({ partition, message }: EachMessagePayload): 
             const delayedPayload = buildDelayedPayloadFromEmail(notification, newRetryCount);
             await publishDelayed(delayedPayload);
             logger.warn(`Email failed, pushed to delayed queue: ${notificationId} (retry ${newRetryCount})`);
+            return true; // Successfully queued for retry, commit offset
         }
 
     } catch (err) {
         logger.error(`Error processing message at partition ${partition}, offset ${messageOffset}:`, err);
-        // Don't throw - let consumer continue with next message
+        // Return false to NOT commit offset - message will be redelivered
+        // This handles crashes during Redis/Kafka operations
+        return false;
     }
 };
 
@@ -179,7 +195,7 @@ const publishFinalFailure = async (
 };
 
 /**
- * Start the email consumer
+ * Start the email consumer with manual offset commit
  */
 export const startEmailConsumer = async (): Promise<void> => {
     if (state.consumer) {
@@ -205,11 +221,27 @@ export const startEmailConsumer = async (): Promise<void> => {
 
     state.isConsuming = true;
 
+    // Use autoCommit: false for manual offset management
     await state.consumer.run({
-        eachMessage: processEmailMessage
+        autoCommit: false,
+        eachMessage: async (payload) => {
+            const shouldCommit = await processEmailMessage(payload);
+
+            if (shouldCommit && state.consumer) {
+                // Commit offset only after successful processing
+                await state.consumer.commitOffsets([{
+                    topic: payload.topic,
+                    partition: payload.partition,
+                    offset: (BigInt(payload.message.offset) + 1n).toString()
+                }]);
+            } else if (!shouldCommit) {
+                // Processing failed - do not commit, message will be redelivered
+                logger.warn(`Not committing offset for partition ${payload.partition}, offset ${payload.message.offset} - will be redelivered`);
+            }
+        }
     });
 
-    logger.success('Email consumer started');
+    logger.success('Email consumer started with manual offset commit');
 };
 
 /**

@@ -32,12 +32,15 @@ export const publishStatus = async (status: notification_status_topic): Promise<
         throw new Error('Status producer not initialized. Call initStatusProducer() first.');
     }
 
+    // Use acks: -1 for durability - wait for all in-sync replicas
     await producer.send({
         topic: TOPICS.notification_status,
         messages: [{
             key: status.notification_id.toString(),
             value: JSON.stringify(status)
-        }]
+        }],
+        acks: -1,  // Wait for all replicas to acknowledge
+        timeout: 30000
     });
 };
 

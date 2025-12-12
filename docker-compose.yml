@@ -307,6 +307,39 @@ services:
       - ns-network
     restart: unless-stopped
 
+  # Recovery Service - Detects and reconciles stuck notifications (single instance only)
+  recovery:
+    image: simplens:latest
+    container_name: ns-recovery
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      BROKERS: kafka:9093
+      # Processing TTL determines stuck threshold (stuck = 2× this value)
+      PROCESSING_TTL_SECONDS: 120
+      # Logging
+      LOKI_URL: http://loki:3100
+      LOG_LEVEL: info
+    command: [ "node", "dist/workers/recovery.service.js" ]
+    depends_on:
+      mongo:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    networks:
+      - ns-network
+    restart: unless-stopped
+    # IMPORTANT: Do not scale this service - it should run as a single instance
+    deploy:
+      replicas: 1
+
   # Admin Dashboard - Next.js web app for monitoring notifications
   dashboard:
     build:

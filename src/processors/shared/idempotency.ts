@@ -69,12 +69,12 @@ export const tryAcquireProcessingLock = async (notificationId: string): Promise<
 }> => {
     const redis = getRedisClient();
     const key = buildKey(notificationId);
-    
+
     const processingRecord: IdempotencyRecord = {
         status: 'processing',
         updated_at: new Date().toISOString()
     };
-    
+
     const result = await redis.eval(
         ACQUIRE_PROCESSING_SCRIPT,
         1,
@@ -82,37 +82,15 @@ export const tryAcquireProcessingLock = async (notificationId: string): Promise<
         JSON.stringify(processingRecord),
         env.PROCESSING_TTL_SECONDS.toString()
     ) as number;
-    
+
     if (result === 0) {
         return { canProcess: false };
     }
-    
-    return { 
-        canProcess: true, 
-        isRetry: result === 2 
-    };
-};
 
-/**
- * @deprecated Use tryAcquireProcessingLock() for atomic check-and-set
- * Check if notification can be processed (non-atomic, kept for backward compatibility)
- */
-export const canProcess = async (notificationId: string): Promise<boolean> => {
-    const redis = getRedisClient();
-    const key = buildKey(notificationId);
-    
-    const data = await redis.get(key);
-    
-    if (!data) {
-        return true;
-    }
-    
-    try {
-        const record: IdempotencyRecord = JSON.parse(data);
-        return record.status === 'failed';
-    } catch {
-        return true;
-    }
+    return {
+        canProcess: true,
+        isRetry: result === 2
+    };
 };
 
 /**
@@ -121,13 +99,13 @@ export const canProcess = async (notificationId: string): Promise<boolean> => {
 export const getIdempotencyStatus = async (notificationId: string): Promise<IdempotencyRecord | null> => {
     const redis = getRedisClient();
     const key = buildKey(notificationId);
-    
+
     const data = await redis.get(key);
-    
+
     if (!data) {
         return null;
     }
-    
+
     try {
         return JSON.parse(data) as IdempotencyRecord;
     } catch {
@@ -136,33 +114,17 @@ export const getIdempotencyStatus = async (notificationId: string): Promise<Idem
 };
 
 /**
- * @deprecated Use tryAcquireProcessingLock() for atomic check-and-set
- * Set status to 'processing' (non-atomic, kept for backward compatibility)
- */
-export const setProcessing = async (notificationId: string): Promise<void> => {
-    const redis = getRedisClient();
-    const key = buildKey(notificationId);
-    
-    const record: IdempotencyRecord = {
-        status: 'processing',
-        updated_at: new Date().toISOString()
-    };
-    
-    await redis.setex(key, env.PROCESSING_TTL_SECONDS, JSON.stringify(record));
-};
-
-/**
  * Set status to 'delivered' - marks notification as successfully processed
  */
 export const setDelivered = async (notificationId: string): Promise<void> => {
     const redis = getRedisClient();
     const key = buildKey(notificationId);
-    
+
     const record: IdempotencyRecord = {
         status: 'delivered',
         updated_at: new Date().toISOString()
     };
-    
+
     // Long TTL for delivered status
     await redis.setex(key, env.IDEMPOTENCY_TTL_SECONDS, JSON.stringify(record));
 };
@@ -173,12 +135,12 @@ export const setDelivered = async (notificationId: string): Promise<void> => {
 export const setFailed = async (notificationId: string): Promise<void> => {
     const redis = getRedisClient();
     const key = buildKey(notificationId);
-    
+
     const record: IdempotencyRecord = {
         status: 'failed',
         updated_at: new Date().toISOString()
     };
-    
+
     // Long TTL for failed status (allows retries)
     await redis.setex(key, env.IDEMPOTENCY_TTL_SECONDS, JSON.stringify(record));
 };

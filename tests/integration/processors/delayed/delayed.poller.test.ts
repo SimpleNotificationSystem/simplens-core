@@ -6,15 +6,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createMockDelayedNotification } from '../../../utils/mocks.js';
 
-// Mock dependencies
-const mockFetchDueEvents = vi.fn();
+// Mock dependencies - two-phase processing API
+const mockClaimDueEvents = vi.fn();
+const mockConfirmProcessed = vi.fn();
+const mockReleaseClaim = vi.fn();
 const mockReAddToQueue = vi.fn();
 const mockGetDueEventCount = vi.fn();
 const mockPublishToTarget = vi.fn();
 const mockPublishDLQFailureStatus = vi.fn();
 
 vi.mock('@src/processors/delayed/delayed.queue.js', () => ({
-    fetchDueEvents: mockFetchDueEvents,
+    claimDueEvents: mockClaimDueEvents,
+    confirmProcessed: mockConfirmProcessed,
+    releaseClaim: mockReleaseClaim,
     reAddToQueue: mockReAddToQueue,
     getDueEventCount: mockGetDueEventCount,
 }));
@@ -53,7 +57,9 @@ describe('Delayed Poller', () => {
         vi.resetModules();
         vi.useFakeTimers();
 
-        mockFetchDueEvents.mockResolvedValue([]);
+        mockClaimDueEvents.mockResolvedValue([]);
+        mockConfirmProcessed.mockResolvedValue(true);
+        mockReleaseClaim.mockResolvedValue(true);
         mockGetDueEventCount.mockResolvedValue(0);
         mockPublishToTarget.mockResolvedValue(undefined);
         mockReAddToQueue.mockResolvedValue(undefined);
@@ -125,7 +131,7 @@ describe('Delayed Poller', () => {
 
     describe('Event Processing', () => {
         it('should handle empty queue gracefully', async () => {
-            mockFetchDueEvents.mockResolvedValue([]);
+            mockClaimDueEvents.mockResolvedValue([]);
 
             delayedPoller.startDelayedPoller();
 
@@ -140,7 +146,7 @@ describe('Delayed Poller', () => {
                 ...createMockDelayedNotification(),
                 notification_id: 'test-notification-id',
             };
-            mockFetchDueEvents.mockResolvedValueOnce([event]);
+            mockClaimDueEvents.mockResolvedValueOnce([event]);
 
             delayedPoller.startDelayedPoller();
 
@@ -158,7 +164,7 @@ describe('Delayed Poller', () => {
                 ...createMockDelayedNotification(),
                 notification_id: 'test-notification-id',
             };
-            mockFetchDueEvents.mockResolvedValueOnce([event]);
+            mockClaimDueEvents.mockResolvedValueOnce([event]);
             mockPublishToTarget.mockRejectedValueOnce(new Error('Kafka error'));
 
             delayedPoller.startDelayedPoller();
@@ -174,7 +180,7 @@ describe('Delayed Poller', () => {
                 notification_id: 'test-notification-id',
                 _pollerRetries: 3, // At max retries
             };
-            mockFetchDueEvents.mockResolvedValueOnce([event]);
+            mockClaimDueEvents.mockResolvedValueOnce([event]);
 
             delayedPoller.startDelayedPoller();
 
@@ -194,7 +200,7 @@ describe('Delayed Poller', () => {
                 notification_id: 'id-2',
                 target_topic: 'whatsapp_notification',
             };
-            mockFetchDueEvents.mockResolvedValueOnce([event1, event2]);
+            mockClaimDueEvents.mockResolvedValueOnce([event1, event2]);
 
             delayedPoller.startDelayedPoller();
 
@@ -209,7 +215,7 @@ describe('Delayed Poller', () => {
                 notification_id: 'test-id',
                 _pollerRetries: 1, // Second retry
             };
-            mockFetchDueEvents.mockResolvedValueOnce([event]);
+            mockClaimDueEvents.mockResolvedValueOnce([event]);
             mockPublishToTarget.mockRejectedValueOnce(new Error('Kafka error'));
 
             delayedPoller.startDelayedPoller();
@@ -224,7 +230,7 @@ describe('Delayed Poller', () => {
         });
 
         it('should handle fetch errors gracefully', async () => {
-            mockFetchDueEvents.mockRejectedValueOnce(new Error('Redis error'));
+            mockClaimDueEvents.mockRejectedValueOnce(new Error('Redis error'));
 
             delayedPoller.startDelayedPoller();
 
@@ -239,7 +245,7 @@ describe('Delayed Poller', () => {
                 ...createMockDelayedNotification(),
                 notification_id: 'test-id',
             };
-            mockFetchDueEvents
+            mockClaimDueEvents
                 .mockResolvedValueOnce([event])
                 .mockResolvedValue([]);  // Empty on subsequent calls
 
@@ -247,11 +253,11 @@ describe('Delayed Poller', () => {
 
             // First poll
             await vi.advanceTimersByTimeAsync(50);
-            expect(mockFetchDueEvents).toHaveBeenCalledTimes(1);
+            expect(mockClaimDueEvents).toHaveBeenCalledTimes(1);
 
             // Second poll after interval
             await vi.advanceTimersByTimeAsync(150);
-            expect(mockFetchDueEvents.mock.calls.length).toBeGreaterThanOrEqual(2);
+            expect(mockClaimDueEvents.mock.calls.length).toBeGreaterThanOrEqual(2);
         });
     });
 });

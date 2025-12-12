@@ -1,11 +1,15 @@
 /**
  * Delayed Poller - Polls Redis queue for due events and publishes to target topics
  * Runs on an interval to fetch events where scheduled_at <= now
- * Implements exponential backoff with max retries to prevent infinite loops
+ * 
+ * Uses two-phase processing:
+ * 1. Claim: Lock events for this worker (prevents duplicate processing)
+ * 2. Publish: Send to target Kafka topic
+ * 3. Confirm: Remove from queue only after successful publish
  */
 
 import { env } from '@src/config/env.config.js';
-import { fetchDueEvents, reAddToQueue, getDueEventCount } from './delayed.queue.js';
+import { claimDueEvents, confirmProcessed, reAddToQueue, getDueEventCount, releaseClaim } from './delayed.queue.js';
 import { publishToTarget } from './target.producer.js';
 import { publishDLQFailureStatus } from './dlq.status.js';
 import { delayedWorkerLogger as logger } from '@src/workers/utils/logger.js';
@@ -33,38 +37,53 @@ const calculateBackoff = (retryCount: number): number => {
 };
 
 /**
- * Process a single due event
- * Publishes to target topic, re-adds to queue on failure with exponential backoff
- * Sends to dead letter queue after max retries exceeded
+ * Process a single due event with two-phase commit
+ * 1. Publish to target topic
+ * 2. Confirm (remove from queue) ONLY after successful publish
  */
 const processDueEvent = async (event: DelayedEventWithRetries): Promise<boolean> => {
     const pollerRetries = event._pollerRetries || 0;
+    const notificationId = event.notification_id.toString();
 
     // Check if max poller retries exceeded
     if (pollerRetries >= env.MAX_POLLER_RETRIES) {
         const errorMessage = `Max poller retries exceeded after ${pollerRetries} attempts`;
-        logger.error(`Event ${event.notification_id} exceeded max poller retries (${env.MAX_POLLER_RETRIES}), marking as failed`);
+        logger.error(`Event ${notificationId} exceeded max poller retries (${env.MAX_POLLER_RETRIES}), marking as failed`);
 
         try {
             // Publish failure status to Kafka -> MongoDB update via status worker
             await publishDLQFailureStatus(event, errorMessage);
-            logger.info(`Published failure status for: ${event.notification_id}`);
+            logger.info(`Published failure status for: ${notificationId}`);
+
+            // Confirm to remove from queue
+            await confirmProcessed(event);
         } catch (statusErr) {
             logger.error(`Failed to publish failure status:`, statusErr);
+            // Release claim so another worker can try
+            await releaseClaim(notificationId);
         }
         return false;
     }
 
     try {
-        logger.info(`Processing due event: ${event.notification_id} -> ${event.target_topic} (poller retry: ${pollerRetries})`);
+        logger.info(`Processing due event: ${notificationId} -> ${event.target_topic} (poller retry: ${pollerRetries})`);
 
-        // Publish payload to the target topic
+        // Step 1: Publish payload to the target topic
         await publishToTarget(event.target_topic, event.payload);
 
-        logger.success(`Successfully published: ${event.notification_id}`);
+        // Step 2: CONFIRM - Remove from queue ONLY after successful publish
+        const confirmed = await confirmProcessed(event);
+
+        if (confirmed) {
+            logger.success(`Successfully published and confirmed: ${notificationId}`);
+        } else {
+            // Lost the claim - event may have been processed by another worker
+            logger.warn(`Claim lost for ${notificationId} - may have been processed by another worker`);
+        }
+
         return true;
     } catch (err) {
-        logger.error(`Failed to publish event ${event.notification_id}:`, err);
+        logger.error(`Failed to publish event ${notificationId}:`, err);
 
         // Re-add to queue with exponential backoff and incremented retry count
         const newRetryCount = pollerRetries + 1;
@@ -75,10 +94,13 @@ const processDueEvent = async (event: DelayedEventWithRetries): Promise<boolean>
                 ...event,
                 _pollerRetries: newRetryCount
             };
+            // reAddToQueue will also release the claim
             await reAddToQueue(eventWithRetries, backoffDelay);
             logger.warn(`Re-added event to queue with ${backoffDelay}ms delay (retry ${newRetryCount}/${env.MAX_POLLER_RETRIES})`);
         } catch (reAddErr) {
             logger.error(`Failed to re-add event to queue:`, reAddErr);
+            // Release claim so event can be picked up on next poll
+            await releaseClaim(notificationId);
         }
 
         return false;
@@ -86,7 +108,7 @@ const processDueEvent = async (event: DelayedEventWithRetries): Promise<boolean>
 };
 
 /**
- * Poll for due events and process them
+ * Poll for due events and process them using two-phase commit
  * Called on each interval tick
  */
 const pollForDueEvents = async (): Promise<void> => {
@@ -98,20 +120,20 @@ const pollForDueEvents = async (): Promise<void> => {
     isPolling = true;
 
     try {
-        // Fetch due events atomically from Redis
-        const dueEvents = await fetchDueEvents(env.DELAYED_BATCH_SIZE);
+        // Claim due events (without removing from queue)
+        const claimedEvents = await claimDueEvents(env.DELAYED_BATCH_SIZE);
 
-        if (dueEvents.length === 0) {
+        if (claimedEvents.length === 0) {
             return;
         }
 
-        logger.info(`Processing ${dueEvents.length} due events...`);
+        logger.info(`Processing ${claimedEvents.length} claimed events...`);
 
         // Process events sequentially to maintain order and avoid overwhelming target topics
         let successCount = 0;
         let failCount = 0;
 
-        for (const event of dueEvents) {
+        for (const event of claimedEvents) {
             const success = await processDueEvent(event);
             if (success) {
                 successCount++;

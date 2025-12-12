@@ -96,7 +96,13 @@ const sendToTopic = async (
             value: JSON.stringify(entry.payload)
         }));
 
-        await producer!.send({ topic, messages });
+        // Use acks: -1 for durability - wait for all in-sync replicas
+        await producer!.send({
+            topic,
+            messages,
+            acks: -1,  // Wait for all replicas to acknowledge
+            timeout: 30000
+        });
         logger.info(`Sent ${messages.length} messages to topic: ${topic}`);
 
         await updateStatusesAfterPublish(topic, entries);
