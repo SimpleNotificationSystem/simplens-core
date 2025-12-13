@@ -31,7 +31,6 @@ export default function ArchitecturePage() {
                     { id: "status-webhooks", label: "Status Updates & Webhooks" },
                     { id: "kafka-topics", label: "Kafka Topics" },
                     { id: "graceful-shutdown", label: "Graceful Shutdown" },
-                    { id: "recovery-cron", label: "Recovery Cron & Alerts" },
                 ]}
             />
 
@@ -606,89 +605,6 @@ export default function ArchitecturePage() {
                     A shutdown flag prevents duplicate shutdown attempts if multiple signals arrive.
                     Once shutdown begins, subsequent signals are ignored.
                 </DocsCallout>
-            </section>
-
-            {/* Recovery Cron & Alerts */}
-            <section id="recovery-cron">
-                <h2 className="text-2xl font-bold mb-4">Recovery Cron &amp; System Alerts</h2>
-                <p className="text-muted-foreground mb-6">
-                    Even with exactly-once delivery guarantees, edge cases can occur. The recovery cron
-                    detects and reconciles inconsistencies between MongoDB and Redis states.
-                </p>
-
-                <h3 className="text-lg font-semibold mb-3">Detection Scenarios</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <div className="p-4 rounded-lg border bg-card">
-                        <h4 className="font-semibold mb-2 text-yellow-600 dark:text-yellow-400">Ghost Deliveries</h4>
-                        <p className="text-sm text-muted-foreground">
-                            Redis idempotency shows <code className="px-1 py-0.5 bg-muted rounded text-xs">delivered</code> but MongoDB
-                            is stuck in <code className="px-1 py-0.5 bg-muted rounded text-xs">processing</code>.
-                            The notification was sent but the status update to MongoDB was lost.
-                        </p>
-                        <p className="text-xs text-green-600 dark:text-green-400 mt-2">
-                            Auto-reconciled: MongoDB updated + status re-published
-                        </p>
-                    </div>
-                    <div className="p-4 rounded-lg border bg-card">
-                        <h4 className="font-semibold mb-2 text-orange-600 dark:text-orange-400">Stuck Processing</h4>
-                        <p className="text-sm text-muted-foreground">
-                            Both Redis and MongoDB show <code className="px-1 py-0.5 bg-muted rounded text-xs">processing</code> for
-                            longer than 2× the processing TTL. Worker may have crashed mid-send.
-                        </p>
-                        <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2">
-                            Flagged for manual review
-                        </p>
-                    </div>
-                    <div className="p-4 rounded-lg border bg-card">
-                        <h4 className="font-semibold mb-2 text-red-600 dark:text-red-400">Orphaned Pending</h4>
-                        <p className="text-sm text-muted-foreground">
-                            Multiple notifications stuck in <code className="px-1 py-0.5 bg-muted rounded text-xs">pending</code> state
-                            for over 5 minutes. Outbox polling may have stopped.
-                        </p>
-                        <p className="text-xs text-red-600 dark:text-red-400 mt-2">
-                            Critical if count &gt; 10
-                        </p>
-                    </div>
-                </div>
-
-                <h3 className="text-lg font-semibold mb-3">Dashboard Alerts</h3>
-                <p className="text-muted-foreground mb-4">
-                    When issues are detected, the recovery cron creates alerts visible in the Admin Dashboard:
-                </p>
-                <DocsTable
-                    headers={["Alert Type", "Severity", "Action"]}
-                    rows={[
-                        [
-                            <code key="ghost" className="text-xs">ghost_delivery</code>,
-                            <span key="ghost-sev" className="text-yellow-600 dark:text-yellow-400">warning</span>,
-                            "Auto-reconciled: MongoDB updated to delivered, status re-published"
-                        ],
-                        [
-                            <code key="stuck" className="text-xs">stuck_processing</code>,
-                            <span key="stuck-sev" className="text-orange-600 dark:text-orange-400">warning/error</span>,
-                            "Flagged for manual review (error if stuck > 30 min)"
-                        ],
-                        [
-                            <code key="orphan" className="text-xs">orphaned_pending</code>,
-                            <span key="orphan-sev" className="text-red-600 dark:text-red-400">warning/critical</span>,
-                            "Alert created when ≥5 orphaned (critical if > 10)"
-                        ],
-                    ]}
-                />
-
-                <DocsCallout type="note" title="Automatic Recovery">
-                    Ghost deliveries are automatically reconciled by updating MongoDB and re-publishing
-                    the status message. For stuck processing, notifications with Redis status
-                    <code className="mx-1">failed</code> or no status are reset to pending with a new outbox entry.
-                </DocsCallout>
-
-                <h3 className="text-lg font-semibold mb-3 mt-4">Configuration</h3>
-                <DocsTable
-                    headers={["Variable", "Default", "Description"]}
-                    rows={[
-                        [<code key="interval" className="text-xs">PROCESSING_TTL_SECONDS</code>, "120", "Base TTL; stuck threshold is 2× this value"],
-                    ]}
-                />
             </section>
 
             {/* Continue Learning */}

@@ -110,7 +110,7 @@ const processWhatsAppMessage = async ({ partition, message }: EachMessagePayload
                 await setDelivered(notificationId);
             } catch (redisErr) {
                 // Redis failed but message was sent - log but continue
-                // This is a "ghost delivery" scenario - recovery job will handle it
+                // This is a "ghost delivery" scenario - requires manual intervention
                 logger.error(`Failed to update idempotency status, but message was sent: ${notificationId}`, redisErr);
             }
 

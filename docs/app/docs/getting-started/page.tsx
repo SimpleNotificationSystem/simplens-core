@@ -187,10 +187,7 @@ npm run email-processor:dev
 npm run whatsapp-processor:dev
 
 # Terminal 5: Delayed Processor
-npm run delayed-processor:dev
-
-# Terminal 6: Recovery Service
-npm run recovery:dev`}
+npm run delayed-processor:dev`}
                 </CodeBlock>
 
                 <DocsCallout type="tip" title="Hot Reload">

@@ -7,7 +7,6 @@ import {
     LayoutDashboard,
     Bell,
     AlertTriangle,
-    AlertCircle,
     BarChart3,
     Settings,
     Send,
@@ -51,11 +50,6 @@ const navItems = [
         title: "Failed",
         href: "/failed",
         icon: AlertTriangle,
-    },
-    {
-        title: "Alerts",
-        href: "/alerts",
-        icon: AlertCircle,
     },
     {
         title: "Analytics",

@@ -7,8 +7,6 @@ import {
     DELAYED_TOPICS,
     NOTIFICATION_STATUS_SF,
     OUTBOX_TOPICS,
-    ALERT_TYPE,
-    ALERT_SEVERITY,
 } from "./types.js";
 import type { UUID } from "crypto";
 import { validate, version } from 'uuid';
@@ -248,27 +246,7 @@ export const batchNotificationRequestSchema = z.object({
     }
 );
 
-export const alertSchema = z.object({
-    type: z.enum([
-        ALERT_TYPE.stuck_processing,
-        ALERT_TYPE.ghost_delivery,
-        ALERT_TYPE.orphaned_pending,
-        ALERT_TYPE.recovery_error
-    ]),
-    notification_id: objectIdSchema.optional(),
-    message: z.string(),
-    severity: z.enum([
-        ALERT_SEVERITY.warning,
-        ALERT_SEVERITY.error,
-        ALERT_SEVERITY.critical
-    ]),
-    metadata: z.record(z.string(), z.unknown()).optional(),
-    resolved: z.boolean().default(false),
-    resolved_at: z.coerce.date().optional(),
-    resolved_by: z.string().optional(),
-    created_at: z.coerce.date().optional(),
-    updated_at: z.coerce.date().optional(),
-});
+
 
 export const validateEmailNotification = (data: unknown) => emailNotificationSchema.parse(data);
 export const validateWhatsappNotification = (data: unknown) => whatsappNotificationSchema.parse(data);
@@ -278,7 +256,7 @@ export const validateNotification = (data: unknown) => notificationSchema.parse(
 export const validateOutbox = (data: unknown) => outboxSchema.parse(data);
 export const validateNotificationRequest = (data: unknown) => notificationRequestSchema.parse(data);
 export const validateBatchNotificationRequest = (data: unknown) => batchNotificationRequestSchema.parse(data);
-export const validateAlert = (data: unknown) => alertSchema.parse(data);
+
 
 export const safeValidateEmailNotification = (data: unknown) => emailNotificationSchema.safeParse(data);
 export const safeValidateWhatsappNotification = (data: unknown) => whatsappNotificationSchema.safeParse(data);

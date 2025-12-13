@@ -220,9 +220,6 @@ npm run dev
    
    # Terminal 5: Delayed Processor
    npm run delayed-processor:dev
-
-   # Terminal 6: Recovery Service
-   npm run recovery:dev
    ```
 
 ### Scaling Processors
@@ -299,7 +296,6 @@ Authorization: Bearer YOUR_API_KEY
 |---------|-----------------|------------|------|
 | API Server | `ns-api` | `npm run start` | 3000 |
 | Background Worker | `ns-worker` | `npm run worker` | - |
-| Recovery Service | `ns-recovery` | `npm run recovery` | - |
 | Email Processor | `ns-email-processor` | `npm run email-processor` | - |
 | WhatsApp Processor | `ns-whatsapp-processor` | `npm run whatsapp-processor` | - |
 | Delayed Processor | `ns-delayed-processor` | `npm run delayed-processor` | - |

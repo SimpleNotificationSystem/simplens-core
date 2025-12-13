@@ -26,7 +26,6 @@ export default function ConfigurationPage() {
                     { id: "rate-limiting", label: "Rate Limiting" },
                     { id: "retry", label: "Retry Configuration" },
                     { id: "delayed", label: "Delayed Processor" },
-                    { id: "recovery", label: "Recovery Cron" },
                     { id: "logging", label: "Logging" },
                     { id: "dashboard", label: "Admin Dashboard" },
                     { id: "example", label: "Example Configuration" },
@@ -306,45 +305,6 @@ export default function ConfigurationPage() {
                             <code key="claim-timeout" className="text-xs">DELAYED_CLAIM_TIMEOUT_MS</code>,
                             "How long a claimed event stays locked",
                             <code key="claim-timeout-val" className="text-xs">30000</code>
-                        ],
-                    ]}
-                />
-            </section>
-
-            {/* Recovery Cron */}
-            <section id="recovery">
-                <h2 className="text-2xl font-bold mb-4">Recovery Cron</h2>
-                <p className="text-muted-foreground mb-4">
-                    The recovery cron detects and reconciles inconsistencies between MongoDB and Redis,
-                    ensuring exactly-once delivery guarantees even after worker crashes.
-                </p>
-                <DocsTable
-                    headers={["Variable", "Description", "Default"]}
-                    rows={[
-                        [
-                            <code key="recovery-interval" className="text-xs">RECOVERY_CRON_INTERVAL_MS</code>,
-                            "How often the recovery cron runs (in milliseconds)",
-                            <code key="recovery-interval-val" className="text-xs">120000</code>
-                        ],
-                        [
-                            <code key="recovery-batch" className="text-xs">RECOVERY_BATCH_SIZE</code>,
-                            "Batch size for processing stuck notifications",
-                            <code key="recovery-batch-val" className="text-xs">50</code>
-                        ],
-                        [
-                            <code key="orphan-threshold" className="text-xs">ORPHAN_THRESHOLD_MS</code>,
-                            "Time after which pending notifications are considered orphaned",
-                            <code key="orphan-threshold-val" className="text-xs">300000</code>
-                        ],
-                        [
-                            <code key="orphan-alert" className="text-xs">ORPHAN_ALERT_THRESHOLD</code>,
-                            "Orphaned count to trigger warning alert",
-                            <code key="orphan-alert-val" className="text-xs">5</code>
-                        ],
-                        [
-                            <code key="orphan-critical" className="text-xs">ORPHAN_CRITICAL_THRESHOLD</code>,
-                            "Orphaned count to trigger critical alert",
-                            <code key="orphan-critical-val" className="text-xs">10</code>
                         ],
                     ]}
                 />

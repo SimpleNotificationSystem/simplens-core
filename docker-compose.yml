@@ -135,15 +135,15 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NODE_ENV: production
-      PORT: 3000
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-3000}
       MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
       REDIS_URL: redis://redis:6379
       BROKERS: kafka:9093
       NS_API_KEY: ${NS_API_KEY:-dev-api-key-change-in-production}
-      MAX_BATCH_REQ_LIMIT: 1000
+      MAX_BATCH_REQ_LIMIT: ${MAX_BATCH_REQ_LIMIT:-1000}
       LOKI_URL: http://loki:3100
-      LOG_LEVEL: info
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       EMAIL_PARTITION: ${EMAIL_PARTITION:-1}
       WHATSAPP_PARTITION: ${WHATSAPP_PARTITION:-1}
       DELAYED_PARTITION: ${DELAYED_PARTITION:-1}
@@ -174,15 +174,15 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
       MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
       REDIS_URL: redis://redis:6379
       BROKERS: kafka:9093
-      OUTBOX_POLL_INTERVAL_MS: 5000
-      OUTBOX_BATCH_SIZE: 100
-      OUTBOX_CLAIM_TIMEOUT_MS: 30000
+      OUTBOX_POLL_INTERVAL_MS: ${OUTBOX_POLL_INTERVAL_MS:-5000}
+      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-100}
+      OUTBOX_CLAIM_TIMEOUT_MS: ${OUTBOX_CLAIM_TIMEOUT_MS:-30000}
       LOKI_URL: http://loki:3100
-      LOG_LEVEL: info
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     command: [ "node", "dist/workers/worker.js" ]
     depends_on:
       mongo:
@@ -203,27 +203,26 @@ services:
   email-processor:
     image: simplens:latest
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
       MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
       REDIS_URL: redis://redis:6379
       BROKERS: kafka:9093
-      WORKER_ID: email-processor-1
-      # Email SMTP Configuration (Gmail)
-      EMAIL_HOST: smtp.gmail.com
-      EMAIL_PORT: 587
+      # Email SMTP Configuration
+      EMAIL_HOST: ${EMAIL_HOST:-smtp.gmail.com}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
       EMAIL_USER: ${EMAIL_USER:-}
       EMAIL_PASS: ${EMAIL_PASS:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
       # Rate Limiting
-      EMAIL_RATE_LIMIT_TOKENS: 100
-      EMAIL_RATE_LIMIT_REFILL_RATE: 10
+      EMAIL_RATE_LIMIT_TOKENS: ${EMAIL_RATE_LIMIT_TOKENS:-100}
+      EMAIL_RATE_LIMIT_REFILL_RATE: ${EMAIL_RATE_LIMIT_REFILL_RATE:-10}
       # Retry Configuration
-      MAX_RETRY_COUNT: 5
-      IDEMPOTENCY_TTL_SECONDS: 86400
-      PROCESSING_TTL_SECONDS: 120
+      MAX_RETRY_COUNT: ${MAX_RETRY_COUNT:-5}
+      IDEMPOTENCY_TTL_SECONDS: ${IDEMPOTENCY_TTL_SECONDS:-86400}
+      PROCESSING_TTL_SECONDS: ${PROCESSING_TTL_SECONDS:-120}
       # Logging
       LOKI_URL: http://loki:3100
-      LOG_LEVEL: info
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     command: [ "node", "dist/processors/email/email.processor.js" ]
     depends_on:
       mongo:
@@ -244,21 +243,20 @@ services:
   whatsapp-processor:
     image: simplens:latest
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
       MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
       REDIS_URL: redis://redis:6379
       BROKERS: kafka:9093
-      WORKER_ID: whatsapp-processor-1
       # Rate Limiting
-      WHATSAPP_RATE_LIMIT_TOKENS: 50
-      WHATSAPP_RATE_LIMIT_REFILL_RATE: 5
+      WHATSAPP_RATE_LIMIT_TOKENS: ${WHATSAPP_RATE_LIMIT_TOKENS:-50}
+      WHATSAPP_RATE_LIMIT_REFILL_RATE: ${WHATSAPP_RATE_LIMIT_REFILL_RATE:-5}
       # Retry Configuration
-      MAX_RETRY_COUNT: 5
-      IDEMPOTENCY_TTL_SECONDS: 86400
-      PROCESSING_TTL_SECONDS: 120
+      MAX_RETRY_COUNT: ${MAX_RETRY_COUNT:-5}
+      IDEMPOTENCY_TTL_SECONDS: ${IDEMPOTENCY_TTL_SECONDS:-86400}
+      PROCESSING_TTL_SECONDS: ${PROCESSING_TTL_SECONDS:-120}
       # Logging
       LOKI_URL: http://loki:3100
-      LOG_LEVEL: info
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     command: [ "node", "dist/processors/whatsapp/whatsapp.processor.js" ]
     depends_on:
       mongo:
@@ -279,18 +277,17 @@ services:
   delayed-processor:
     image: simplens:latest
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
       MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
       REDIS_URL: redis://redis:6379
       BROKERS: kafka:9093
-      WORKER_ID: delayed-processor-1
       # Delayed Queue Configuration
-      DELAYED_POLL_INTERVAL_MS: 1000
-      DELAYED_BATCH_SIZE: 10
-      MAX_POLLER_RETRIES: 3
+      DELAYED_POLL_INTERVAL_MS: ${DELAYED_POLL_INTERVAL_MS:-1000}
+      DELAYED_BATCH_SIZE: ${DELAYED_BATCH_SIZE:-10}
+      MAX_POLLER_RETRIES: ${MAX_POLLER_RETRIES:-3}
       # Logging
       LOKI_URL: http://loki:3100
-      LOG_LEVEL: info
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     command: [ "node", "dist/processors/delayed/delayed.processor.js" ]
     depends_on:
       mongo:
@@ -306,39 +303,6 @@ services:
     networks:
       - ns-network
     restart: unless-stopped
-
-  # Recovery Service - Detects and reconciles stuck notifications (single instance only)
-  recovery:
-    image: simplens:latest
-    container_name: ns-recovery
-    environment:
-      NODE_ENV: production
-      MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
-      REDIS_URL: redis://redis:6379
-      BROKERS: kafka:9093
-      # Processing TTL determines stuck threshold (stuck = 2× this value)
-      PROCESSING_TTL_SECONDS: 120
-      # Logging
-      LOKI_URL: http://loki:3100
-      LOG_LEVEL: info
-    command: [ "node", "dist/workers/recovery.service.js" ]
-    depends_on:
-      mongo:
-        condition: service_healthy
-      kafka:
-        condition: service_started
-      redis:
-        condition: service_healthy
-      loki:
-        condition: service_healthy
-      api:
-        condition: service_healthy
-    networks:
-      - ns-network
-    restart: unless-stopped
-    # IMPORTANT: Do not scale this service - it should run as a single instance
-    deploy:
-      replicas: 1
 
   # Admin Dashboard - Next.js web app for monitoring notifications
   dashboard:

@@ -36,6 +36,14 @@ vi.mock('@src/database/models/notification.models.js', () => ({
     },
 }));
 
+// Mock alert model to prevent OverwriteModelError
+vi.mock('@src/database/models/alert.models.js', () => ({
+    default: {
+        create: vi.fn(),
+        findOne: vi.fn(),
+    },
+}));
+
 vi.mock('@src/workers/utils/logger.js', () => ({
     consumerLogger: {
         info: vi.fn(),

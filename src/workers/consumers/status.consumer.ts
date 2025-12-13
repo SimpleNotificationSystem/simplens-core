@@ -60,11 +60,11 @@ const sendWebhookCallback = async (
     notificationId: string
 ): Promise<boolean> => {
     logger.info(`Sending webhook to ${webhookUrl} for ${notificationId}`);
-    
+
     for (let attempt = 1; attempt <= WEBHOOK_MAX_RETRIES; attempt++) {
         try {
             logger.info(`Webhook attempt ${attempt}/${WEBHOOK_MAX_RETRIES} for ${notificationId}`);
-            
+
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
 
@@ -107,9 +107,9 @@ const sendWebhookCallback = async (
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
             const errorName = err instanceof Error ? err.name : 'Unknown';
-            
+
             logger.error(`Webhook error for ${notificationId} (attempt ${attempt}/${WEBHOOK_MAX_RETRIES}): ${errorName} - ${errorMessage}`);
-            
+
             if (err instanceof Error && err.name === 'AbortError') {
                 logger.error(`Webhook timeout after ${WEBHOOK_TIMEOUT_MS}ms for ${notificationId}`);
             }
@@ -170,10 +170,10 @@ const processStatusMessage = async ({ partition, message }: EachMessagePayload):
 
         if (result) {
             logger.success(`Updated notification ${data.notification_id} to status: ${newStatus}`);
-            
+
             // Send webhook callback to notify client about status change
             logger.info(`Webhook URL from status message: ${data.webhook_url || '(not provided)'}`);
-            
+
             if (data.webhook_url) {
                 const webhookPayload = buildWebhookPayload(data);
                 const webhookSent = await sendWebhookCallback(
@@ -181,7 +181,7 @@ const processStatusMessage = async ({ partition, message }: EachMessagePayload):
                     webhookPayload,
                     data.notification_id.toString()
                 );
-                
+
                 if (!webhookSent) {
                     logger.warn(`Failed to deliver webhook for ${data.notification_id} after ${WEBHOOK_MAX_RETRIES} attempts`);
                     // Note: We don't fail the status update if webhook fails
@@ -198,6 +198,7 @@ const processStatusMessage = async ({ partition, message }: EachMessagePayload):
         // Don't throw - let the consumer continue processing other messages
     }
 };
+
 
 /**
  * Initialize and start the status consumer

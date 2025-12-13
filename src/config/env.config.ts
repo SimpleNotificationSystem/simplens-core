@@ -59,13 +59,6 @@ export const env = {
     DELAYED_POLL_INTERVAL_MS: <number>parseInt(process.env.DELAYED_POLL_INTERVAL_MS || "1000"),
     DELAYED_BATCH_SIZE: <number>parseInt(process.env.DELAYED_BATCH_SIZE || "10"),
 
-    // Recovery Cron
-    RECOVERY_CRON_INTERVAL_MS: <number>parseInt(process.env.RECOVERY_CRON_INTERVAL_MS || "120000"),      // 2 minutes
-    RECOVERY_BATCH_SIZE: <number>parseInt(process.env.RECOVERY_BATCH_SIZE || "50"),
-    ORPHAN_THRESHOLD_MS: <number>parseInt(process.env.ORPHAN_THRESHOLD_MS || "300000"),                  // 5 minutes
-    ORPHAN_ALERT_THRESHOLD: <number>parseInt(process.env.ORPHAN_ALERT_THRESHOLD || "5"),
-    ORPHAN_CRITICAL_THRESHOLD: <number>parseInt(process.env.ORPHAN_CRITICAL_THRESHOLD || "10"),
-
     // Logging - Grafana Loki
     LOKI_URL: <string>process.env.LOKI_URL || "",
     LOG_LEVEL: <string>process.env.LOG_LEVEL || "info",

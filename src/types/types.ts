@@ -1,4 +1,4 @@
-import { emailNotificationSchema, whatsappNotificationSchema, delayedNotificationTopicSchema, notificationStatusTopicSchema, notificationSchema, outboxSchema, notificationRequestSchema, batchNotificationRequestSchema, alertSchema } from "./schemas.js";
+import { emailNotificationSchema, whatsappNotificationSchema, delayedNotificationTopicSchema, notificationStatusTopicSchema, notificationSchema, outboxSchema, notificationRequestSchema, batchNotificationRequestSchema } from "./schemas.js";
 import { z } from 'zod';
 
 export enum CHANNEL {
@@ -42,18 +42,7 @@ export enum OUTBOX_STATUS {
     published = "published"
 }
 
-export enum ALERT_TYPE {
-    stuck_processing = "stuck_processing",
-    ghost_delivery = "ghost_delivery",
-    orphaned_pending = "orphaned_pending",
-    recovery_error = "recovery_error"
-}
 
-export enum ALERT_SEVERITY {
-    warning = "warning",
-    error = "error",
-    critical = "critical"
-}
 
 export type email_notification = z.infer<typeof emailNotificationSchema>;
 
@@ -71,4 +60,3 @@ export type notification_request = z.infer<typeof notificationRequestSchema>;
 
 export type batch_notification_request = z.infer<typeof batchNotificationRequestSchema>;
 
-export type alert = z.infer<typeof alertSchema>;

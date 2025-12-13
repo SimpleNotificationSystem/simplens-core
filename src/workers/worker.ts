@@ -66,9 +66,6 @@ const registerShutdownHandlers = (): void => {
 
 /**
  * Main entry point for the background worker
- * 
- * Note: Recovery cron runs as a separate service (recovery.service.ts)
- * to avoid race conditions when workers are scaled horizontally.
  */
 const main = async (): Promise<void> => {
     logger.info("================================");

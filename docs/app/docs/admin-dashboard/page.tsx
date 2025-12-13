@@ -12,7 +12,6 @@ import {
     BarChart3,
     Send,
     Lock,
-    Bell,
     LucideIcon
 } from "lucide-react";
 
@@ -50,7 +49,6 @@ export default function AdminDashboardPage() {
                     { id: "features", label: "Key Features" },
                     { id: "access", label: "Accessing the Dashboard" },
                     { id: "pages", label: "Dashboard Pages" },
-                    { id: "alerts", label: "System Alerts" },
                     { id: "configuration", label: "Configuration" },
                     { id: "local-setup", label: "Local Development" },
                     { id: "docker-setup", label: "Docker Setup" },
@@ -105,11 +103,6 @@ export default function AdminDashboardPage() {
                         icon={Send}
                         title="Send Notifications"
                         description="Send single or batch notifications directly from the dashboard. Test your notification setup without writing code."
-                    />
-                    <FeatureCard
-                        icon={Bell}
-                        title="System Alerts"
-                        description="Monitor system health with real-time alerts for ghost deliveries, stuck processing, and missed status updates."
                     />
                     <FeatureCard
                         icon={Lock}
@@ -197,44 +190,6 @@ export default function AdminDashboardPage() {
                     <li><strong>Scheduled Delivery</strong> — Set a future delivery time</li>
                     <li><strong>Real-time Feedback</strong> — See the webhook response in the dashboard</li>
                 </ul>
-            </section>
-
-            {/* System Alerts */}
-            <section id="alerts">
-                <h2 className="text-2xl font-bold mb-4">System Alerts</h2>
-                <p className="text-muted-foreground mb-4">
-                    The Alerts page displays system-level issues detected by the recovery cron:
-                </p>
-                <DocsTable
-                    headers={["Alert Type", "Severity", "Description"]}
-                    rows={[
-                        [
-                            <code key="ghost" className="text-xs">ghost_delivery</code>,
-                            <span key="ghost-sev" className="text-yellow-600 dark:text-yellow-400">warning</span>,
-                            "Redis shows delivered but MongoDB was stuck in processing"
-                        ],
-                        [
-                            <code key="stuck" className="text-xs">stuck_processing</code>,
-                            <span key="stuck-sev" className="text-orange-600 dark:text-orange-400">warning/error</span>,
-                            "Notification stuck in processing for too long (error if > 30 min)"
-                        ],
-                        [
-                            <code key="orphan" className="text-xs">orphaned_pending</code>,
-                            <span key="orphan-sev" className="text-red-600 dark:text-red-400">warning/critical</span>,
-                            "Multiple notifications stuck in pending (critical if > 10)"
-                        ],
-                    ]}
-                />
-                <ul className="list-disc list-inside space-y-2 text-muted-foreground mt-4 mb-4">
-                    <li><strong>Filter by Severity</strong> — View only errors, warnings, or info alerts</li>
-                    <li><strong>Filter by Type</strong> — Focus on specific issue categories</li>
-                    <li><strong>Alert Details</strong> — View notification ID, message, and metadata</li>
-                    <li><strong>Mark as Resolved</strong> — Clear alerts after investigation</li>
-                </ul>
-                <DocsCallout type="note" title="Automatic Detection">
-                    Alerts are automatically created by the recovery cron when inconsistencies are
-                    detected between MongoDB and Redis. The cron runs every 2 minutes.
-                </DocsCallout>
             </section>
 
             {/* Configuration */}
