@@ -59,6 +59,12 @@ export const env = {
     DELAYED_POLL_INTERVAL_MS: <number>parseInt(process.env.DELAYED_POLL_INTERVAL_MS || "1000"),
     DELAYED_BATCH_SIZE: <number>parseInt(process.env.DELAYED_BATCH_SIZE || "10"),
 
+    // Recovery Service
+    RECOVERY_POLL_INTERVAL_MS: <number>parseInt(process.env.RECOVERY_POLL_INTERVAL_MS || "60000"),
+    PROCESSING_STUCK_THRESHOLD_MS: <number>parseInt(process.env.PROCESSING_STUCK_THRESHOLD_MS || "300000"),
+    PENDING_STUCK_THRESHOLD_MS: <number>parseInt(process.env.PENDING_STUCK_THRESHOLD_MS || "300000"),
+    RECOVERY_BATCH_SIZE: <number>parseInt(process.env.RECOVERY_BATCH_SIZE || "50"),
+
     // Logging - Grafana Loki
     LOKI_URL: <string>process.env.LOKI_URL || "",
     LOG_LEVEL: <string>process.env.LOG_LEVEL || "info",

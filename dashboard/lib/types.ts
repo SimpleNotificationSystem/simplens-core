@@ -89,3 +89,23 @@ export interface NotificationFilters {
     page?: number;
     limit?: number;
 }
+
+export enum ALERT_TYPE {
+    ghost_delivery = "ghost_delivery",
+    stuck_processing = "stuck_processing",
+    orphaned_pending = "orphaned_pending"
+}
+
+export interface Alert {
+    _id: string;
+    notification_id: string;
+    alert_type: ALERT_TYPE;
+    reason: string;
+    redis_status: string | null;
+    db_status: NOTIFICATION_STATUS;
+    retry_count: number;
+    resolved: boolean;
+    resolved_at: Date | null;
+    created_at: Date;
+    updated_at: Date;
+}

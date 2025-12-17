@@ -31,7 +31,7 @@ import {
     PaginationNext,
     PaginationPrevious,
 } from "@/components/ui/pagination";
-import { Search, Eye, RefreshCw } from "lucide-react";
+import { Search, Eye, RefreshCw, ArrowUpDown } from "lucide-react";
 import { format } from "date-fns";
 import type { PaginatedResponse, Notification, NOTIFICATION_STATUS, CHANNEL } from "@/lib/types";
 import Link from "next/link";
@@ -44,6 +44,7 @@ export default function EventsPage() {
     const [channel, setChannel] = useState<string>("all");
     const [search, setSearch] = useState("");
     const [searchInput, setSearchInput] = useState("");
+    const [sortBy, setSortBy] = useState<string>("created_at_desc");
 
     const buildUrl = () => {
         const params = new URLSearchParams();
@@ -52,6 +53,7 @@ export default function EventsPage() {
         if (status !== "all") params.set("status", status);
         if (channel !== "all") params.set("channel", channel);
         if (search) params.set("search", search);
+        params.set("sortBy", sortBy);
         return `/api/notifications?${params.toString()}`;
     };
 
@@ -78,6 +80,11 @@ export default function EventsPage() {
 
     const handleChannelChange = (value: string) => {
         setChannel(value);
+        setPage(1);
+    };
+
+    const handleSortChange = (value: string) => {
+        setSortBy(value);
         setPage(1);
     };
 
@@ -122,6 +129,19 @@ export default function EventsPage() {
                             <SelectItem value="all">All Channels</SelectItem>
                             <SelectItem value="email">Email</SelectItem>
                             <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    <Select value={sortBy} onValueChange={handleSortChange}>
+                        <SelectTrigger className="w-[180px]">
+                            <ArrowUpDown className="h-4 w-4 mr-2" />
+                            <SelectValue placeholder="Sort by" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="created_at_desc">Created (Newest)</SelectItem>
+                            <SelectItem value="created_at_asc">Created (Oldest)</SelectItem>
+                            <SelectItem value="updated_at_desc">Updated (Newest)</SelectItem>
+                            <SelectItem value="updated_at_asc">Updated (Oldest)</SelectItem>
                         </SelectContent>
                     </Select>
 

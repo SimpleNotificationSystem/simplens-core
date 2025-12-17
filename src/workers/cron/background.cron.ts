@@ -1,7 +1,9 @@
 import { env } from "@src/config/env.config.js";
-import { OUTBOX_STATUS } from "@src/types/types.js";
+import { OUTBOX_STATUS, TOPICS } from "@src/types/types.js";
 import outbox_model from "@src/database/models/outbox.models.js";
-import { sendOutboxEvents } from "@src/workers/producers/background.producer.js";
+import status_outbox_model from "@src/database/models/status-outbox.models.js";
+import { type status_outbox } from "@src/types/types.js";
+import { sendOutboxEvents, sendStatusOutboxEvents } from "@src/workers/producers/background.producer.js";
 import { cronLogger as logger } from "@src/workers/utils/logger.js";
 import type { OutboxDocument } from "@src/workers/utils/validation.js";
 
@@ -9,16 +11,20 @@ import type { OutboxDocument } from "@src/workers/utils/validation.js";
 interface CronState {
     pollIntervalId: NodeJS.Timeout | null;
     cleanupIntervalId: NodeJS.Timeout | null;
+    statusPollIntervalId: NodeJS.Timeout | null;
     isPolling: boolean;
     isCleaningUp: boolean;
+    isPollingStatus: boolean;
     shouldStop: boolean;
 }
 
 const state: CronState = {
     pollIntervalId: null,
     cleanupIntervalId: null,
+    statusPollIntervalId: null,
     isPolling: false,
     isCleaningUp: false,
+    isPollingStatus: false,
     shouldStop: false
 };
 
@@ -41,7 +47,7 @@ const claimOutboxEntries = async (): Promise<OutboxDocument[]> => {
                     // Unclaimed pending entries
                     { status: OUTBOX_STATUS.pending },
                     // Stale entries from crashed workers (claimed but not processed in time)
-                    { 
+                    {
                         status: OUTBOX_STATUS.processing,
                         claimed_at: { $lt: staleThreshold }
                     }
@@ -122,8 +128,68 @@ const cleanupPublishedEvents = async (): Promise<void> => {
  * Wait for ongoing operations to complete
  */
 const waitForOperationsToComplete = async (): Promise<void> => {
-    while (state.isPolling || state.isCleaningUp) {
+    while (state.isPolling || state.isCleaningUp || state.isPollingStatus) {
         await new Promise(resolve => setTimeout(resolve, 100));
+    }
+};
+
+/**
+ * Atomically claim a batch of pending status outbox entries for this worker.
+ */
+const claimStatusOutboxEntries = async (): Promise<status_outbox[]> => {
+    const claimedEntries: status_outbox[] = [];
+    const now = new Date();
+    const staleThreshold = new Date(now.getTime() - env.OUTBOX_CLAIM_TIMEOUT_MS);
+
+    for (let i = 0; i < env.OUTBOX_BATCH_SIZE; i++) {
+        const entry = await status_outbox_model.findOneAndUpdate(
+            {
+                $or: [
+                    { processed: false, claimed_by: null },
+                    { processed: false, claimed_at: { $lt: staleThreshold } }
+                ]
+            },
+            {
+                $set: {
+                    claimed_by: env.WORKER_ID,
+                    claimed_at: now
+                }
+            },
+            {
+                new: true,
+                sort: { created_at: 1 }
+            }
+        );
+
+        if (!entry) break;
+        claimedEntries.push(entry);
+    }
+
+    return claimedEntries;
+};
+
+/**
+ * Poll and process status outbox entries
+ */
+const pollStatusOutbox = async (): Promise<void> => {
+    if (state.isPollingStatus || state.shouldStop) return;
+
+    state.isPollingStatus = true;
+
+    try {
+        const claimedEntries = await claimStatusOutboxEntries();
+        if (claimedEntries.length === 0) {
+            return;
+        }
+
+        logger.info(`Claimed ${claimedEntries.length} status outbox entries (worker: ${env.WORKER_ID})`);
+
+        const result = await sendStatusOutboxEvents(claimedEntries);
+        logger.info(`Status outbox: ${result.successCount} success, ${result.failedCount} failed`);
+    } catch (err) {
+        logger.error("Error polling status outbox:", err);
+    } finally {
+        state.isPollingStatus = false;
     }
 };
 
@@ -131,7 +197,7 @@ const waitForOperationsToComplete = async (): Promise<void> => {
  * Start the cron jobs for polling and cleanup
  */
 export const startCronJobs = (): void => {
-    if (state.pollIntervalId || state.cleanupIntervalId) {
+    if (state.pollIntervalId || state.cleanupIntervalId || state.statusPollIntervalId) {
         logger.info("Cron jobs already running");
         return;
     }
@@ -142,6 +208,10 @@ export const startCronJobs = (): void => {
     logger.info(`Starting outbox poll loop (every ${env.OUTBOX_POLL_INTERVAL_MS}ms)`);
     state.pollIntervalId = setInterval(pollOutbox, env.OUTBOX_POLL_INTERVAL_MS);
     pollOutbox(); // Run immediately
+
+    // Start status outbox polling loop
+    logger.info(`Starting status outbox poll loop (every ${env.OUTBOX_POLL_INTERVAL_MS}ms)`);
+    state.statusPollIntervalId = setInterval(pollStatusOutbox, env.OUTBOX_POLL_INTERVAL_MS);
 
     // Start cleanup loop
     logger.info(`Starting cleanup loop (every ${env.OUTBOX_CLEANUP_INTERVAL_MS}ms)`);
@@ -155,12 +225,17 @@ export const startCronJobs = (): void => {
  */
 export const stopCronJobs = async (): Promise<void> => {
     logger.info("Stopping cron jobs...");
-    
+
     state.shouldStop = true;
 
     if (state.pollIntervalId) {
         clearInterval(state.pollIntervalId);
         state.pollIntervalId = null;
+    }
+
+    if (state.statusPollIntervalId) {
+        clearInterval(state.statusPollIntervalId);
+        state.statusPollIntervalId = null;
     }
 
     if (state.cleanupIntervalId) {
@@ -176,5 +251,5 @@ export const stopCronJobs = async (): Promise<void> => {
  * Check if cron jobs are running
  */
 export const isCronRunning = (): boolean => {
-    return state.pollIntervalId !== null || state.cleanupIntervalId !== null;
+    return state.pollIntervalId !== null || state.cleanupIntervalId !== null || state.statusPollIntervalId !== null;
 };

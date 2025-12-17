@@ -1,9 +1,11 @@
 import { Producer, Partitioners } from "kafkajs";
 import mongoose from "mongoose";
 import { kafka } from "@src/config/kafka.config.js";
-import { OUTBOX_STATUS, NOTIFICATION_STATUS, OUTBOX_TOPICS } from "@src/types/types.js";
+import { OUTBOX_STATUS, NOTIFICATION_STATUS, OUTBOX_TOPICS, TOPICS, NOTIFICATION_STATUS_SF, type notification_status_topic } from "@src/types/types.js";
 import outbox_model from "@src/database/models/outbox.models.js";
 import notification_model from "@src/database/models/notification.models.js";
+import status_outbox_model from "@src/database/models/status-outbox.models.js";
+import { type status_outbox } from "@src/types/types.js";
 import { producerLogger as logger } from "@src/workers/utils/logger.js";
 import { validateAndGroupByTopic, type OutboxDocument, type ValidatedOutboxEntry } from "@src/workers/utils/validation.js";
 import type { SendResult } from "@src/workers/utils/types.js";
@@ -141,6 +143,75 @@ export const sendOutboxEvents = async (outboxEntries: OutboxDocument[]): Promise
             successCount += result.count;
         } else {
             failedCount += result.count;
+        }
+    }
+
+    return { successCount, failedCount };
+};
+
+/**
+ * Send status outbox events to notification_status topic
+ * Used by recovery service to publish status updates atomically
+ */
+export const sendStatusOutboxEvents = async (statusEntries: status_outbox[]): Promise<SendResult> => {
+    if (!producer) {
+        throw new Error("Producer not initialized");
+    }
+
+    if (statusEntries.length === 0) {
+        return { successCount: 0, failedCount: 0 };
+    }
+
+    let successCount = 0;
+    let failedCount = 0;
+
+    for (const entry of statusEntries) {
+        try {
+            // Fetch notification to build full status payload
+            const notification = await notification_model.findById(entry.notification_id);
+
+            if (!notification) {
+                logger.warn(`Notification ${entry.notification_id} not found for status outbox entry`);
+                failedCount++;
+                continue;
+            }
+
+            const statusPayload: notification_status_topic = {
+                notification_id: notification._id,
+                request_id: notification.request_id,
+                client_id: notification.client_id,
+                channel: notification.channel,
+                status: entry.status as NOTIFICATION_STATUS_SF,
+                message: entry.status === 'delivered'
+                    ? 'Recovered by recovery service - ghost delivery'
+                    : 'Failed after recovery check',
+                retry_count: notification.retry_count,
+                webhook_url: notification.webhook_url,
+                created_at: new Date()
+            };
+
+            // Publish to notification_status topic
+            await producer.send({
+                topic: TOPICS.notification_status,
+                messages: [{
+                    key: notification._id.toString(),
+                    value: JSON.stringify(statusPayload)
+                }],
+                acks: -1,
+                timeout: 30000
+            });
+
+            // Mark as processed
+            await status_outbox_model.updateOne(
+                { _id: entry._id },
+                { processed: true, updated_at: new Date() }
+            );
+
+            logger.info(`Published status update for notification ${notification._id}: ${entry.status}`);
+            successCount++;
+        } catch (err) {
+            logger.error(`Failed to publish status for entry ${entry._id}:`, err);
+            failedCount++;
         }
     }
 

@@ -304,6 +304,42 @@ services:
       - ns-network
     restart: unless-stopped
 
+  # Recovery Service - Detects stuck notifications and creates alerts
+  recovery:
+    image: simplens:latest
+    deploy:
+      replicas: 1
+    container_name: ns-recovery
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      BROKERS: kafka:9093
+      # Recovery Configuration
+      RECOVERY_POLL_INTERVAL_MS: ${RECOVERY_POLL_INTERVAL_MS:-60000}
+      PROCESSING_STUCK_THRESHOLD_MS: ${PROCESSING_STUCK_THRESHOLD_MS:-300000}
+      PENDING_STUCK_THRESHOLD_MS: ${PENDING_STUCK_THRESHOLD_MS:-300000}
+      RECOVERY_BATCH_SIZE: ${RECOVERY_BATCH_SIZE:-50}
+      MAX_RETRY_COUNT: ${MAX_RETRY_COUNT:-5}
+      # Logging
+      LOKI_URL: http://loki:3100
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    command: [ "node", "dist/workers/recovery/recovery.service.js" ]
+    depends_on:
+      mongo:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    networks:
+      - ns-network
+    restart: unless-stopped
+
   # Admin Dashboard - Next.js web app for monitoring notifications
   dashboard:
     build:

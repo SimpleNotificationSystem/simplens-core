@@ -7,6 +7,7 @@ import {
     DELAYED_TOPICS,
     NOTIFICATION_STATUS_SF,
     OUTBOX_TOPICS,
+    ALERT_TYPE,
 } from "./types.js";
 import type { UUID } from "crypto";
 import { validate, version } from 'uuid';
@@ -118,6 +119,30 @@ export const outboxSchema = z.object({
     payload: z.union([emailNotificationSchema, whatsappNotificationSchema, delayedNotificationTopicSchema]),
     status: z.enum(OUTBOX_STATUS),
     // Worker synchronization fields
+    claimed_by: z.string().nullable().optional(),
+    claimed_at: z.coerce.date().nullable().optional(),
+    created_at: z.coerce.date().optional(),
+    updated_at: z.coerce.date().optional(),
+});
+
+export const alertSchema = z.object({
+    notification_id: objectIdSchema,
+    alert_type: z.enum(ALERT_TYPE),
+    reason: z.string(),
+    redis_status: z.string().nullable().optional(),
+    db_status: z.enum(NOTIFICATION_STATUS),
+    retry_count: z.number().int().min(0),
+    resolved: z.boolean().default(false),
+    resolved_at: z.coerce.date().nullable().optional(),
+    created_at: z.coerce.date().optional(),
+    updated_at: z.coerce.date().optional(),
+});
+
+export const statusOutboxSchema = z.object({
+    _id: objectIdSchema,
+    notification_id: objectIdSchema,
+    status: z.enum(NOTIFICATION_STATUS_SF),
+    processed: z.boolean().default(false),
     claimed_by: z.string().nullable().optional(),
     claimed_at: z.coerce.date().nullable().optional(),
     created_at: z.coerce.date().optional(),

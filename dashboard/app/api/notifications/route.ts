@@ -58,9 +58,17 @@ export async function GET(request: NextRequest) {
 
         const skip = (page - 1) * limit;
 
+        // Parse sort parameter
+        const sortBy = searchParams.get('sortBy') || 'created_at_desc';
+        const [sortField, sortOrder] = sortBy.split('_').length === 3
+            ? [sortBy.substring(0, sortBy.lastIndexOf('_')), sortBy.substring(sortBy.lastIndexOf('_') + 1)]
+            : ['created_at', 'desc'];
+        const sortDirection = sortOrder === 'asc' ? 1 : -1;
+        const sortQuery = { [sortField]: sortDirection };
+
         const [notifications, total] = await Promise.all([
             NotificationModel.find(filter)
-                .sort({ created_at: -1 })
+                .sort(sortQuery as Record<string, 1 | -1>)
                 .skip(skip)
                 .limit(limit)
                 .lean(),

@@ -3,10 +3,12 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import useSWR from "swr";
 import {
     LayoutDashboard,
     Bell,
     AlertTriangle,
+    ShieldAlert,
     BarChart3,
     Settings,
     Send,
@@ -25,12 +27,23 @@ import {
     SidebarProvider,
     SidebarInset,
     SidebarTrigger,
+    SidebarMenuBadge,
 } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarThemeToggle } from "@/components/theme-toggle";
 import { LogoutButton } from "@/components/logout-button";
+import type { DashboardStats } from "@/lib/types";
 
-const navItems = [
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+interface NavItem {
+    title: string;
+    href: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badgeKey?: "failed" | "alerts";
+}
+
+const navItems: NavItem[] = [
     {
         title: "Dashboard",
         href: "/dashboard",
@@ -50,6 +63,13 @@ const navItems = [
         title: "Failed",
         href: "/failed",
         icon: AlertTriangle,
+        badgeKey: "failed",
+    },
+    {
+        title: "Alerts",
+        href: "/alerts",
+        icon: ShieldAlert,
+        badgeKey: "alerts",
     },
     {
         title: "Analytics",
@@ -69,6 +89,24 @@ const settingsItems = [
 function AppSidebar() {
     const pathname = usePathname();
 
+    // Fetch counts for badges
+    const { data: stats } = useSWR<DashboardStats>(
+        "/api/dashboard/stats",
+        fetcher,
+        { refreshInterval: 30000 }
+    );
+
+    const { data: alertStats } = useSWR<{ count: number }>(
+        "/api/alerts",
+        fetcher,
+        { refreshInterval: 30000 }
+    );
+
+    const badgeCounts = {
+        failed: stats?.failed ?? 0,
+        alerts: alertStats?.count ?? 0,
+    };
+
     return (
         <Sidebar>
             <SidebarHeader>
@@ -86,16 +124,30 @@ function AppSidebar() {
                 <SidebarGroup>
                     <SidebarGroupContent>
                         <SidebarMenu>
-                            {navItems.map((item) => (
-                                <SidebarMenuItem key={item.href}>
-                                    <SidebarMenuButton asChild isActive={pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))}>
-                                        <Link href={item.href}>
-                                            <item.icon className="h-4 w-4" />
-                                            <span>{item.title}</span>
-                                        </Link>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            ))}
+                            {navItems.map((item) => {
+                                const count = item.badgeKey ? badgeCounts[item.badgeKey] : 0;
+                                return (
+                                    <SidebarMenuItem key={item.href}>
+                                        <SidebarMenuButton asChild isActive={pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))}>
+                                            <Link href={item.href}>
+                                                <item.icon className="h-4 w-4" />
+                                                <span>{item.title}</span>
+                                            </Link>
+                                        </SidebarMenuButton>
+                                        {item.badgeKey && count > 0 && (
+                                            <SidebarMenuBadge
+                                                className={
+                                                    item.badgeKey === "failed"
+                                                        ? "bg-red-500 text-white"
+                                                        : "bg-yellow-500 text-black"
+                                                }
+                                            >
+                                                {count > 99 ? "99+" : count}
+                                            </SidebarMenuBadge>
+                                        )}
+                                    </SidebarMenuItem>
+                                );
+                            })}
                         </SidebarMenu>
                     </SidebarGroupContent>
                 </SidebarGroup>
@@ -138,14 +190,14 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
                 <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
                     <SidebarTrigger className="-ml-1" />
                     <Separator orientation="vertical" className="mr-2 h-4" />
-                    <div className="flex flex-col">
+                    <div>
                         <h1 className="text-lg font-semibold">{title}</h1>
                         {description && (
                             <p className="text-sm text-muted-foreground">{description}</p>
                         )}
                     </div>
                 </header>
-                <main className="flex-1 overflow-auto p-6">
+                <main className="flex-1 overflow-y-auto p-4">
                     {children}
                 </main>
             </SidebarInset>

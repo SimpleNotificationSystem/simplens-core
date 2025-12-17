@@ -24,6 +24,8 @@
     "whatsapp-processor:dev": "tsx watch src/processors/whatsapp/whatsapp.processor.ts",
     "delayed-processor": "node dist/processors/delayed/delayed.processor.js",
     "delayed-processor:dev": "tsx watch src/processors/delayed/delayed.processor.ts",
+    "recovery": "node dist/workers/recovery/recovery.service.js",
+    "recovery:dev": "tsx watch src/workers/recovery/recovery.service.ts",
     "prepare": "husky"
   },
   "repository": {

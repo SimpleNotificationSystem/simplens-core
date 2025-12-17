@@ -1,6 +1,7 @@
 "use client";
 
 import useSWR from "swr";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/events/status-badge";
@@ -59,14 +60,15 @@ export function RecentActivity() {
                 <CardTitle>Recent Activity</CardTitle>
             </CardHeader>
             <CardContent>
-                <div className="space-y-4">
+                <div className="flex flex-col gap-1">
                     {notifications.length === 0 ? (
                         <p className="text-sm text-muted-foreground">No notifications yet</p>
                     ) : (
                         notifications.map((notification) => (
-                            <div
+                            <Link
                                 key={notification._id}
-                                className="flex items-center justify-between gap-4 border-b pb-4 last:border-0 last:pb-0"
+                                href={`/events/${notification._id}`}
+                                className="flex items-center justify-between gap-4 hover:bg-muted/50 rounded-md p-2 transition-colors cursor-pointer"
                             >
                                 <div className="flex flex-col gap-1">
                                     <div className="flex items-center gap-2">
@@ -80,7 +82,7 @@ export function RecentActivity() {
                                     </span>
                                 </div>
                                 <StatusBadge status={notification.status} />
-                            </div>
+                            </Link>
                         ))
                     )}
                 </div>
