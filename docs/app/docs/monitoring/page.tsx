@@ -376,7 +376,51 @@ docker inspect --format='{{json .State.Health}}' ns-api | jq`}
                     <li>Check if the background worker is running</li>
                     <li>Verify MongoDB connection</li>
                     <li>Check outbox polling interval settings</li>
+                    <li>Check the <strong>Alerts</strong> page in the Admin Dashboard for <code className="px-1.5 py-0.5 bg-muted rounded">orphaned_pending</code> alerts</li>
                 </ul>
+
+                <h3 className="text-lg font-semibold mb-3 mt-4">Recovery Alerts</h3>
+                <p className="text-muted-foreground mb-4">
+                    The Recovery Service detects stuck notifications and creates alerts for manual inspection.
+                    Check the Admin Dashboard <strong>Alerts</strong> page to manage these:
+                </p>
+                <DocsTable
+                    headers={["Alert Type", "Meaning", "Action"]}
+                    rows={[
+                        [
+                            <code key="gd" className="text-xs">ghost_delivery</code>,
+                            "Notification delivered but DB not updated",
+                            "Usually auto-recovered; check if status updated"
+                        ],
+                        [
+                            <code key="sp" className="text-xs">stuck_processing</code>,
+                            "Notification stuck in processing state",
+                            "Retry via dashboard or investigate processor logs"
+                        ],
+                        [
+                            <code key="op" className="text-xs">orphaned_pending</code>,
+                            "Notification never picked up from outbox",
+                            "Check background worker health, retry via dashboard"
+                        ],
+                    ]}
+                />
+
+                <h4 className="font-semibold mt-4 mb-2">LogQL Query for Recovery Service</h4>
+                <CodeBlock language="bash">
+                    {`# View recovery service activity
+{service="recovery"} |= "stuck" OR |= "ghost" OR |= "orphaned"
+
+# View created alerts
+{service="recovery"} |= "Created alert"
+
+# View auto-recovered notifications
+{service="recovery"} |= "Ghost delivery detected"`}
+                </CodeBlock>
+
+                <DocsCallout type="tip" title="Proactive Monitoring">
+                    Set up a Grafana alert rule to notify you when the count of unresolved alerts exceeds a threshold.
+                    This helps catch systemic issues before they impact delivery rates.
+                </DocsCallout>
             </section>
             <DocsNavGrid
                 items={[

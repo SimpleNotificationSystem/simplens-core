@@ -26,6 +26,8 @@ export default function ConfigurationPage() {
                     { id: "rate-limiting", label: "Rate Limiting" },
                     { id: "retry", label: "Retry Configuration" },
                     { id: "delayed", label: "Delayed Processor" },
+                    { id: "recovery", label: "Recovery Service" },
+                    { id: "cleanup", label: "Cleanup Configuration" },
                     { id: "logging", label: "Logging" },
                     { id: "dashboard", label: "Admin Dashboard" },
                     { id: "example", label: "Example Configuration" },
@@ -308,6 +310,72 @@ export default function ConfigurationPage() {
                         ],
                     ]}
                 />
+            </section>
+
+            {/* Recovery Service */}
+            <section id="recovery">
+                <h2 className="text-2xl font-bold mb-4">Recovery Service</h2>
+                <p className="text-muted-foreground mb-4">
+                    The Recovery Service detects stuck notifications and creates alerts for manual inspection.
+                    It runs as a separate cron job that cross-references MongoDB and Redis states.
+                </p>
+                <DocsTable
+                    headers={["Variable", "Description", "Default"]}
+                    rows={[
+                        [
+                            <code key="rpi" className="text-xs">RECOVERY_POLL_INTERVAL_MS</code>,
+                            "How often recovery runs",
+                            <code key="rpi-val" className="text-xs">60000</code>
+                        ],
+                        [
+                            <code key="pst" className="text-xs">PROCESSING_STUCK_THRESHOLD_MS</code>,
+                            "Time before processing status is considered stuck",
+                            <code key="pst-val" className="text-xs">300000</code>
+                        ],
+                        [
+                            <code key="pdt" className="text-xs">PENDING_STUCK_THRESHOLD_MS</code>,
+                            "Time before pending status is considered orphaned",
+                            <code key="pdt-val" className="text-xs">300000</code>
+                        ],
+                        [
+                            <code key="rbs" className="text-xs">RECOVERY_BATCH_SIZE</code>,
+                            "Maximum stuck notifications to process per run",
+                            <code key="rbs-val" className="text-xs">50</code>
+                        ],
+                    ]}
+                />
+                <DocsCallout type="tip" title="Threshold Configuration">
+                    Set thresholds higher than your expected maximum processing time to avoid false positives.
+                    If emails typically take up to 60 seconds with retries, use at least 300 seconds (5 minutes).
+                </DocsCallout>
+            </section>
+
+            {/* Cleanup Configuration */}
+            <section id="cleanup">
+                <h2 className="text-2xl font-bold mb-4">Cleanup Configuration</h2>
+                <p className="text-muted-foreground mb-4">
+                    Configure retention periods for resolved alerts and processed status outbox entries.
+                    Cleanup runs as part of the recovery cron job.
+                </p>
+                <DocsTable
+                    headers={["Variable", "Description", "Default"]}
+                    rows={[
+                        [
+                            <code key="crar" className="text-xs">CLEANUP_RESOLVED_ALERTS_RETENTION_MS</code>,
+                            "How long to keep resolved alerts before deletion",
+                            <code key="crar-val" className="text-xs">86400000</code>
+                        ],
+                        [
+                            <code key="cpso" className="text-xs">CLEANUP_PROCESSED_STATUS_OUTBOX_RETENTION_MS</code>,
+                            "How long to keep processed status outbox entries",
+                            <code key="cpso-val" className="text-xs">86400000</code>
+                        ],
+                    ]}
+                />
+                <DocsCallout type="note" title="Default 24-Hour Retention">
+                    Both default to 86400000ms (24 hours). This provides enough time to investigate
+                    issues while preventing unbounded growth of the collections.
+                </DocsCallout>
             </section>
 
             {/* Logging */}

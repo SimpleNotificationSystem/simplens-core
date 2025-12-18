@@ -30,6 +30,7 @@ export default function ArchitecturePage() {
                     { id: "dlq", label: "Dead Letter Handling" },
                     { id: "status-webhooks", label: "Status Updates & Webhooks" },
                     { id: "kafka-topics", label: "Kafka Topics" },
+                    { id: "recovery-service", label: "Recovery Service" },
                     { id: "graceful-shutdown", label: "Graceful Shutdown" },
                 ]}
             />
@@ -139,6 +140,41 @@ export default function ArchitecturePage() {
                     ]}
                 />
 
+                <h3 className="text-lg font-semibold mb-3 mt-6">Status Outbox Collection</h3>
+                <p className="text-muted-foreground mb-4">
+                    A minimal transactional outbox for publishing notification status updates to Kafka.
+                    Used by the Recovery Service to ensure atomic status updates when recovering stuck notifications.
+                </p>
+                <DocsTable
+                    headers={["Field", "Type", "Description"]}
+                    rows={[
+                        [<code key="so-nid" className="text-xs">notification_id</code>, "ObjectId (ref)", "Reference to the notification document"],
+                        [<code key="so-status" className="text-xs">status</code>, "Enum", "Target status: delivered or failed"],
+                        [<code key="so-processed" className="text-xs">processed</code>, "Boolean", "Whether the entry has been published to Kafka"],
+                        [<code key="so-claimed" className="text-xs">claimed_by</code>, "String", "Worker ID that claimed this entry"],
+                        [<code key="so-claimat" className="text-xs">claimed_at</code>, "Date", "When the worker claimed it"],
+                    ]}
+                />
+
+                <h3 className="text-lg font-semibold mb-3 mt-6">Alerts Collection</h3>
+                <p className="text-muted-foreground mb-4">
+                    Stores alerts for notifications requiring manual inspection. Created by the Recovery Service
+                    when it detects stuck or orphaned notifications that cannot be automatically resolved.
+                </p>
+                <DocsTable
+                    headers={["Field", "Type", "Description"]}
+                    rows={[
+                        [<code key="al-nid" className="text-xs">notification_id</code>, "ObjectId (ref)", "Reference to the notification document"],
+                        [<code key="al-type" className="text-xs">alert_type</code>, "Enum", "ghost_delivery, stuck_processing, or orphaned_pending"],
+                        [<code key="al-reason" className="text-xs">reason</code>, "String", "Human-readable explanation of the alert"],
+                        [<code key="al-redis" className="text-xs">redis_status</code>, "String", "Status from Redis at detection time (if available)"],
+                        [<code key="al-db" className="text-xs">db_status</code>, "Enum", "Status from MongoDB at detection time"],
+                        [<code key="al-retry" className="text-xs">retry_count</code>, "Number", "Notification retry count at detection time"],
+                        [<code key="al-resolved" className="text-xs">resolved</code>, "Boolean", "Whether the alert has been resolved"],
+                        [<code key="al-resolvedat" className="text-xs">resolved_at</code>, "Date", "When the alert was resolved (if applicable)"],
+                    ]}
+                />
+
                 <h3 className="text-lg font-semibold mb-3 mt-6">Key Indexes</h3>
                 <DocsTable
                     headers={["Collection", "Index", "Purpose"]}
@@ -167,6 +203,21 @@ export default function ArchitecturePage() {
                             "outbox",
                             <code key="idx5" className="text-xs">{"{ status: 1, claimed_at: 1 }"}</code>,
                             "Find stale entries for crash recovery"
+                        ],
+                        [
+                            "status_outbox",
+                            <code key="idx6" className="text-xs">{"{ processed: 1, created_at: 1 }"}</code>,
+                            "Efficient polling for unprocessed status entries"
+                        ],
+                        [
+                            "alerts",
+                            <code key="idx7" className="text-xs">{"{ notification_id: 1, alert_type: 1 }"}</code>,
+                            "Unique constraint: one alert per notification per type"
+                        ],
+                        [
+                            "alerts",
+                            <code key="idx8" className="text-xs">{"{ resolved: 1, created_at: -1 }"}</code>,
+                            "Query unresolved alerts for dashboard"
                         ],
                     ]}
                 />
@@ -575,6 +626,242 @@ export default function ArchitecturePage() {
                         [<code key="sp" className="text-xs">NOTIFICATION_STATUS_PARTITION</code>, "Number of partitions for notification_status topic"],
                     ]}
                 />
+            </section>
+
+            {/* Recovery Service */}
+            <section id="recovery-service">
+                <h2 className="text-2xl font-bold mb-4">Recovery Service</h2>
+                <p className="text-muted-foreground mb-6">
+                    The Recovery Service is a critical component that runs as a separate cron job to detect and recover
+                    stuck notifications. It ensures <strong className="text-foreground">maximum delivery guarantees</strong> by
+                    cross-referencing MongoDB and Redis states to identify inconsistencies and take corrective action.
+                </p>
+
+                {/* Quick Reference */}
+                <div className="p-4 rounded-lg border bg-linear-to-r from-blue-500/5 to-purple-500/5 border-blue-500/20 mb-6">
+                    <h4 className="font-semibold mb-3 text-blue-600 dark:text-blue-400">Quick Reference</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        <div>
+                            <p className="font-medium">Trigger</p>
+                            <p className="text-muted-foreground">Cron job at configurable intervals</p>
+                        </div>
+                        <div>
+                            <p className="font-medium">Data Sources</p>
+                            <p className="text-muted-foreground">MongoDB (notification status) + Redis (idempotency)</p>
+                        </div>
+                        <div>
+                            <p className="font-medium">Outcomes</p>
+                            <p className="text-muted-foreground">Auto-resolution OR Alert creation</p>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 className="text-lg font-semibold mb-3">Why Recovery is Needed</h3>
+                <p className="text-muted-foreground mb-4">
+                    In a distributed system, several failure scenarios can leave notifications in an inconsistent state:
+                </p>
+                <ul className="list-disc list-inside space-y-2 text-muted-foreground mb-6">
+                    <li><strong>Processor crash after delivery:</strong> Email sent successfully, but processor crashes before updating MongoDB status</li>
+                    <li><strong>Network partition:</strong> Kafka message delivered but status update lost</li>
+                    <li><strong>Worker crash during outbox processing:</strong> Notification stuck in processing without being published to Kafka</li>
+                    <li><strong>Orphaned notifications:</strong> API committed to MongoDB but outbox entry was never picked up</li>
+                </ul>
+
+                <h3 className="text-lg font-semibold mb-3">Three Types of Stuck Notifications</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div className="p-4 rounded-lg border bg-yellow-500/5 border-yellow-500/20">
+                        <h4 className="font-semibold mb-2 text-yellow-600 dark:text-yellow-400">Ghost Delivery</h4>
+                        <p className="text-sm text-muted-foreground">
+                            Redis shows <code className="px-1 py-0.5 bg-muted rounded text-xs">delivered</code> but
+                            MongoDB still shows <code className="px-1 py-0.5 bg-muted rounded text-xs">processing</code>.
+                            The notification was successfully delivered but the database wasn&apos;t updated.
+                        </p>
+                    </div>
+                    <div className="p-4 rounded-lg border bg-red-500/5 border-red-500/20">
+                        <h4 className="font-semibold mb-2 text-red-600 dark:text-red-400">Stuck Processing</h4>
+                        <p className="text-sm text-muted-foreground">
+                            MongoDB shows <code className="px-1 py-0.5 bg-muted rounded text-xs">processing</code> for
+                            longer than the threshold. Redis may show <code className="px-1 py-0.5 bg-muted rounded text-xs">processing</code>,
+                            <code className="px-1 py-0.5 bg-muted rounded text-xs">failed</code>, or no record at all.
+                        </p>
+                    </div>
+                    <div className="p-4 rounded-lg border bg-orange-500/5 border-orange-500/20">
+                        <h4 className="font-semibold mb-2 text-orange-600 dark:text-orange-400">Orphaned Pending</h4>
+                        <p className="text-sm text-muted-foreground">
+                            MongoDB shows <code className="px-1 py-0.5 bg-muted rounded text-xs">pending</code> for
+                            too long. The notification was never picked up by the outbox processor.
+                        </p>
+                    </div>
+                </div>
+
+                <h3 className="text-lg font-semibold mb-3">Recovery Detection Flow</h3>
+                <p className="text-muted-foreground mb-4">
+                    The recovery cron runs at configurable intervals and performs these checks:
+                </p>
+                <ol className="list-decimal list-inside space-y-2 text-muted-foreground mb-6">
+                    <li><strong>Find stuck processing:</strong> Query MongoDB for notifications with status <code className="px-1.5 py-0.5 bg-muted rounded">processing</code> and <code className="px-1.5 py-0.5 bg-muted rounded">updated_at</code> older than <code className="px-1.5 py-0.5 bg-muted rounded">PROCESSING_STUCK_THRESHOLD_MS</code></li>
+                    <li><strong>Cross-reference Redis:</strong> For each stuck notification, check its idempotency status in Redis</li>
+                    <li><strong>Determine action:</strong> Based on Redis status, either auto-recover or create an alert</li>
+                    <li><strong>Find orphaned pending:</strong> Query for notifications with status <code className="px-1.5 py-0.5 bg-muted rounded">pending</code> older than <code className="px-1.5 py-0.5 bg-muted rounded">PENDING_STUCK_THRESHOLD_MS</code></li>
+                    <li><strong>Create alerts:</strong> Create alerts for orphaned pending notifications and stuck processing notifications requiring manual intervention</li>
+                </ol>
+
+                <h3 className="text-lg font-semibold mb-3">Auto-Resolution: Ghost Deliveries</h3>
+                <DocsCallout type="tip" title="Auto-Resolved Case">
+                    Ghost deliveries are <strong>automatically resolved</strong> — they do NOT create alerts.
+                    Redis is the source of truth for delivery status.
+                </DocsCallout>
+                <p className="text-muted-foreground mb-4">
+                    When a ghost delivery is detected (Redis says <code className="px-1.5 py-0.5 bg-muted rounded">delivered</code>
+                    but MongoDB shows <code className="px-1.5 py-0.5 bg-muted rounded">processing</code>), the Recovery Service
+                    uses the <strong className="text-foreground">Status Outbox pattern</strong> to ensure atomic recovery:
+                </p>
+                <div className="p-4 rounded-lg border bg-muted/30 mb-6">
+                    <h4 className="font-semibold mb-3">Transactional Recovery Steps</h4>
+                    <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
+                        <li><strong>Start MongoDB transaction</strong> to ensure atomicity</li>
+                        <li><strong>Acquire lock:</strong> Use <code className="px-1.5 py-0.5 bg-muted rounded">findOneAndUpdate</code> to atomically claim the notification and prevent race conditions with other recovery instances</li>
+                        <li><strong>Update notification status:</strong> Set status to <code className="px-1.5 py-0.5 bg-muted rounded">delivered</code> in MongoDB</li>
+                        <li><strong>Insert status outbox entry:</strong> Create a <code className="px-1.5 py-0.5 bg-muted rounded">status_outbox</code> document with <code className="px-1.5 py-0.5 bg-muted rounded">status: delivered</code></li>
+                        <li><strong>Commit transaction:</strong> Both updates succeed or both fail atomically</li>
+                    </ol>
+                </div>
+
+                <DocsCallout type="important" title="Why Use Status Outbox?">
+                    The Status Outbox ensures that status updates are eventually published to the
+                    <code className="mx-1">notification_status</code> Kafka topic, even if the recovery service crashes
+                    after updating MongoDB. The Background Worker polls the status outbox and publishes status events
+                    to Kafka, which then triggers webhook callbacks to clients.
+                </DocsCallout>
+
+                <h3 className="text-lg font-semibold mb-3 mt-6">Status Outbox Lifecycle</h3>
+                <p className="text-muted-foreground mb-4">
+                    The Status Outbox follows the same claim/confirm pattern as the main Outbox:
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div className="p-4 rounded-lg border bg-card">
+                        <h4 className="font-semibold mb-2">1. Create</h4>
+                        <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                            <li>Recovery Service creates entry</li>
+                            <li>Inside MongoDB transaction</li>
+                            <li><code className="px-1 py-0.5 bg-muted rounded text-xs">processed: false</code></li>
+                        </ul>
+                    </div>
+                    <div className="p-4 rounded-lg border bg-card">
+                        <h4 className="font-semibold mb-2">2. Claim</h4>
+                        <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                            <li>Background Worker polls</li>
+                            <li>Atomically claims entry</li>
+                            <li>Sets <code className="px-1 py-0.5 bg-muted rounded text-xs">claimed_by</code></li>
+                        </ul>
+                    </div>
+                    <div className="p-4 rounded-lg border bg-card">
+                        <h4 className="font-semibold mb-2">3. Publish</h4>
+                        <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                            <li>Publish to <code className="px-1 py-0.5 bg-muted rounded text-xs">notification_status</code></li>
+                            <li>Contains notification ID + status</li>
+                            <li>Triggers webhook flow</li>
+                        </ul>
+                    </div>
+                    <div className="p-4 rounded-lg border bg-card">
+                        <h4 className="font-semibold mb-2">4. Confirm</h4>
+                        <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                            <li>Mark <code className="px-1 py-0.5 bg-muted rounded text-xs">processed: true</code></li>
+                            <li>Cleanup after retention</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3 className="text-lg font-semibold mb-3">Recovery Decision Summary</h3>
+                <p className="text-muted-foreground mb-4">
+                    The Recovery Service takes different actions based on the Redis idempotency status:
+                </p>
+
+                {/* Auto-Resolved vs Alert distinction */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div className="p-4 rounded-lg border bg-green-500/5 border-green-500/20">
+                        <h4 className="font-semibold mb-2 text-green-600 dark:text-green-400">✓ Auto-Resolved (via Status Outbox)</h4>
+                        <ul className="text-sm text-muted-foreground space-y-1">
+                            <li>• <strong>Ghost Delivery:</strong> Redis = <code className="px-1 py-0.5 bg-muted rounded text-xs">delivered</code></li>
+                            <li>• <strong>Failed, max retries exceeded:</strong> Redis = <code className="px-1 py-0.5 bg-muted rounded text-xs">failed</code> + retry_count ≥ MAX</li>
+                        </ul>
+                    </div>
+                    <div className="p-4 rounded-lg border bg-red-500/5 border-red-500/20">
+                        <h4 className="font-semibold mb-2 text-red-600 dark:text-red-400">✗ Creates Alert (Manual Intervention)</h4>
+                        <ul className="text-sm text-muted-foreground space-y-1">
+                            <li>• <strong>Stuck Processing:</strong> Redis = <code className="px-1 py-0.5 bg-muted rounded text-xs">failed</code>, <code className="px-1 py-0.5 bg-muted rounded text-xs">processing</code>, or null</li>
+                            <li>• <strong>Orphaned Pending:</strong> Notification stuck in pending state</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h4 className="font-semibold mb-3">Detailed Recovery Actions</h4>
+                <DocsTable
+                    headers={["Scenario", "Redis Status", "Resolution", "Action"]}
+                    rows={[
+                        [
+                            <span key="gd-row" className="font-medium text-green-600 dark:text-green-400">Ghost Delivery</span>,
+                            <code key="gd-redis" className="text-xs">delivered</code>,
+                            <span key="gd-res" className="text-green-600 dark:text-green-400">Auto</span>,
+                            "Update MongoDB to delivered, write to status_outbox"
+                        ],
+                        [
+                            <span key="me-row" className="font-medium text-green-600 dark:text-green-400">Failed (max retries)</span>,
+                            <code key="me-redis" className="text-xs">failed</code>,
+                            <span key="me-res" className="text-green-600 dark:text-green-400">Auto</span>,
+                            "Update MongoDB to failed, write to status_outbox"
+                        ],
+                        [
+                            <span key="fr-row" className="font-medium text-red-600 dark:text-red-400">Failed (retries remaining)</span>,
+                            <code key="fr-redis" className="text-xs">failed</code>,
+                            <span key="fr-res" className="text-red-600 dark:text-red-400">Alert</span>,
+                            "Create STUCK_PROCESSING alert for admin retry"
+                        ],
+                        [
+                            <span key="uk-row" className="font-medium text-red-600 dark:text-red-400">Unknown State</span>,
+                            <span key="uk-redis" className="text-muted-foreground text-xs">processing / null</span>,
+                            <span key="uk-res" className="text-red-600 dark:text-red-400">Alert</span>,
+                            "Create STUCK_PROCESSING alert for inspection"
+                        ],
+                        [
+                            <span key="op-row" className="font-medium text-red-600 dark:text-red-400">Orphaned Pending</span>,
+                            <span key="op-redis" className="text-muted-foreground text-xs">N/A</span>,
+                            <span key="op-res" className="text-red-600 dark:text-red-400">Alert</span>,
+                            "Create ORPHANED_PENDING alert for investigation"
+                        ],
+                    ]}
+                />
+
+                <h3 className="text-lg font-semibold mb-3 mt-6">Managing Alerts via Dashboard</h3>
+                <p className="text-muted-foreground mb-4">
+                    The Admin Dashboard provides an <strong className="text-foreground">Alerts page</strong> for managing
+                    notifications that require manual intervention:
+                </p>
+                <ul className="list-disc list-inside space-y-2 text-muted-foreground mb-6">
+                    <li><strong>View alerts:</strong> See all unresolved alerts with type, reason, and notification details</li>
+                    <li><strong>Filter by type:</strong> Filter by Stuck Processing or Orphaned Pending</li>
+                    <li><strong>Retry notification:</strong> Reset notification to pending and create new outbox entry</li>
+                    <li><strong>Dismiss alert:</strong> Mark alert as resolved without retrying</li>
+                    <li><strong>Bulk operations:</strong> Retry or dismiss multiple alerts at once</li>
+                </ul>
+
+                <h3 className="text-lg font-semibold mb-3">Configuration</h3>
+                <DocsTable
+                    headers={["Variable", "Default", "Description"]}
+                    rows={[
+                        [<code key="rpi" className="text-xs">RECOVERY_POLL_INTERVAL_MS</code>, "60000", "How often recovery runs (1 minute)"],
+                        [<code key="pst" className="text-xs">PROCESSING_STUCK_THRESHOLD_MS</code>, "300000", "Time before processing is stuck (5 min)"],
+                        [<code key="pdt" className="text-xs">PENDING_STUCK_THRESHOLD_MS</code>, "300000", "Time before pending is orphaned (5 min)"],
+                        [<code key="rbs" className="text-xs">RECOVERY_BATCH_SIZE</code>, "50", "Max notifications per recovery run"],
+                        [<code key="crar" className="text-xs">CLEANUP_RESOLVED_ALERTS_RETENTION_MS</code>, "86400000", "Keep resolved alerts for 24 hours"],
+                        [<code key="cpso" className="text-xs">CLEANUP_PROCESSED_STATUS_OUTBOX_RETENTION_MS</code>, "86400000", "Keep processed status entries for 24 hours"],
+                    ]}
+                />
+
+                <DocsCallout type="tip" title="Tuning Recovery Thresholds">
+                    Set <code>PROCESSING_STUCK_THRESHOLD_MS</code> higher than your expected maximum processing time.
+                    If emails typically take 30 seconds with retries, set threshold to at least 300 seconds (5 min).
+                </DocsCallout>
             </section>
 
             {/* Graceful Shutdown */}

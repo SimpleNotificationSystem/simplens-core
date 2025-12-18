@@ -354,6 +354,7 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:-change-this-in-production}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      AUTH_TRUST_HOST: ${AUTH_TRUST_HOST:-true}
       # For sending notifications
       API_BASE_URL: http://api:3000
       NS_API_KEY: ${NS_API_KEY:-dev-api-key-change-in-production}

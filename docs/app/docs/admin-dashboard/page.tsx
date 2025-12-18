@@ -12,6 +12,7 @@ import {
     BarChart3,
     Send,
     Lock,
+    ShieldAlert,
     LucideIcon
 } from "lucide-react";
 
@@ -109,6 +110,11 @@ export default function AdminDashboardPage() {
                         title="Authentication"
                         description="Secure login with username/password authentication. Session management with NextAuth.js."
                     />
+                    <FeatureCard
+                        icon={ShieldAlert}
+                        title="Alerts"
+                        description="View and manage stuck notifications requiring manual intervention. Retry or dismiss alerts created by the Recovery Service."
+                    />
                 </div>
             </section>
 
@@ -190,6 +196,24 @@ export default function AdminDashboardPage() {
                     <li><strong>Scheduled Delivery</strong> — Set a future delivery time</li>
                     <li><strong>Real-time Feedback</strong> — See the webhook response in the dashboard</li>
                 </ul>
+
+                <h3 className="text-xl font-semibold mb-3">Alerts</h3>
+                <p className="text-muted-foreground mb-4">
+                    The Alerts page displays notifications that require manual inspection, created by the Recovery Service:
+                </p>
+                <ul className="list-disc list-inside space-y-2 text-muted-foreground mb-6">
+                    <li><strong>Alert Types</strong> — View Ghost Delivery, Stuck Processing, and Orphaned Pending alerts</li>
+                    <li><strong>Filter by Type</strong> — Quickly filter to see specific alert categories</li>
+                    <li><strong>Alert Details</strong> — See notification ID, reason, DB status, Redis status, and retry count</li>
+                    <li><strong>Retry Notification</strong> — Reset notification to pending and create new outbox entry</li>
+                    <li><strong>Dismiss Alert</strong> — Mark alert as resolved without retrying</li>
+                    <li><strong>Bulk Operations</strong> — Retry or dismiss multiple alerts at once</li>
+                </ul>
+
+                <DocsCallout type="note" title="Recovery Service Integration">
+                    Alerts are automatically created by the Recovery Service when it detects stuck notifications.
+                    Check the <strong>Architecture</strong> page for details on how recovery detection works.
+                </DocsCallout>
             </section>
 
             {/* Configuration */}
