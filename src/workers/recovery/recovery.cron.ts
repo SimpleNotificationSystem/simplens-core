@@ -232,6 +232,38 @@ const detectOrphanedPending = async (): Promise<void> => {
 };
 
 /**
+ * Cleanup resolved alerts older than retention period
+ */
+const cleanupResolvedAlerts = async (): Promise<void> => {
+    const threshold = new Date(Date.now() - env.CLEANUP_RESOLVED_ALERTS_RETENTION_MS);
+
+    const result = await alert_model.deleteMany({
+        resolved: true,
+        resolved_at: { $lt: threshold }
+    });
+
+    if (result.deletedCount > 0) {
+        logger.info(`🧹 Cleaned up ${result.deletedCount} resolved alerts`);
+    }
+};
+
+/**
+ * Cleanup processed status outbox entries older than retention period
+ */
+const cleanupProcessedStatusOutbox = async (): Promise<void> => {
+    const threshold = new Date(Date.now() - env.CLEANUP_PROCESSED_STATUS_OUTBOX_RETENTION_MS);
+
+    const result = await status_outbox_model.deleteMany({
+        processed: true,
+        updated_at: { $lt: threshold }
+    });
+
+    if (result.deletedCount > 0) {
+        logger.info(`🧹 Cleaned up ${result.deletedCount} processed status outbox entries`);
+    }
+};
+
+/**
  * Main recovery job
  */
 const runRecovery = async (): Promise<void> => {
@@ -262,6 +294,10 @@ const runRecovery = async (): Promise<void> => {
 
         await recoverStuckProcessing();
         await detectOrphanedPending();
+
+        // Cleanup old resolved alerts and processed status outbox entries
+        await cleanupResolvedAlerts();
+        await cleanupProcessedStatusOutbox();
 
     } catch (err) {
         state.consecutiveFailures++;

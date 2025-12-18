@@ -65,6 +65,10 @@ export const env = {
     PENDING_STUCK_THRESHOLD_MS: <number>parseInt(process.env.PENDING_STUCK_THRESHOLD_MS || "300000"),
     RECOVERY_BATCH_SIZE: <number>parseInt(process.env.RECOVERY_BATCH_SIZE || "50"),
 
+    // Cleanup Configuration (run as part of recovery cron)
+    CLEANUP_RESOLVED_ALERTS_RETENTION_MS: <number>parseInt(process.env.CLEANUP_RESOLVED_ALERTS_RETENTION_MS || "86400000"), // 24 hours
+    CLEANUP_PROCESSED_STATUS_OUTBOX_RETENTION_MS: <number>parseInt(process.env.CLEANUP_PROCESSED_STATUS_OUTBOX_RETENTION_MS || "86400000"), // 24 hours
+
     // Logging - Grafana Loki
     LOKI_URL: <string>process.env.LOKI_URL || "",
     LOG_LEVEL: <string>process.env.LOG_LEVEL || "info",

@@ -314,13 +314,15 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
       REDIS_URL: redis://redis:6379
-      BROKERS: kafka:9093
       # Recovery Configuration
       RECOVERY_POLL_INTERVAL_MS: ${RECOVERY_POLL_INTERVAL_MS:-60000}
       PROCESSING_STUCK_THRESHOLD_MS: ${PROCESSING_STUCK_THRESHOLD_MS:-300000}
       PENDING_STUCK_THRESHOLD_MS: ${PENDING_STUCK_THRESHOLD_MS:-300000}
       RECOVERY_BATCH_SIZE: ${RECOVERY_BATCH_SIZE:-50}
       MAX_RETRY_COUNT: ${MAX_RETRY_COUNT:-5}
+      # Cleanup Configuration
+      CLEANUP_RESOLVED_ALERTS_RETENTION_MS: ${CLEANUP_RESOLVED_ALERTS_RETENTION_MS:-86400000}
+      CLEANUP_PROCESSED_STATUS_OUTBOX_RETENTION_MS: ${CLEANUP_PROCESSED_STATUS_OUTBOX_RETENTION_MS:-86400000}
       # Logging
       LOKI_URL: http://loki:3100
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -328,8 +330,6 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
-      kafka:
-        condition: service_started
       redis:
         condition: service_healthy
       loki:
