@@ -352,7 +352,6 @@ services:
       NODE_ENV: production
       MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
       AUTH_SECRET: ${AUTH_SECRET:-change-this-in-production}
-      AUTH_TRUST_HOST: "true"
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
       # For sending notifications
