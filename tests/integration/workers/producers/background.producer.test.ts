@@ -58,6 +58,13 @@ vi.mock('@src/database/models/notification.models.js', () => ({
     },
 }));
 
+vi.mock('@src/database/models/status-outbox.models.js', () => ({
+    default: {
+        updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+        findById: vi.fn(),
+    },
+}));
+
 vi.mock('@src/workers/utils/logger.js', () => ({
     producerLogger: {
         info: vi.fn(),
@@ -88,13 +95,13 @@ vi.mock('@src/workers/utils/validation.js', () => ({
 }));
 
 describe('Background Producer', () => {
-    let backgroundProducer: typeof import('@src/workers/producers/background.producer.js');
+    let backgroundProducer: typeof import('../../../../src/workers/producers/background.producer.js');
 
     beforeEach(async () => {
         vi.clearAllMocks();
         vi.resetModules();
         mockSend.mockResolvedValue({ success: true });
-        backgroundProducer = await import('@src/workers/producers/background.producer.js');
+        backgroundProducer = await import('../../../../src/workers/producers/background.producer.js');
     });
 
     afterEach(() => {
