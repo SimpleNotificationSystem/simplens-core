@@ -82,3 +82,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Call webhook after successful push
+        if: success()
+        run: |
+          curl --insecure ${{ secrets.WEBHOOK_URL }}
