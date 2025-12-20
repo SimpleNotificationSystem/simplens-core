@@ -1,102 +1,112 @@
-import { notification_request, outbox, email_notification, whatsapp_notification, delayed_notification_topic, batch_notification_request } from "@src/types/types.js"
-import { notification } from "@src/types/types.js"
-import { CHANNEL, NOTIFICATION_STATUS, OUTBOX_TOPICS, OUTBOX_STATUS, DELAYED_TOPICS } from "@src/types/types.js"
+/**
+ * API Utilities
+ * 
+ * Helper functions for notification processing.
+ * These are channel-agnostic - specific logic is handled by plugins.
+ */
+
+import { notification_request, outbox, notification, batch_notification_request, getTopicForChannel, CORE_TOPICS, delayed_notification_topic } from "@src/types/types.js"
+import { NOTIFICATION_STATUS, OUTBOX_STATUS } from "@src/types/types.js"
 import mongoose from "mongoose";
 import notification_model from "@src/database/models/notification.models.js";
 import outbox_model from "@src/database/models/outbox.models.js";
 import { apiLogger as logger } from "@src/workers/utils/logger.js";
 
+/**
+ * Convert notification request to notification schema objects
+ */
 export const convert_notification_request_to_notification_schema = (data: notification_request): notification[] => {
     const notifications: notification[] = [];
-    for (const channel of data.channel) {
-        const base_notification = {
+
+    data.channel.forEach((channel, index) => {
+        let provider: string | undefined;
+        if (Array.isArray(data.provider)) {
+            const p = data.provider[index];
+            provider = p ?? undefined;
+        } else {
+            provider = data.provider;
+        }
+
+        const base_notification: notification = {
             request_id: data.request_id,
             client_id: data.client_id,
             client_name: data.client_name,
             channel: channel,
-            recipient: {
-                user_id: data.recipient.user_id,
-                email: channel === CHANNEL.email ? data.recipient.email : undefined,
-                phone: channel === CHANNEL.whatsapp ? data.recipient.phone : undefined,
-            },
-            content: {
-                email: channel === CHANNEL.email ? data.content.email : undefined,
-                whatsapp: channel === CHANNEL.whatsapp ? data.content.whatsapp : undefined,
-            },
+            provider: provider,
+            recipient: data.recipient,
+            content: data.content,
+            variables: data.variables,
             webhook_url: data.webhook_url,
             status: NOTIFICATION_STATUS.pending,
             scheduled_at: data.scheduled_at,
             retry_count: 0,
             created_at: new Date()
-        } satisfies notification;
+        };
 
         notifications.push(base_notification);
-    }
+    });
 
     return notifications;
 }
 
+/**
+ * Convert batch notification to notification schema objects
+ */
 export const convert_batch_notification_schema_to_notification_schema = (data: batch_notification_request): notification[] => {
     const notifications: notification[] = [];
 
     for (const recipient of data.recipients) {
-        for (const channel of data.channel) {
-            const notification_obj = {
+        data.channel.forEach((channel, index) => {
+            let provider: string | undefined;
+            if (Array.isArray(data.provider)) {
+                const p = data.provider[index];
+                provider = p ?? undefined;
+            } else {
+                provider = data.provider;
+            }
+
+            const notification_obj: notification = {
                 request_id: recipient.request_id,
                 client_id: data.client_id,
                 client_name: data.client_name,
                 channel,
+                provider: provider,
                 recipient: {
-                    user_id: recipient.user_id,
-                    email: channel === CHANNEL.email ? recipient.email : undefined,
-                    phone: channel === CHANNEL.whatsapp ? recipient.phone : undefined,
+                    ...recipient // Include any channel-specific fields
                 },
-                content: {
-                    email: channel === CHANNEL.email ? data.content.email : undefined,
-                    whatsapp: channel === CHANNEL.whatsapp ? data.content.whatsapp : undefined,
-                },
+                content: data.content,
                 variables: recipient.variables,
                 webhook_url: data.webhook_url,
                 status: NOTIFICATION_STATUS.pending,
                 scheduled_at: data.scheduled_at,
                 retry_count: 0,
                 created_at: new Date(),
-            } satisfies notification;
-
+            };
             notifications.push(notification_obj);
-        }
+        });
     }
 
     return notifications;
-};
+}
 
-export const convert_notification_schema_to_outbox_schema = (data: notification, notification_id: mongoose.Types.ObjectId): outbox=>{
-    if (data.scheduled_at && data.scheduled_at.getTime() > Date.now()) {
-        const payload = to_delayed_notification_topic(data, notification_id);
-        return {
-            notification_id,
-            topic: OUTBOX_TOPICS.delayed_notification,
-            payload,
-            status: OUTBOX_STATUS.pending,
-            created_at: new Date(),
-            updated_at: new Date()
-        };
-    }
-    if (data.channel === CHANNEL.email) {
-        const payload = to_email_notification(data, notification_id);
-        return {
-            notification_id,
-            topic: OUTBOX_TOPICS.email_notification,
-            payload,
-            status: OUTBOX_STATUS.pending,
-            created_at: new Date(),
-            updated_at: new Date()
-        };
-    }
-    const payload = to_whatsapp_notification(data, notification_id);
+/**
+ * Create outbox entry for a notification
+ */
+export const to_outbox = (data: notification, notification_id: mongoose.Types.ObjectId): outbox => {
+    // Determine topic based on scheduling
+    const isScheduled = data.scheduled_at && new Date(data.scheduled_at) > new Date();
+    const topic = isScheduled
+        ? CORE_TOPICS.delayed_notification
+        : getTopicForChannel(data.channel);
+
+    // Build payload
+    const payload = isScheduled
+        ? to_delayed_notification_topic(data, notification_id)
+        : to_channel_notification(data, notification_id);
+
     return {
         notification_id,
-        topic: OUTBOX_TOPICS.whatsapp_notification,
+        topic,
         payload,
         status: OUTBOX_STATUS.pending,
         created_at: new Date(),
@@ -104,20 +114,26 @@ export const convert_notification_schema_to_outbox_schema = (data: notification,
     };
 }
 
-export const to_email_notification = (data: notification, notification_id: mongoose.Types.ObjectId): email_notification => {
+/**
+ * Convert notification to channel-specific format
+ * Extracts channel-specific content if present (e.g., content.email for email channel)
+ */
+export const to_channel_notification = (data: notification, notification_id: mongoose.Types.ObjectId): Record<string, unknown> => {
+    // Extract channel-specific content if available
+    // Dashboard sends: content: { email: { subject, message } }
+    // Plugin expects: content: { subject, message }
+    const rawContent = data.content as Record<string, unknown>;
+    const channelContent = rawContent[data.channel] as Record<string, unknown> | undefined;
+    const finalContent = channelContent || rawContent;
+
     return {
         notification_id,
         request_id: data.request_id,
         client_id: data.client_id,
-        channel: CHANNEL.email,
-        recipient: {
-            user_id: data.recipient.user_id,
-            email: data.recipient.email as string,
-        },
-        content: {
-            subject: data.content.email?.subject,
-            message: data.content.email?.message as string,
-        },
+        channel: data.channel,
+        provider: data.provider,
+        recipient: data.recipient,
+        content: finalContent,
         variables: data.variables,
         webhook_url: data.webhook_url,
         retry_count: data.retry_count ?? 0,
@@ -125,46 +141,26 @@ export const to_email_notification = (data: notification, notification_id: mongo
     };
 }
 
-export const to_whatsapp_notification = (data: notification, notification_id: mongoose.Types.ObjectId): whatsapp_notification => {
-    return {
-        notification_id,
-        request_id: data.request_id,
-        client_id: data.client_id,
-        channel: CHANNEL.whatsapp,
-        recipient: {
-            user_id: data.recipient.user_id,
-            phone: data.recipient.phone as string,
-        },
-        content: {
-            message: data.content.whatsapp?.message as string,
-        },
-        variables: data.variables,
-        webhook_url: data.webhook_url,
-        retry_count: data.retry_count ?? 0,
-        created_at: new Date(),
-    };
-}
-
+/**
+ * Convert notification to delayed notification format
+ */
 export const to_delayed_notification_topic = (data: notification, notification_id: mongoose.Types.ObjectId): delayed_notification_topic => {
-    const target_topic: DELAYED_TOPICS = data.channel === CHANNEL.email
-        ? DELAYED_TOPICS.email_notification
-        : DELAYED_TOPICS.whatsapp_notification;
-
-    const payload = data.channel === CHANNEL.email
-        ? to_email_notification(data, notification_id)
-        : to_whatsapp_notification(data, notification_id);
+    const payload = to_channel_notification(data, notification_id);
 
     return {
         notification_id,
         request_id: data.request_id,
         client_id: data.client_id,
         scheduled_at: data.scheduled_at as Date,
-        target_topic,
+        target_topic: getTopicForChannel(data.channel),
         payload,
         created_at: new Date(),
     };
 }
 
+/**
+ * Error class for duplicate notifications
+ */
 export class DuplicateNotificationError extends Error {
     public duplicateCount: number;
     public duplicateKeys: { request_id: string; channel: string }[];
@@ -177,42 +173,61 @@ export class DuplicateNotificationError extends Error {
     }
 }
 
-export const process_notifications = async (notifications: notification[])=>{
-    const session = await mongoose.startSession();
-    try{
-        await session.withTransaction(async()=>{
-            const created_notifications = await notification_model.insertMany(notifications, {session, ordered: false});
-            const outboxes = created_notifications.map((created)=>{
-                return convert_notification_schema_to_outbox_schema(created as notification, created._id as mongoose.Types.ObjectId);
-            });
-            await outbox_model.insertMany(outboxes, {session, ordered: true});
+/**
+ * Process notifications and create outbox entries
+ */
+export const process_notifications = async (notifications: notification[]) => {
+    const notification_ids: mongoose.Types.ObjectId[] = [];
+    const outbox_entries: outbox[] = [];
+    const duplicate_keys: { request_id: string; channel: string }[] = [];
+
+    for (const notification of notifications) {
+        // Check for duplicates
+        const existingNotification = await notification_model.findOne({
+            request_id: notification.request_id,
+            channel: notification.channel
         });
-        logger.info("Successfully added notifications to MongoDB");
-    } catch(err: any) {
-        if (err.code === 11000 || err.name === 'MongoBulkWriteError') {
-            logger.warn("Duplicate notification(s) detected:", { error: err.message });
-            
-            // Extract duplicate key info from the error if available
-            const duplicateKeys: { request_id: string; channel: string }[] = [];
-            if (err.writeErrors) {
-                for (const writeErr of err.writeErrors) {
-                    if (writeErr.err?.code === 11000 && writeErr.err?.op) {
-                        duplicateKeys.push({
-                            request_id: writeErr.err.op.request_id,
-                            channel: writeErr.err.op.channel
-                        });
-                    }
-                }
-            }
-            
+
+        if (existingNotification) {
+            duplicate_keys.push({
+                request_id: notification.request_id as string,
+                channel: notification.channel
+            });
+            continue;
+        }
+
+        // Create notification document
+        const notification_doc = new notification_model(notification);
+        await notification_doc.save();
+
+        const notification_id = notification_doc._id as mongoose.Types.ObjectId;
+        notification_ids.push(notification_id);
+
+        // Create outbox entry
+        const outbox_entry = to_outbox(notification, notification_id);
+        outbox_entries.push(outbox_entry);
+    }
+
+    // Insert outbox entries in bulk
+    if (outbox_entries.length > 0) {
+        await outbox_model.insertMany(outbox_entries);
+    }
+
+    // Handle duplicates
+    if (duplicate_keys.length > 0) {
+        if (duplicate_keys.length === notifications.length) {
             throw new DuplicateNotificationError(
-                "Duplicate notification(s) already exist with non-failed status",
-                duplicateKeys
+                'All notifications are duplicates',
+                duplicate_keys
             );
         }
-        logger.error("Transaction failed:", err);
-        throw new Error("Failed to create notifications");
-    } finally {
-        await session.endSession();
+        logger.warn(`Skipped ${duplicate_keys.length} duplicate notifications`);
     }
+
+    return {
+        notification_ids,
+        created_count: notification_ids.length,
+        duplicate_count: duplicate_keys.length,
+        duplicate_keys: duplicate_keys.length > 0 ? duplicate_keys : undefined
+    };
 }

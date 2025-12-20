@@ -1,21 +1,26 @@
 /**
  * DLQ Status Publisher - Publishes failure status when events are sent to Dead Letter Queue
- * This ensures MongoDB is updated so admin dashboard can show failed events
+ * Channel-agnostic - extracts channel from target_topic
  */
 
 import { Producer, Partitioners } from 'kafkajs';
 import { kafka } from '@src/config/kafka.config.js';
 import {
-    TOPICS,
-    CHANNEL,
+    CORE_TOPICS,
     NOTIFICATION_STATUS_SF,
-    DELAYED_TOPICS,
     type notification_status_topic,
     type delayed_notification_topic
 } from '@src/types/types.js';
 import { delayedWorkerLogger as logger } from '@src/workers/utils/logger.js';
 
 let producer: Producer | null = null;
+
+/**
+ * Extract channel from target_topic (e.g., "email_notification" -> "email")
+ */
+const extractChannelFromTopic = (targetTopic: string): string => {
+    return targetTopic.replace('_notification', '');
+};
 
 /**
  * Initialize the DLQ status producer
@@ -36,7 +41,6 @@ export const initDLQStatusProducer = async (): Promise<void> => {
 
 /**
  * Publish failure status when an event is sent to DLQ
- * This updates MongoDB via the status worker so admin dashboard sees the failure
  */
 export const publishDLQFailureStatus = async (
     event: delayed_notification_topic,
@@ -46,10 +50,9 @@ export const publishDLQFailureStatus = async (
         throw new Error('DLQ status producer not initialized. Call initDLQStatusProducer() first.');
     }
 
-    // Determine channel from target_topic
-    const channel = event.target_topic === DELAYED_TOPICS.email_notification
-        ? CHANNEL.email
-        : CHANNEL.whatsapp;
+    // Extract channel from target_topic dynamically
+    const channel = extractChannelFromTopic(event.target_topic);
+    const payload = event.payload as Record<string, unknown>;
 
     const status: notification_status_topic = {
         notification_id: event.notification_id,
@@ -58,20 +61,20 @@ export const publishDLQFailureStatus = async (
         channel: channel,
         status: NOTIFICATION_STATUS_SF.failed,
         message: `DLQ: ${errorMessage}`,
-        retry_count: event.payload.retry_count,
-        webhook_url: event.payload.webhook_url,
+        retry_count: (payload.retry_count as number) || 0,
+        webhook_url: (payload.webhook_url as string) || '',
         created_at: new Date()
     };
 
     await producer.send({
-        topic: TOPICS.notification_status,
+        topic: CORE_TOPICS.notification_status,
         messages: [{
-            key: status.notification_id.toString(),
+            key: status.notification_id?.toString() || '',
             value: JSON.stringify(status)
         }]
     });
 
-    logger.info(`Published DLQ failure status to notification_status topic: ${event.notification_id}`);
+    logger.info(`Published DLQ failure status: ${event.notification_id}`);
 };
 
 /**

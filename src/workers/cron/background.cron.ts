@@ -1,5 +1,5 @@
 import { env } from "@src/config/env.config.js";
-import { OUTBOX_STATUS, TOPICS } from "@src/types/types.js";
+import { OUTBOX_STATUS } from "@src/types/types.js";
 import outbox_model from "@src/database/models/outbox.models.js";
 import status_outbox_model from "@src/database/models/status-outbox.models.js";
 import { type status_outbox } from "@src/types/types.js";

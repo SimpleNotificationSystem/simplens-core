@@ -1,6 +1,7 @@
 /**
  * API Route: POST /api/alerts/bulk-resolve
  * Resolves multiple alerts at once
+ * Channel-agnostic
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -9,7 +10,9 @@ import { connectDB } from "@/lib/db";
 import AlertModel from "@/lib/models/alert";
 import { NotificationModel } from "@/lib/models/notification";
 import OutboxModel from "@/lib/models/outbox";
-import { CHANNEL } from "@/lib/types";
+
+// Helper to get topic from channel
+const getTopicForChannel = (channel: string): string => `${channel}_notification`;
 
 export async function POST(request: NextRequest) {
     try {
@@ -18,7 +21,6 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const { appendWarning, limit = 50 } = body;
 
-        // Get unresolved alerts
         const alerts = await AlertModel.find({ resolved: false })
             .sort({ created_at: 1 })
             .limit(limit);
@@ -45,67 +47,40 @@ export async function POST(request: NextRequest) {
                         return;
                     }
 
-                    // Update notification content with warning if requested
+                    // Update content with warning if requested
                     if (appendWarning) {
-                        const isEmail = notification.channel === CHANNEL.email;
-                        const warningMessage = isEmail
-                            ? "\n\n⚠️ Ignore this email if you already received it!"
-                            : "\n\n⚠️ Ignore this message if you already received it!";
+                        const warningMessage = "\n\n⚠️ Ignore this message if you already received it!";
+                        const content = notification.content as Record<string, unknown>;
 
-                        if (isEmail && notification.content?.email?.message) {
-                            notification.content.email.message += warningMessage;
-                        } else if (!isEmail && notification.content?.whatsapp?.message) {
-                            notification.content.whatsapp.message += warningMessage;
+                        // Try to append to channel-specific message
+                        const channelContent = content[notification.channel] as Record<string, unknown> | undefined;
+                        if (channelContent?.message) {
+                            channelContent.message = String(channelContent.message) + warningMessage;
+                        } else if (content.message) {
+                            content.message = String(content.message) + warningMessage;
                         }
                     }
 
-                    // Reset notification to pending status
+                    // Reset notification to pending
                     notification.status = "pending";
                     notification.error_message = undefined;
                     notification.updated_at = new Date();
                     await notification.save({ session });
 
-                    // Create outbox entry
-                    const topic = notification.channel === CHANNEL.email
-                        ? "email_notification"
-                        : "whatsapp_notification";
-
-                    const payload = notification.channel === CHANNEL.email
-                        ? {
-                            notification_id: notification._id,
-                            request_id: notification.request_id,
-                            client_id: notification.client_id,
-                            channel: notification.channel,
-                            recipient: {
-                                user_id: notification.recipient.user_id,
-                                email: notification.recipient.email,
-                            },
-                            content: {
-                                subject: notification.content.email?.subject,
-                                message: notification.content.email?.message || "",
-                            },
-                            variables: notification.variables,
-                            webhook_url: notification.webhook_url,
-                            retry_count: notification.retry_count,
-                            created_at: new Date(),
-                        }
-                        : {
-                            notification_id: notification._id,
-                            request_id: notification.request_id,
-                            client_id: notification.client_id,
-                            channel: notification.channel,
-                            recipient: {
-                                user_id: notification.recipient.user_id,
-                                phone: notification.recipient.phone,
-                            },
-                            content: {
-                                message: notification.content.whatsapp?.message || "",
-                            },
-                            variables: notification.variables,
-                            webhook_url: notification.webhook_url,
-                            retry_count: notification.retry_count,
-                            created_at: new Date(),
-                        };
+                    // Create outbox entry with dynamic topic
+                    const topic = getTopicForChannel(notification.channel);
+                    const payload = {
+                        notification_id: notification._id,
+                        request_id: notification.request_id,
+                        client_id: notification.client_id,
+                        channel: notification.channel,
+                        recipient: notification.recipient,
+                        content: notification.content,
+                        variables: notification.variables,
+                        webhook_url: notification.webhook_url,
+                        retry_count: notification.retry_count,
+                        created_at: new Date(),
+                    };
 
                     await OutboxModel.create(
                         [{ notification_id: notification._id, topic, payload, status: "pending" }],

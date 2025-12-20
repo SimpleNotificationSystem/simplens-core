@@ -1,11 +1,11 @@
 /**
  * Delayed Consumer - Consumes from delayed_notification topic and stores in Redis queue
- * Events are stored in a Redis ZSET with scheduled_at as the score
+ * Channel-agnostic - routes based on dynamic target_topic
  */
 
 import { Consumer, EachMessagePayload } from 'kafkajs';
 import { kafka } from '@src/config/kafka.config.js';
-import { TOPICS } from '@src/types/types.js';
+import { CORE_TOPICS } from '@src/types/types.js';
 import { delayedNotificationTopicSchema } from '@src/types/schemas.js';
 import { addToDelayedQueue } from './delayed.queue.js';
 import { delayedWorkerLogger as logger } from '@src/workers/utils/logger.js';
@@ -24,24 +24,22 @@ const state: ConsumerState = {
 
 /**
  * Process a delayed notification message
- * Validates the message and stores it in the Redis delayed queue
  */
 const processDelayedMessage = async ({ topic, partition, message }: EachMessagePayload): Promise<void> => {
     const messageValue = message.value?.toString();
-    
+
     if (!messageValue) {
         logger.warn(`Empty message received on partition ${partition}`);
         return;
     }
 
     try {
-        // Parse and validate the message
         const rawData = JSON.parse(messageValue);
         const validationResult = delayedNotificationTopicSchema.safeParse(rawData);
 
         if (!validationResult.success) {
             logger.error('Invalid delayed notification message:', validationResult.error.message);
-            return; // Skip invalid messages
+            return;
         }
 
         const delayedEvent = validationResult.data;
@@ -49,7 +47,6 @@ const processDelayedMessage = async ({ topic, partition, message }: EachMessageP
         logger.info(`Received delayed notification: ${delayedEvent.notification_id} -> ${delayedEvent.target_topic}`);
         logger.info(`Scheduled for: ${delayedEvent.scheduled_at}`);
 
-        // Add to Redis delayed queue
         await addToDelayedQueue(delayedEvent);
 
     } catch (err) {
@@ -77,10 +74,10 @@ export const startDelayedConsumer = async (): Promise<void> => {
     logger.success('Delayed consumer connected');
 
     await state.consumer.subscribe({
-        topic: TOPICS.delayed_notification,
+        topic: CORE_TOPICS.delayed_notification,
         fromBeginning: false
     });
-    logger.info(`Subscribed to topic: ${TOPICS.delayed_notification}`);
+    logger.info(`Subscribed to topic: ${CORE_TOPICS.delayed_notification}`);
 
     state.isConsuming = true;
 

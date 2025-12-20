@@ -1,38 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { DateTimePicker } from "@/components/ui/datetime-picker";
 import { HtmlPreview } from "./html-preview";
 import { toast } from "sonner";
-import { Loader2, Send, Mail, MessageCircle, Plus, Trash2 } from "lucide-react";
+import { Loader2, Send, Plus, Trash2, AlertCircle } from "lucide-react";
+import { DynamicField } from "./dynamic-field";
+import { PluginMetadata, ProviderMetadata, FieldDefinition } from "@/lib/types";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Generate a UUIDv4
 function generateUUID(): string {
-    return crypto.randomUUID();
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
 }
 
-interface Recipient {
-    id: string;
+interface BatchRecipient {
+    id: string; // Internal UI ID
     request_id: string;
     user_id: string;
-    email: string;
-    phone: string;
-    variables: string; // JSON string
+    [key: string]: any; // Dynamic fields + variables
 }
 
-function createNewRecipient(): Recipient {
+function createNewRecipient(): BatchRecipient {
     return {
         id: generateUUID(),
         request_id: generateUUID(),
         user_id: "",
-        email: "",
-        phone: "",
         variables: "{}"
     };
 }
@@ -43,107 +48,188 @@ interface BatchNotificationFormProps {
 
 export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps) {
     const [isLoading, setIsLoading] = useState(false);
-    const [channels, setChannels] = useState<string[]>(["email"]);
+    const [isFetchingPlugins, setIsFetchingPlugins] = useState(true);
+    const [plugins, setPlugins] = useState<PluginMetadata | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    // Form Data
+    const [clientId] = useState(generateUUID());
     const [scheduledDate, setScheduledDate] = useState<Date | undefined>();
 
-    // Form fields - use UUID for client_id
-    const [clientId] = useState(generateUUID());
-    const [emailSubject, setEmailSubject] = useState("");
-    const [emailMessage, setEmailMessage] = useState("");
-    const [whatsappMessage, setWhatsappMessage] = useState("");
-    const [recipients, setRecipients] = useState<Recipient[]>([createNewRecipient()]);
+    // Selection
+    const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
+    const [selectedProviders, setSelectedProviders] = useState<Record<string, string>>({});
 
-    // Sample variables for preview
+    // Dynamic Data
+    const [contentData, setContentData] = useState<Record<string, Record<string, any>>>({});
+    const [recipients, setRecipients] = useState<BatchRecipient[]>([createNewRecipient()]);
+
+    // Preview
     const [previewVariables, setPreviewVariables] = useState<Record<string, string>>({});
 
-    const toggleChannel = (channel: string) => {
-        setChannels((prev) =>
-            prev.includes(channel)
-                ? prev.filter((c) => c !== channel)
-                : [...prev, channel]
-        );
-    };
+    // Fetch plugins
+    useEffect(() => {
+        const fetchPlugins = async () => {
+            try {
+                const res = await fetch('/api/plugins');
+                if (!res.ok) throw new Error(`Failed to load plugins: ${res.statusText}`);
+                const data = await res.json();
+                setPlugins(data);
 
-    const addRecipient = () => {
-        setRecipients([...recipients, createNewRecipient()]);
-    };
+                // Select first channel by default
+                const availableChannels = Object.keys(data.channels || {});
+                if (availableChannels.length > 0) {
+                    setSelectedChannels([availableChannels[0]]);
+                }
+            } catch (err) {
+                console.error("Error fetching plugins:", err);
+                setError("Failed to load plugin configuration.");
+            } finally {
+                setIsFetchingPlugins(false);
+            }
+        };
+        fetchPlugins();
+    }, []);
+
+    // Provider selection logic
+    useEffect(() => {
+        if (!plugins) return;
+        const newProviders = { ...selectedProviders };
+        let hasChanges = false;
+        selectedChannels.forEach(channel => {
+            if (!newProviders[channel]) {
+                const channelConfig = plugins.channels[channel];
+                if (channelConfig) {
+                    newProviders[channel] = channelConfig.default || channelConfig.providers[0]?.id;
+                    hasChanges = true;
+                }
+            }
+        });
+        if (hasChanges) setSelectedProviders(newProviders);
+    }, [selectedChannels, plugins, selectedProviders]);
+
+    // Recipient Management
+    const addRecipient = () => setRecipients([...recipients, createNewRecipient()]);
 
     const removeRecipient = (id: string) => {
         if (recipients.length > 1) {
-            setRecipients(recipients.filter((r) => r.id !== id));
+            setRecipients(recipients.filter(r => r.id !== id));
         }
     };
 
-    const updateRecipient = (id: string, field: keyof Recipient, value: string) => {
-        setRecipients(
-            recipients.map((r) => (r.id === id ? { ...r, [field]: value } : r))
-        );
+    const updateRecipient = (id: string, field: string, value: any) => {
+        setRecipients(recipients.map(r => r.id === id ? { ...r, [field]: value } : r));
 
-        // Update preview variables from first recipient
+        // Update preview if variables changed on first recipient
         if (field === "variables" && recipients[0].id === id) {
             try {
                 setPreviewVariables(JSON.parse(value));
             } catch {
-                // Invalid JSON, ignore
+                // Invalid JSON
             }
         }
+    };
+
+    const updateContentData = (channel: string, field: string, value: any) => {
+        setContentData(prev => ({
+            ...prev,
+            [channel]: { ...(prev[channel] || {}), [field]: value }
+        }));
+    };
+
+    const toggleChannel = (channel: string) => {
+        setSelectedChannels(prev =>
+            prev.includes(channel) ? prev.filter(c => c !== channel) : [...prev, channel]
+        );
+    };
+
+    const getActiveProvider = (channel: string) => {
+        if (!plugins) return undefined;
+        const channelConfig = plugins.channels[channel];
+        if (!channelConfig) return undefined;
+        const providerId = selectedProviders[channel] || channelConfig.default;
+        return channelConfig.providers.find(p => p.id === providerId);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (channels.length === 0) {
+        if (selectedChannels.length === 0) {
             toast.error("Please select at least one channel");
-            return;
-        }
-
-        const validRecipients = recipients.filter((r) => {
-            if (!r.user_id) return false;
-            if (channels.includes("email") && !r.email) return false;
-            if (channels.includes("whatsapp") && !r.phone) return false;
-            return true;
-        });
-
-        if (validRecipients.length === 0) {
-            toast.error("Please add at least one valid recipient with user_id and required contact info");
             return;
         }
 
         setIsLoading(true);
 
         try {
-            const payload = {
-                type: "batch",
-                client_id: clientId,
-                channel: channels,
-                content: {
-                    ...(channels.includes("email") && {
-                        email: {
-                            subject: emailSubject,
-                            message: emailMessage,
-                        },
-                    }),
-                    ...(channels.includes("whatsapp") && {
-                        whatsapp: {
-                            message: whatsappMessage,
-                        },
-                    }),
-                },
-                recipients: validRecipients.map((r) => ({
+            // Validate JSON variables for all recipients
+            const processedRecipients = recipients.map(r => {
+                let parsedVariables = {};
+                try {
+                    parsedVariables = JSON.parse(r.variables || "{}");
+                } catch (e) {
+                    // Ignore invalid JSON, treat as empty
+                }
+
+                // Construct recipient object with ONLY relevant fields for selected channels
+                const recipientObj: any = {
                     request_id: r.request_id,
                     user_id: r.user_id,
-                    ...(channels.includes("email") && { email: r.email }),
-                    ...(channels.includes("whatsapp") && { phone: r.phone }),
-                    variables: (() => {
-                        try {
-                            return JSON.parse(r.variables);
-                        } catch {
-                            return {};
-                        }
-                    })(),
-                })),
-                ...(scheduledDate && { scheduled_at: scheduledDate.toISOString() }),
+                    variables: parsedVariables
+                };
+
+                // Add fields required by selected channels
+                selectedChannels.forEach(channel => {
+                    const provider = getActiveProvider(channel);
+                    if (provider) {
+                        provider.recipientFields.forEach(field => {
+                            if (field.name !== 'user_id' && r[field.name]) {
+                                recipientObj[field.name] = r[field.name];
+                            }
+                        });
+                    }
+                });
+
+                return recipientObj;
+            });
+
+            const payload: any = {
+                type: "batch",
+                client_id: clientId,
+                channel: selectedChannels,
+                recipients: processedRecipients,
+                content: {},
             };
+
+            selectedChannels.forEach(channel => {
+                payload.content[channel] = contentData[channel] || {};
+            });
+
+            if (scheduledDate) {
+                payload.scheduled_at = scheduledDate.toISOString();
+            }
+
+            // Add provider(s)
+            if (Object.keys(selectedProviders).length > 0) {
+                // Map providers to channel order
+                const orderedProviders = selectedChannels.map(channel => {
+                    const explicit = selectedProviders[channel];
+                    // If no explicit provider selected, we can send null values (backend handles gaps)
+                    return explicit || null;
+                });
+
+                // If all are null, don't send anything (allow backend defaults)
+                const hasAnyExplicit = orderedProviders.some(p => p !== null);
+
+                if (hasAnyExplicit) {
+                    if (selectedChannels.length === 1 && orderedProviders[0]) {
+                        payload.provider = orderedProviders[0];
+                    } else {
+                        // Send array matching channel length
+                        payload.provider = orderedProviders;
+                    }
+                }
+            }
 
             const response = await fetch("/api/send", {
                 method: "POST",
@@ -157,15 +243,14 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                 throw new Error(data.message || data.error || "Failed to send");
             }
 
-            toast.success(`Batch notification sent to ${validRecipients.length} recipient(s)!`);
+            toast.success(`Batch notification sent to ${recipients.length} recipients!`);
             onSuccess?.();
 
-            // Reset form with new recipients
+            // Reset
             setRecipients([createNewRecipient()]);
-            setEmailSubject("");
-            setEmailMessage("");
-            setWhatsappMessage("");
+            setContentData({});
             setScheduledDate(undefined);
+
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to send batch notification");
         } finally {
@@ -173,193 +258,186 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
         }
     };
 
+    if (isFetchingPlugins) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
+    if (error) return <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Error</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>;
+    if (!plugins || Object.keys(plugins.channels).length === 0) return <Alert><AlertTitle>No Plugins</AlertTitle><AlertDescription>No plugins configured.</AlertDescription></Alert>;
+
+    const availableChannels = Object.keys(plugins.channels);
+
+    // Collect all unique recipient fields across selected channels
+    const uniqueRecipientFields: (FieldDefinition & { channel: string })[] = [];
+    const seenFields = new Set<string>();
+
+    selectedChannels.forEach(channel => {
+        const provider = getActiveProvider(channel);
+        if (provider) {
+            provider.recipientFields.forEach(field => {
+                if (field.name === 'user_id') return; // User ID is handled separately
+                if (!seenFields.has(field.name)) {
+                    seenFields.add(field.name);
+                    uniqueRecipientFields.push({ ...field, channel });
+                }
+            });
+        }
+    });
+
     return (
         <form onSubmit={handleSubmit} className="space-y-6 w-full">
-            {/* Form */}
-            <div className="space-y-6">
-                {/* Channels */}
-                <Card>
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-sm font-medium">Channels</CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex gap-4">
-                        <div className="flex items-center space-x-2">
-                            <Checkbox
-                                id="batch-email"
-                                checked={channels.includes("email")}
-                                onCheckedChange={() => toggleChannel("email")}
-                            />
-                            <Label htmlFor="batch-email" className="flex items-center gap-2">
-                                <Mail className="h-4 w-4" />
-                                Email
-                            </Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                            <Checkbox
-                                id="batch-whatsapp"
-                                checked={channels.includes("whatsapp")}
-                                onCheckedChange={() => toggleChannel("whatsapp")}
-                            />
-                            <Label htmlFor="batch-whatsapp" className="flex items-center gap-2">
-                                <MessageCircle className="h-4 w-4" />
-                                WhatsApp
-                            </Label>
-                        </div>
-                    </CardContent>
-                </Card>
+            {/* Channels */}
+            <Card>
+                <CardHeader className="pb-3"><CardTitle className="text-sm font-medium">Channels</CardTitle></CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {availableChannels.map(channel => {
+                        const isSelected = selectedChannels.includes(channel);
+                        const channelConfig = plugins?.channels[channel];
+                        const providers = channelConfig?.providers || [];
+                        const isMulti = selectedChannels.length > 1;
 
-                {/* Recipients */}
-                <Card>
-                    <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <CardTitle className="text-sm font-medium">Recipients</CardTitle>
-                                <CardDescription>Add multiple recipients with template variables</CardDescription>
-                            </div>
-                            <Button type="button" variant="outline" size="sm" onClick={addRecipient}>
-                                <Plus className="h-4 w-4 mr-1" />
-                                Add
-                            </Button>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {recipients.map((recipient, index) => (
-                            <div key={recipient.id} className="border rounded-lg p-4 space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm font-medium">Recipient {index + 1}</span>
-                                    {recipients.length > 1 && (
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => removeRecipient(recipient.id)}
-                                        >
-                                            <Trash2 className="h-4 w-4 text-destructive" />
-                                        </Button>
-                                    )}
-                                </div>
-                                <Input
-                                    placeholder="User ID * (string: e.g. user123)"
-                                    value={recipient.user_id}
-                                    onChange={(e) => updateRecipient(recipient.id, "user_id", e.target.value)}
-                                    className="font-mono text-xs"
-                                />
-                                <div className="grid gap-3 md:grid-cols-2">
-                                    {channels.includes("email") && (
-                                        <Input
-                                            placeholder="Email * (e.g. user@example.com)"
-                                            type="email"
-                                            value={recipient.email}
-                                            onChange={(e) => updateRecipient(recipient.id, "email", e.target.value)}
-                                        />
-                                    )}
-                                    {channels.includes("whatsapp") && (
-                                        <Input
-                                            placeholder="Phone * (E.164: +15551234567)"
-                                            value={recipient.phone}
-                                            onChange={(e) => updateRecipient(recipient.id, "phone", e.target.value)}
-                                        />
-                                    )}
-                                </div>
-                                <Input
-                                    placeholder='Variables (optional): {"name": "Alice", "promo_code": "SUMMER20"}'
-                                    value={recipient.variables === "{}" ? "" : recipient.variables}
-                                    onChange={(e) => updateRecipient(recipient.id, "variables", e.target.value || "{}")}
-                                    className="font-mono text-xs"
-                                />
-                            </div>
-                        ))}
-                    </CardContent>
-                </Card>
-
-                {/* Email Content */}
-                {channels.includes("email") && (
-                    <>
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <CardTitle className="text-sm font-medium">Email Template</CardTitle>
-                                <CardDescription>Use {"{{variable}}"} for personalization</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="batch-subject">Subject *</Label>
-                                    <Input
-                                        id="batch-subject"
-                                        placeholder="Hello {{name}}!"
-                                        value={emailSubject}
-                                        onChange={(e) => setEmailSubject(e.target.value)}
-                                        required
+                        return (
+                            <div key={channel} className={`flex flex-col space-y-3 p-3 border rounded-lg transition-all ${isSelected ? 'bg-secondary/10 border-primary/50' : 'opacity-80'}`}>
+                                <div className="flex items-center space-x-2">
+                                    <Checkbox
+                                        id={`batch-${channel}`}
+                                        checked={isSelected}
+                                        onCheckedChange={() => toggleChannel(channel)}
                                     />
+                                    <Label htmlFor={`batch-${channel}`} className="capitalize cursor-pointer flex-1 font-medium">{channel}</Label>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="batch-message">Message (HTML) *</Label>
-                                    <Textarea
-                                        id="batch-message"
-                                        placeholder="<h1>Hello {{name}}!</h1><p>Your code is {{code}}.</p>"
-                                        value={emailMessage}
-                                        onChange={(e) => setEmailMessage(e.target.value)}
-                                        rows={8}
-                                        className="font-mono text-sm"
-                                        required
-                                    />
-                                </div>
-                            </CardContent>
-                        </Card>
 
-                        {/* Email Preview - directly under email template */}
-                        {emailMessage && (
-                            <HtmlPreview html={emailMessage} variables={previewVariables} />
-                        )}
-                    </>
-                )}
-                {/* WhatsApp Content */}
-                {channels.includes("whatsapp") && (
-                    <Card>
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-medium">WhatsApp Template</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <Textarea
-                                placeholder="Hi {{name}}, your code is {{code}}."
-                                value={whatsappMessage}
-                                onChange={(e) => setWhatsappMessage(e.target.value)}
-                                rows={4}
+                                {isSelected && (
+                                    <div className="pl-6">
+                                        <div className="flex items-center gap-2">
+                                            <Label className="text-xs text-muted-foreground w-16">Provider:</Label>
+                                            <Select
+                                                value={selectedProviders[channel]}
+                                                onValueChange={(val) => setSelectedProviders(prev => ({ ...prev, [channel]: val }))}
+                                            >
+                                                <SelectTrigger className="h-8 text-xs">
+                                                    <SelectValue placeholder="Select provider" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {providers.map(p => (
+                                                        <SelectItem key={p.id} value={p.id} className="text-xs">
+                                                            {p.displayName} {p.id === channelConfig?.default && "(Default)"}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </CardContent>
+            </Card>
+
+            {/* Recipients */}
+            <Card>
+                <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <CardTitle className="text-sm font-medium">Recipients</CardTitle>
+                            <CardDescription>Add multiple recipients with template variables</CardDescription>
+                        </div>
+                        <Button type="button" variant="outline" size="sm" onClick={addRecipient}>
+                            <Plus className="h-4 w-4 mr-1" /> Add
+                        </Button>
+                    </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {recipients.map((recipient, index) => (
+                        <div key={recipient.id} className="border rounded-lg p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium">Recipient {index + 1}</span>
+                                {recipients.length > 1 && (
+                                    <Button type="button" variant="ghost" size="sm" onClick={() => removeRecipient(recipient.id)}>
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                )}
+                            </div>
+
+                            {/* Standard User ID */}
+                            <Input
+                                placeholder="User ID * (string)"
+                                value={recipient.user_id}
+                                onChange={(e) => updateRecipient(recipient.id, "user_id", e.target.value)}
+                                className="font-mono text-xs"
                                 required
                             />
+
+                            {/* Dynamic Fields */}
+                            <div className="grid gap-3 md:grid-cols-2">
+                                {uniqueRecipientFields.map(field => (
+                                    <Input
+                                        key={field.name}
+                                        type={field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : 'text'}
+                                        placeholder={`${field.name}${field.required ? ' *' : ''} (${field.description || field.type})`}
+                                        value={recipient[field.name] || ''}
+                                        onChange={(e) => updateRecipient(recipient.id, field.name, e.target.value)}
+                                        required={field.required}
+                                    />
+                                ))}
+                            </div>
+
+                            {/* Variables */}
+                            <Input
+                                placeholder='Variables (optional): {"name": "Alice"}'
+                                value={recipient.variables}
+                                onChange={(e) => updateRecipient(recipient.id, "variables", e.target.value)}
+                                className="font-mono text-xs"
+                            />
+                        </div>
+                    ))}
+                </CardContent>
+            </Card>
+
+            {/* Content Templates */}
+            {selectedChannels.map(channel => {
+                const provider = getActiveProvider(channel);
+                if (!provider) return null;
+                return (
+                    <Card key={channel}>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-medium capitalize">{channel} Template</CardTitle>
+                            <CardDescription>Provider: {provider.displayName} — Use {"{{variable}}"} for personalization</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            {provider.contentFields.map(field => (
+                                <div key={field.name} className="space-y-2">
+                                    <DynamicField
+                                        field={field}
+                                        value={contentData[channel]?.[field.name]}
+                                        onChange={(val) => updateContentData(channel, field.name, val)}
+                                    />
+                                    {(field.name === 'message' || field.name === 'body') && contentData[channel]?.[field.name] && (
+                                        <div className="mt-2">
+                                            <Label className="text-xs text-muted-foreground mb-1 block">Preview (with variables from first recipient)</Label>
+                                            <HtmlPreview html={contentData[channel]?.[field.name]} variables={previewVariables} />
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
                         </CardContent>
                     </Card>
-                )}
+                );
+            })}
 
-                {/* Schedule */}
-                <Card>
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-sm font-medium">Schedule (Optional)</CardTitle>
-                        <CardDescription>Leave empty to send immediately</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <DateTimePicker
-                            value={scheduledDate}
-                            onChange={setScheduledDate}
-                            placeholder="Pick a date & time"
-                        />
-                    </CardContent>
-                </Card>
+            {/* Schedule */}
+            <Card>
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium">Schedule (Optional)</CardTitle>
+                    <CardDescription>Leave empty to send immediately</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <DateTimePicker value={scheduledDate} onChange={setScheduledDate} placeholder="Pick a date & time" />
+                </CardContent>
+            </Card>
 
-                {/* Submit */}
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? (
-                        <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Sending...
-                        </>
-                    ) : (
-                        <>
-                            <Send className="mr-2 h-4 w-4" />
-                            Send Batch ({recipients.length} recipient{recipients.length > 1 ? "s" : ""})
-                        </>
-                    )}
-                </Button>
-            </div>
-        </form >
+            {/* Submit */}
+            <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending...</> : <><Send className="mr-2 h-4 w-4" /> Send Batch ({recipients.length})</>}
+            </Button>
+        </form>
     );
 }

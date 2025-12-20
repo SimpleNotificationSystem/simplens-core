@@ -1,16 +1,13 @@
+/**
+ * Notification Model
+ * 
+ * Stores notification records in MongoDB.
+ * Channel-agnostic - supports any channel via flexible schema.
+ */
+
 import { NOTIFICATION_STATUS, type notification } from '@src/types/types.js';
 import mongoose from 'mongoose';
-import {validate, version} from 'uuid';
-import { CHANNEL } from '@src/types/types.js';
-
-const emailContentSchema = new mongoose.Schema({
-  subject: { type: String },
-  message: { type: String, required: true }
-}, { _id: false });
-
-const whatsappContentSchema = new mongoose.Schema({
-  message: { type: String }
-}, { _id: false });
+import { validate, version } from 'uuid';
 
 const notification_schema = new mongoose.Schema<notification>(
   {
@@ -18,8 +15,8 @@ const notification_schema = new mongoose.Schema<notification>(
       type: String,
       required: true,
       validate: {
-        validator: (v: string)=> validate(v)&&version(v)==4,
-        message: (props: {value: string})=>`${props.value} is not a valid UUIDV4 ID`
+        validator: (v: string) => validate(v) && version(v) == 4,
+        message: (props: { value: string }) => `${props.value} is not a valid UUIDV4 ID`
       }
     },
     client_id: {
@@ -36,26 +33,21 @@ const notification_schema = new mongoose.Schema<notification>(
     },
     channel: {
       type: String,
-      enum: Object.values(CHANNEL),
+      required: true,
+      index: true,
+    },
+    provider: {
+      type: String,
+      index: true,
+    },
+    // Dynamic recipient schema - structure depends on channel
+    recipient: {
+      type: mongoose.Schema.Types.Mixed,
       required: true,
     },
-    recipient: {
-      user_id: {
-        type: String,
-        required: true,
-      },
-      email: {
-        type: String,
-      },
-      phone: {
-        type: String,
-      },
-    },
-   content: {
-      type: {
-        email: { type: emailContentSchema },      
-        whatsapp: { type: whatsappContentSchema },
-      },
+    // Dynamic content schema - structure depends on channel
+    content: {
+      type: mongoose.Schema.Types.Mixed,
       required: true,
     },
     variables: {
@@ -91,19 +83,19 @@ const notification_schema = new mongoose.Schema<notification>(
   }
 );
 
+// Unique constraint: one notification per request_id + channel
 notification_schema.index(
   { request_id: 1, channel: 1 },
   {
     unique: true,
-    // MongoDB partial index doesn't support $ne, so use $in with allowed statuses instead
-    partialFilterExpression: { 
-      status: { 
+    partialFilterExpression: {
+      status: {
         $in: [
-          NOTIFICATION_STATUS.pending, 
-          NOTIFICATION_STATUS.processing, 
+          NOTIFICATION_STATUS.pending,
+          NOTIFICATION_STATUS.processing,
           NOTIFICATION_STATUS.delivered
-        ] 
-      } 
+        ]
+      }
     }
   }
 );

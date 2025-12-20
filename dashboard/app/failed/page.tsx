@@ -219,7 +219,7 @@ export default function FailedPage() {
                                             <ChannelBadge channel={notification.channel} />
                                         </TableCell>
                                         <TableCell className="max-w-[150px] truncate">
-                                            {notification.recipient.email || notification.recipient.phone}
+                                            {String(notification.recipient.email || notification.recipient.phone || notification.recipient.user_id || '')}
                                         </TableCell>
                                         <TableCell className="max-w-[200px] truncate text-red-600 dark:text-red-400">
                                             {notification.error_message || "Unknown error"}

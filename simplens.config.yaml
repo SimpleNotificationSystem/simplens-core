@@ -1,0 +1,24 @@
+# SimpleNS Configuration
+# Configure notification providers and channel routing
+
+providers:
+  # Gmail provider for email notifications
+  - package: "simplens-plugin-gmail"
+    id: "gmail-primary"
+    credentials:
+      EMAIL_HOST: "${EMAIL_HOST}"
+      EMAIL_PORT: "${EMAIL_PORT}"
+      EMAIL_USER: "${EMAIL_USER}"
+      EMAIL_PASS: "${EMAIL_PASS}"
+      EMAIL_FROM: "${EMAIL_FROM}"
+    options:
+      priority: 1
+      rateLimit:
+        maxTokens: 100
+        refillRate: 10
+
+# Channel to provider mapping
+channels:
+  email:
+    default: "gmail-primary"
+    # fallback: "sendgrid-backup"  # Uncomment when you have a fallback provider

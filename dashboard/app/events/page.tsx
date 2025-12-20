@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/pagination";
 import { Search, Eye, RefreshCw, ArrowUpDown } from "lucide-react";
 import { format } from "date-fns";
-import type { PaginatedResponse, Notification, NOTIFICATION_STATUS, CHANNEL } from "@/lib/types";
+import type { PaginatedResponse, Notification, NOTIFICATION_STATUS } from "@/lib/types";
 import Link from "next/link";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -199,7 +199,7 @@ export default function EventsPage() {
                                             <ChannelBadge channel={notification.channel} />
                                         </TableCell>
                                         <TableCell className="max-w-[200px] truncate">
-                                            {notification.recipient.email || notification.recipient.phone}
+                                            {String(notification.recipient.email || notification.recipient.phone || notification.recipient.user_id || '')}
                                         </TableCell>
                                         <TableCell>
                                             <StatusBadge status={notification.status} />

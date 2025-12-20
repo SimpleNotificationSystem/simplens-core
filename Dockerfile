@@ -1,5 +1,5 @@
 # Multi-stage build for Node.js TypeScript application
-# Supports multiple services: api, worker, email-processor, whatsapp-processor, delayed-processor
+# Supports multiple services: api, worker, unified-processor, delayed-processor, recovery
 
 # ============================================
 # Stage 1: Build

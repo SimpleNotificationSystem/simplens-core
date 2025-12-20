@@ -1,21 +1,12 @@
 /**
  * Notification model for the dashboard
- * Replicates the schema from the notification service
+ * Channel-agnostic - supports any channel registered via plugins
  */
 
 import mongoose, { Schema, Document } from 'mongoose';
-import { NOTIFICATION_STATUS, CHANNEL, type Notification } from '@/lib/types';
+import { NOTIFICATION_STATUS, type Notification } from '@/lib/types';
 
 export interface NotificationDocument extends Omit<Notification, '_id'>, Document { }
-
-const emailContentSchema = new Schema({
-    subject: { type: String },
-    message: { type: String, required: true }
-}, { _id: false });
-
-const whatsappContentSchema = new Schema({
-    message: { type: String }
-}, { _id: false });
 
 const notificationSchema = new Schema<NotificationDocument>(
     {
@@ -33,26 +24,17 @@ const notificationSchema = new Schema<NotificationDocument>(
         },
         channel: {
             type: String,
-            enum: Object.values(CHANNEL),
+            required: true,
+            index: true,
+        },
+        // Dynamic recipient - structure depends on channel
+        recipient: {
+            type: Schema.Types.Mixed,
             required: true,
         },
-        recipient: {
-            user_id: {
-                type: String,
-                required: true,
-            },
-            email: {
-                type: String,
-            },
-            phone: {
-                type: String,
-            },
-        },
+        // Dynamic content - structure depends on channel  
         content: {
-            type: {
-                email: { type: emailContentSchema },
-                whatsapp: { type: whatsappContentSchema },
-            },
+            type: Schema.Types.Mixed,
             required: true,
         },
         variables: {

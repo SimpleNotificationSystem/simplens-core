@@ -24,6 +24,8 @@
     "whatsapp-processor:dev": "tsx watch src/processors/whatsapp/whatsapp.processor.ts",
     "delayed-processor": "node dist/processors/delayed/delayed.processor.js",
     "delayed-processor:dev": "tsx watch src/processors/delayed/delayed.processor.ts",
+    "processor": "node dist/processors/unified/unified.processor.js",
+    "processor:dev": "tsx watch src/processors/unified/unified.processor.ts",
     "recovery": "node dist/workers/recovery/recovery.service.js",
     "recovery:dev": "tsx watch src/workers/recovery/recovery.service.ts",
     "prepare": "husky"
@@ -62,6 +64,8 @@
     "vitest": "^4.0.15"
   },
   "dependencies": {
+    "simplens-plugin-gmail": "^1.0.0",
+    "simplens-sdk": "^1.0.1",
     "axios": "^1.13.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
@@ -75,6 +79,7 @@
     "uuid": "^13.0.0",
     "winston": "^3.18.3",
     "winston-loki": "^6.1.3",
+    "yaml": "^2.8.2",
     "zod": "^4.1.13"
   }
 }

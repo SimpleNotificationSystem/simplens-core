@@ -1,6 +1,6 @@
 /**
  * Outbox Model for Dashboard
- * Used for creating outbox entries when retrying notifications.
+ * Channel-agnostic - topic is a dynamic string
  */
 
 import mongoose from "mongoose";
@@ -15,8 +15,8 @@ const outboxSchema = new mongoose.Schema(
         },
         topic: {
             type: String,
-            enum: ["email_notification", "whatsapp_notification", "delayed_notification"],
             required: true,
+            index: true,
         },
         payload: {
             type: mongoose.Schema.Types.Mixed,

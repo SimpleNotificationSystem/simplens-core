@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import { NotificationModel } from '@/lib/models/notification';
-import type { PaginatedResponse, Notification, NOTIFICATION_STATUS, CHANNEL } from '@/lib/types';
+import type { PaginatedResponse, Notification, NOTIFICATION_STATUS, Channel } from '@/lib/types';
 
 // Define filter type inline to avoid mongoose version issues
 interface NotificationFilter {
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
         const page = parseInt(searchParams.get('page') || '1');
         const limit = parseInt(searchParams.get('limit') || '20');
         const status = searchParams.get('status') as NOTIFICATION_STATUS | null;
-        const channel = searchParams.get('channel') as CHANNEL | null;
+        const channel = searchParams.get('channel') as Channel | null;
         const search = searchParams.get('search');
         const from = searchParams.get('from');
         const to = searchParams.get('to');

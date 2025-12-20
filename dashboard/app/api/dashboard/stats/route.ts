@@ -1,6 +1,6 @@
 /**
  * Dashboard statistics API
- * Returns aggregate counts for notifications
+ * Returns aggregate counts for notifications with dynamic channel support
  */
 
 import { NextResponse } from 'next/server';
@@ -26,7 +26,7 @@ export async function GET() {
             }
         ]);
 
-        // Aggregate by channel
+        // Aggregate by channel - dynamic, not hardcoded
         const channelStats = await NotificationModel.aggregate([
             {
                 $group: {
@@ -36,14 +36,12 @@ export async function GET() {
             }
         ]);
 
-        const byChannel = {
-            email: 0,
-            whatsapp: 0
-        };
-
+        // Build dynamic byChannel object
+        const byChannel: Record<string, number> = {};
         channelStats.forEach((item: { _id: string; count: number }) => {
-            if (item._id === 'email') byChannel.email = item.count;
-            if (item._id === 'whatsapp') byChannel.whatsapp = item.count;
+            if (item._id) {
+                byChannel[item._id] = item.count;
+            }
         });
 
         const stats: DashboardStats = statusStats.length > 0

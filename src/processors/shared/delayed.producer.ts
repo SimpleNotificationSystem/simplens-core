@@ -4,13 +4,7 @@
 
 import { Producer, Partitioners } from 'kafkajs';
 import { kafka } from '@src/config/kafka.config.js';
-import {
-    TOPICS,
-    DELAYED_TOPICS,
-    type delayed_notification_topic,
-    type email_notification,
-    type whatsapp_notification
-} from '@src/types/types.js';
+import { CORE_TOPICS, getTopicForChannel, type delayed_notification_topic } from '@src/types/types.js';
 
 let producer: Producer | null = null;
 
@@ -31,58 +25,40 @@ export const initDelayedProducer = async (): Promise<void> => {
 };
 
 /**
- * Calculate quadratic backoff delay in seconds
- * delay = retry_count^2 seconds
+ * Calculate exponential backoff delay in milliseconds
  */
 const calculateBackoffDelay = (retryCount: number): number => {
-    return retryCount ** 2;
+    const baseDelay = 1000; // 1 second
+    const maxDelay = 300000; // 5 minutes
+    return Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
 };
 
 /**
- * Build delayed notification payload from email notification
+ * Build delayed notification payload from any channel's notification
  */
-export const buildDelayedPayloadFromEmail = (
-    notification: email_notification,
+export const buildDelayedPayload = (
+    notification: Record<string, unknown>,
+    channel: string,
     newRetryCount: number
 ): delayed_notification_topic => {
-    const delaySeconds = calculateBackoffDelay(newRetryCount);
+    const delay = calculateBackoffDelay(newRetryCount);
 
     return {
         notification_id: notification.notification_id,
         request_id: notification.request_id,
         client_id: notification.client_id,
-        scheduled_at: new Date(Date.now() + delaySeconds * 1000),
-        target_topic: DELAYED_TOPICS.email_notification,
+        scheduled_at: new Date(Date.now() + delay),
+        target_topic: getTopicForChannel(channel),
         payload: {
             ...notification,
             retry_count: newRetryCount
         },
         created_at: new Date()
-    };
+    } as delayed_notification_topic;
 };
 
-/**
- * Build delayed notification payload from whatsapp notification
- */
-export const buildDelayedPayloadFromWhatsapp = (
-    notification: whatsapp_notification,
-    newRetryCount: number
-): delayed_notification_topic => {
-    const delaySeconds = calculateBackoffDelay(newRetryCount);
-
-    return {
-        notification_id: notification.notification_id,
-        request_id: notification.request_id,
-        client_id: notification.client_id,
-        scheduled_at: new Date(Date.now() + delaySeconds * 1000),
-        target_topic: DELAYED_TOPICS.whatsapp_notification,
-        payload: {
-            ...notification,
-            retry_count: newRetryCount
-        },
-        created_at: new Date()
-    };
-};
+// Alias for backward compatibility
+export const buildDelayedPayloadGeneric = buildDelayedPayload;
 
 /**
  * Publish notification to delayed_notification topic for later retry
@@ -92,14 +68,13 @@ export const publishDelayed = async (payload: delayed_notification_topic): Promi
         throw new Error('Delayed producer not initialized. Call initDelayedProducer() first.');
     }
 
-    // Use acks: -1 for durability - wait for all in-sync replicas
     await producer.send({
-        topic: TOPICS.delayed_notification,
+        topic: CORE_TOPICS.delayed_notification,
         messages: [{
-            key: payload.notification_id.toString(),
+            key: payload.notification_id?.toString() || '',
             value: JSON.stringify(payload)
         }],
-        acks: -1,  // Wait for all replicas to acknowledge
+        acks: -1,
         timeout: 30000
     });
 };

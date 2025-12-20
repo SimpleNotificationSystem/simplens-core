@@ -1,19 +1,14 @@
 /**
  * Centralized payload validation for outbox entries
+ * 
+ * Channel-agnostic - uses base notification schema for all payloads.
  */
 
 import mongoose from "mongoose";
-import { 
-    OUTBOX_TOPICS,
-    type outbox,
-    type email_notification,
-    type whatsapp_notification,
-    type delayed_notification_topic
-} from "@src/types/types.js";
-import { 
+import { type outbox, type delayed_notification_topic } from "@src/types/types.js";
+import {
     safeValidateOutbox,
-    safeValidateEmailNotification,
-    safeValidateWhatsappNotification,
+    safeValidateBaseNotification,
     safeValidateDelayedNotificationTopic
 } from "@src/types/schemas.js";
 import type { HydratedDocument } from "mongoose";
@@ -22,32 +17,25 @@ import { producerLogger as logger } from "./logger.js";
 // Type for outbox document from MongoDB
 export type OutboxDocument = HydratedDocument<outbox>;
 
-// Union type for all valid payloads
-export type ValidPayload = email_notification | whatsapp_notification | delayed_notification_topic;
+// Generic payload type
+export type ValidPayload = Record<string, unknown>;
 
-// Validated outbox entry with typed payload
+// Validated outbox entry
 export interface ValidatedOutboxEntry {
     _id: mongoose.Types.ObjectId;
-    notification_id: mongoose.Types.ObjectId;
-    topic: OUTBOX_TOPICS;
+    notification_id: mongoose.Types.ObjectId | string;
+    topic: string;
     payload: ValidPayload;
     status: string;
 }
 
-// Payload validators mapped by topic
-const PAYLOAD_VALIDATORS: Record<OUTBOX_TOPICS, (payload: unknown) => { success: true; data: ValidPayload } | { success: false; error: { issues: unknown[] } }> = {
-    [OUTBOX_TOPICS.email_notification]: safeValidateEmailNotification,
-    [OUTBOX_TOPICS.whatsapp_notification]: safeValidateWhatsappNotification,
-    [OUTBOX_TOPICS.delayed_notification]: safeValidateDelayedNotificationTopic,
-};
-
 /**
- * Validate an outbox entry and its payload based on topic
+ * Validate an outbox entry and its payload
  * @returns ValidatedOutboxEntry if valid, null if validation fails
  */
 export const validateOutboxEntry = (entry: OutboxDocument): ValidatedOutboxEntry | null => {
     const plainEntry = entry.toObject();
-    
+
     // Validate the outbox schema
     const outboxResult = safeValidateOutbox(plainEntry);
     if (!outboxResult.success) {
@@ -57,17 +45,26 @@ export const validateOutboxEntry = (entry: OutboxDocument): ValidatedOutboxEntry
 
     const { topic, payload, notification_id, status } = outboxResult.data;
 
-    // Get the appropriate validator for this topic
-    const validator = PAYLOAD_VALIDATORS[topic];
-    if (!validator) {
-        logger.error(`Unknown topic: ${topic}`);
-        return null;
+    // Validate payload based on topic
+    if (topic === 'delayed_notification') {
+        const delayedResult = safeValidateDelayedNotificationTopic(payload);
+        if (!delayedResult.success) {
+            logger.error(`Invalid delayed_notification payload for outbox ${plainEntry._id}:`, delayedResult.error.issues);
+            return null;
+        }
+        return {
+            _id: plainEntry._id as mongoose.Types.ObjectId,
+            notification_id,
+            topic,
+            payload: delayedResult.data as ValidPayload,
+            status
+        };
     }
 
-    // Validate the payload
-    const payloadResult = validator(payload);
-    if (!payloadResult.success) {
-        logger.error(`Invalid ${topic} payload for outbox ${plainEntry._id}:`, payloadResult.error.issues);
+    // For channel notifications, validate with base schema
+    const notificationResult = safeValidateBaseNotification(payload);
+    if (!notificationResult.success) {
+        logger.error(`Invalid notification payload for outbox ${plainEntry._id}:`, notificationResult.error.issues);
         return null;
     }
 
@@ -75,20 +72,19 @@ export const validateOutboxEntry = (entry: OutboxDocument): ValidatedOutboxEntry
         _id: plainEntry._id as mongoose.Types.ObjectId,
         notification_id,
         topic,
-        payload: payloadResult.data,
+        payload: notificationResult.data as ValidPayload,
         status
     };
 };
 
 /**
  * Validate and group outbox entries by topic
- * @returns Map of topic to validated entries, plus count of validation failures
  */
 export const validateAndGroupByTopic = (entries: OutboxDocument[]): {
-    groupedByTopic: Map<OUTBOX_TOPICS, ValidatedOutboxEntry[]>;
+    groupedByTopic: Map<string, ValidatedOutboxEntry[]>;
     validationFailedCount: number;
 } => {
-    const groupedByTopic = new Map<OUTBOX_TOPICS, ValidatedOutboxEntry[]>();
+    const groupedByTopic = new Map<string, ValidatedOutboxEntry[]>();
     let validationFailedCount = 0;
 
     for (const entry of entries) {

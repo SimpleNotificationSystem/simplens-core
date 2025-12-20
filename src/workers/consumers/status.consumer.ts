@@ -1,6 +1,6 @@
 import { Consumer, EachMessagePayload } from "kafkajs";
 import { kafka } from "@src/config/kafka.config.js";
-import { TOPICS, NOTIFICATION_STATUS, NOTIFICATION_STATUS_SF, type notification_status_topic } from "@src/types/types.js";
+import { CORE_TOPICS, NOTIFICATION_STATUS, NOTIFICATION_STATUS_SF, type notification_status_topic } from "@src/types/types.js";
 import { safeValidateNotificationStatusTopic } from "@src/types/schemas.js";
 import notification_model from "@src/database/models/notification.models.js";
 import { consumerLogger as logger } from "@src/workers/utils/logger.js";
@@ -220,10 +220,10 @@ export const startStatusConsumer = async (): Promise<void> => {
     logger.info("Status consumer connected");
 
     await state.consumer.subscribe({
-        topic: TOPICS.notification_status,
+        topic: CORE_TOPICS.notification_status,
         fromBeginning: false
     });
-    logger.info(`Subscribed to topic: ${TOPICS.notification_status}`);
+    logger.info(`Subscribed to topic: ${CORE_TOPICS.notification_status}`);
 
     state.isConsuming = true;
 

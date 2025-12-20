@@ -1,57 +1,22 @@
 /**
  * Retry notification API
  * Resets a failed notification to pending status for reprocessing
+ * Channel-agnostic
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import { NotificationModel } from '@/lib/models/notification';
+import OutboxModel from '@/lib/models/outbox';
 import { NOTIFICATION_STATUS } from '@/lib/types';
 import mongoose from 'mongoose';
-
-// Outbox model for re-inserting the notification
-const outboxSchema = new mongoose.Schema({
-    notification_id: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Notification',
-        index: true
-    },
-    topic: {
-        type: String,
-        required: true,
-        index: true,
-    },
-    payload: {
-        type: mongoose.Schema.Types.Mixed,
-        required: true
-    },
-    status: {
-        type: String,
-        enum: ['pending', 'processing', 'published'],
-        default: 'pending',
-        index: true,
-    },
-    claimed_by: {
-        type: String,
-        default: null,
-        index: true,
-    },
-    claimed_at: {
-        type: Date,
-        default: null,
-    },
-}, {
-    timestamps: {
-        createdAt: 'created_at',
-        updatedAt: 'updated_at',
-    },
-});
-
-const OutboxModel = mongoose.models.Outbox || mongoose.model('Outbox', outboxSchema);
 
 interface RouteParams {
     params: Promise<{ id: string }>;
 }
+
+// Helper to get topic from channel
+const getTopicForChannel = (channel: string): string => `${channel}_notification`;
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
     try {
@@ -93,24 +58,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                     { session }
                 );
 
-                // Determine the topic based on channel
-                const topic = notification.channel === 'email'
-                    ? 'email_notification'
-                    : 'whatsapp_notification';
+                // Determine the topic based on channel dynamically
+                const topic = getTopicForChannel(notification.channel);
 
-                // Build the payload for the outbox
+                // Build the payload for the outbox (channel-agnostic)
                 const payload = {
                     notification_id: notification._id,
                     request_id: notification.request_id,
                     client_id: notification.client_id,
                     channel: notification.channel,
                     recipient: notification.recipient,
-                    content: notification.channel === 'email'
-                        ? {
-                            subject: notification.content.email?.subject,
-                            message: notification.content.email?.message
-                        }
-                        : { message: notification.content.whatsapp?.message },
+                    content: notification.content,
                     variables: notification.variables,
                     webhook_url: notification.webhook_url,
                     retry_count: 0,

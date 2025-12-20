@@ -17,6 +17,7 @@ const SERVICE_LABELS = {
     emailProcessor: 'email-processor',
     whatsappProcessor: 'whatsapp-processor',
     delayedWorker: 'delayed-processor',
+    unifiedProcessor: 'unified-processor',
     redis: 'redis',
     recoveryService: 'recovery-service'
 } as const;
@@ -74,6 +75,7 @@ const SERVICE_EMOJI: Record<ServiceContext, string> = {
     emailProcessor: '📧',
     whatsappProcessor: '💬',
     delayedWorker: '⏰',
+    unifiedProcessor: '🔌',
     redis: '🔴',
     recoveryService: '🔧'
 };
@@ -172,7 +174,7 @@ const createWinstonLogger = (service: ServiceContext) => {
 /**
  * Logger interface matching our usage patterns
  */
-interface Logger {
+export interface Logger {
     info: (message: string, meta?: LogMeta) => void;
     warn: (message: string, meta?: LogMeta) => void;
     error: (message: string, meta?: LogMeta | unknown) => void;

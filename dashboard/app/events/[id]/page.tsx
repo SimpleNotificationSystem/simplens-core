@@ -244,20 +244,20 @@ export default function EventDetailPage({ params }: PageProps) {
                             <div className="flex items-center gap-2">
                                 <User className="h-4 w-4 text-muted-foreground" />
                                 <span className="text-sm text-muted-foreground">User ID:</span>
-                                <span className="font-mono text-sm">{notification.recipient.user_id}</span>
+                                <span className="font-mono text-sm">{String(notification.recipient.user_id || '')}</span>
                             </div>
-                            {notification.recipient.email && (
+                            {Boolean(notification.recipient.email) && (
                                 <div className="flex items-center gap-2">
                                     <Mail className="h-4 w-4 text-muted-foreground" />
                                     <span className="text-sm text-muted-foreground">Email:</span>
-                                    <span className="text-sm">{notification.recipient.email}</span>
+                                    <span className="text-sm">{String(notification.recipient.email)}</span>
                                 </div>
                             )}
-                            {notification.recipient.phone && (
+                            {Boolean(notification.recipient.phone) && (
                                 <div className="flex items-center gap-2">
                                     <Phone className="h-4 w-4 text-muted-foreground" />
                                     <span className="text-sm text-muted-foreground">Phone:</span>
-                                    <span className="text-sm">{notification.recipient.phone}</span>
+                                    <span className="text-sm">{String(notification.recipient.phone)}</span>
                                 </div>
                             )}
                             <Separator />
@@ -278,29 +278,38 @@ export default function EventDetailPage({ params }: PageProps) {
                             <CardDescription>Message content for this notification</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            {notification.channel === "email" && notification.content.email && (
+                            {notification.channel === "email" && (notification.content as Record<string, { subject?: string; message?: string }>).email && (
                                 <div className="space-y-4">
-                                    {notification.content.email.subject && (
+                                    {(notification.content as Record<string, { subject?: string; message?: string }>).email?.subject && (
                                         <div>
                                             <span className="text-sm font-medium">Subject:</span>
-                                            <p className="mt-1 text-sm">{notification.content.email.subject}</p>
+                                            <p className="mt-1 text-sm">{String((notification.content as Record<string, { subject?: string }>).email?.subject)}</p>
                                         </div>
                                     )}
                                     <div>
                                         <span className="text-sm font-medium">Message:</span>
                                         <div
                                             className="mt-2 p-4 bg-muted rounded-lg text-sm"
-                                            dangerouslySetInnerHTML={{ __html: notification.content.email.message }}
+                                            dangerouslySetInnerHTML={{ __html: String((notification.content as Record<string, { message?: string }>).email?.message || '') }}
                                         />
                                     </div>
                                 </div>
                             )}
-                            {notification.channel === "whatsapp" && notification.content.whatsapp && (
+                            {notification.channel === "whatsapp" && (notification.content as Record<string, { message?: string }>).whatsapp && (
                                 <div>
                                     <span className="text-sm font-medium">Message:</span>
                                     <p className="mt-2 p-4 bg-muted rounded-lg text-sm whitespace-pre-wrap">
-                                        {notification.content.whatsapp.message}
+                                        {String((notification.content as Record<string, { message?: string }>).whatsapp?.message || '')}
                                     </p>
+                                </div>
+                            )}
+                            {/* Generic content fallback for other channels */}
+                            {notification.channel !== "email" && notification.channel !== "whatsapp" && (
+                                <div>
+                                    <span className="text-sm font-medium">Content:</span>
+                                    <pre className="mt-2 p-4 bg-muted rounded-lg text-xs overflow-auto">
+                                        {JSON.stringify(notification.content, null, 2)}
+                                    </pre>
                                 </div>
                             )}
                         </CardContent>

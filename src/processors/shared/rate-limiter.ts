@@ -1,11 +1,13 @@
 /**
  * Token Bucket Rate Limiter using Redis
  * Controls the rate at which notifications are sent to external services
+ * 
+ * Gets rate limit configuration from plugins or environment defaults.
  */
 
 import { getRedisClient } from '@src/config/redis.config.js';
 import { env } from '@src/config/env.config.js';
-import { CHANNEL } from '@src/types/types.js';
+import { getRateLimitConfig as getPluginRateLimitConfig } from '@src/plugins/index.js';
 
 // Redis key prefixes
 const TOKENS_KEY_PREFIX = 'ratelimit:tokens';
@@ -16,26 +18,31 @@ interface RateLimitConfig {
     refillRate: number; // tokens per second
 }
 
+// Default rate limit config
+const DEFAULT_RATE_LIMIT: RateLimitConfig = {
+    maxTokens: 100,
+    refillRate: 10,
+};
+
 /**
  * Get rate limit configuration for a channel
+ * Priority: Plugin config > Default
  */
-const getConfig = (channel: CHANNEL): RateLimitConfig => {
-    if (channel === CHANNEL.email) {
-        return {
-            maxTokens: env.EMAIL_RATE_LIMIT_TOKENS,
-            refillRate: env.EMAIL_RATE_LIMIT_REFILL_RATE
-        };
+const getConfig = (channel: string): RateLimitConfig => {
+    // Try plugin registry first
+    const pluginConfig = getPluginRateLimitConfig(channel);
+    if (pluginConfig) {
+        return pluginConfig;
     }
-    return {
-        maxTokens: env.WHATSAPP_RATE_LIMIT_TOKENS,
-        refillRate: env.WHATSAPP_RATE_LIMIT_REFILL_RATE
-    };
+
+    // Default config for all channels
+    return DEFAULT_RATE_LIMIT;
 };
 
 /**
  * Build Redis keys for a channel
  */
-const buildKeys = (channel: CHANNEL): { tokensKey: string; lastRefillKey: string } => {
+const buildKeys = (channel: string): { tokensKey: string; lastRefillKey: string } => {
     return {
         tokensKey: `${TOKENS_KEY_PREFIX}:${channel}`,
         lastRefillKey: `${LAST_REFILL_KEY_PREFIX}:${channel}`
@@ -55,13 +62,13 @@ export interface RateLimitResult {
  * Try to consume a token from the bucket
  * Uses Redis Lua script for atomic operation
  */
-export const consumeToken = async (channel: CHANNEL): Promise<RateLimitResult> => {
+export const consumeToken = async (channel: string): Promise<RateLimitResult> => {
     const redis = getRedisClient();
     const config = getConfig(channel);
     const { tokensKey, lastRefillKey } = buildKeys(channel);
-    
+
     const now = Date.now();
-    
+
     // Lua script for atomic token bucket operation
     const luaScript = `
         local tokens_key = KEYS[1]
@@ -93,7 +100,7 @@ export const consumeToken = async (channel: CHANNEL): Promise<RateLimitResult> =
             return { 0, new_tokens, wait_time }  -- denied, remaining, wait_time
         end
     `;
-    
+
     const result = await redis.eval(
         luaScript,
         2,
@@ -103,9 +110,9 @@ export const consumeToken = async (channel: CHANNEL): Promise<RateLimitResult> =
         config.refillRate.toString(),
         now.toString()
     ) as [number, number, number?];
-    
+
     const [allowed, remainingTokens, retryAfterMs] = result;
-    
+
     return {
         allowed: allowed === 1,
         remainingTokens: Math.floor(remainingTokens),
@@ -116,30 +123,30 @@ export const consumeToken = async (channel: CHANNEL): Promise<RateLimitResult> =
 /**
  * Get current token count without consuming
  */
-export const getTokenCount = async (channel: CHANNEL): Promise<number> => {
+export const getTokenCount = async (channel: string): Promise<number> => {
     const redis = getRedisClient();
     const config = getConfig(channel);
     const { tokensKey, lastRefillKey } = buildKeys(channel);
-    
+
     const now = Date.now();
-    
+
     const [tokensStr, lastRefillStr] = await redis.mget(tokensKey, lastRefillKey);
-    
+
     const currentTokens = tokensStr ? parseFloat(tokensStr) : config.maxTokens;
     const lastRefill = lastRefillStr ? parseInt(lastRefillStr) : now;
-    
+
     const elapsedSeconds = (now - lastRefill) / 1000;
     const tokensToAdd = elapsedSeconds * config.refillRate;
-    
+
     return Math.min(currentTokens + tokensToAdd, config.maxTokens);
 };
 
 /**
  * Reset rate limiter for a channel (for testing)
  */
-export const resetRateLimiter = async (channel: CHANNEL): Promise<void> => {
+export const resetRateLimiter = async (channel: string): Promise<void> => {
     const redis = getRedisClient();
     const { tokensKey, lastRefillKey } = buildKeys(channel);
-    
+
     await redis.del(tokensKey, lastRefillKey);
 };

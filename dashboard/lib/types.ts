@@ -1,12 +1,10 @@
 /**
  * Types for the admin dashboard
- * Mirrors the notification service types
+ * Channel-agnostic - supports any channel registered via plugins
  */
 
-export enum CHANNEL {
-    email = "email",
-    whatsapp = "whatsapp"
-}
+// Channel is a dynamic string, not an enum
+export type Channel = string;
 
 export enum NOTIFICATION_STATUS {
     delivered = "delivered",
@@ -15,32 +13,21 @@ export enum NOTIFICATION_STATUS {
     failed = "failed"
 }
 
+// Generic recipient - structure depends on channel
 export interface Recipient {
     user_id: string;
-    email?: string;
-    phone?: string;
+    [key: string]: unknown;
 }
 
-export interface EmailContent {
-    subject?: string;
-    message: string;
-}
-
-export interface WhatsappContent {
-    message: string;
-}
-
-export interface NotificationContent {
-    email?: EmailContent;
-    whatsapp?: WhatsappContent;
-}
+// Generic content - structure depends on channel
+export type NotificationContent = Record<string, unknown>;
 
 export interface Notification {
     _id: string;
     request_id: string;
     client_id: string;
     client_name?: string;
-    channel: CHANNEL;
+    channel: Channel;
     recipient: Recipient;
     content: NotificationContent;
     variables?: Record<string, string>;
@@ -59,10 +46,7 @@ export interface DashboardStats {
     processing: number;
     delivered: number;
     failed: number;
-    byChannel: {
-        email: number;
-        whatsapp: number;
-    };
+    byChannel: Record<string, number>;
 }
 
 export interface TrendDataPoint {
@@ -82,7 +66,7 @@ export interface PaginatedResponse<T> {
 
 export interface NotificationFilters {
     status?: NOTIFICATION_STATUS;
-    channel?: CHANNEL;
+    channel?: Channel;
     search?: string;
     from?: string;
     to?: string;
@@ -108,4 +92,31 @@ export interface Alert {
     resolved_at: Date | null;
     created_at: Date;
     updated_at: Date;
+}
+
+export interface FieldDefinition {
+    name: string;
+    type: 'string' | 'email' | 'phone' | 'text' | 'number' | 'boolean';
+    required: boolean;
+    description?: string;
+}
+
+export interface ProviderMetadata {
+    id: string;
+    name: string;
+    displayName: string;
+    description?: string;
+    priority: number;
+    recipientFields: FieldDefinition[];
+    contentFields: FieldDefinition[];
+}
+
+export interface ChannelMetadata {
+    providers: ProviderMetadata[];
+    default?: string;
+    fallback?: string;
+}
+
+export interface PluginMetadata {
+    channels: Record<string, ChannelMetadata>;
 }

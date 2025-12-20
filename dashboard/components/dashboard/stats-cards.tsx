@@ -4,7 +4,10 @@ import useSWR from "swr";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bell, CheckCircle, Clock, AlertTriangle, Mail, MessageCircle, ShieldAlert, LucideIcon } from "lucide-react";
+import {
+    Bell, CheckCircle, Clock, AlertTriangle, Mail, MessageCircle,
+    ShieldAlert, LucideIcon, Activity, Smartphone, Zap
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DashboardStats } from "@/lib/types";
 
@@ -19,121 +22,151 @@ interface StatsCardConfig {
     gradientClass: string;
     bgIconColor: string;
     href?: string;
-    span?: "row-span-2";
+    className?: string; // For grid span overrides
 }
 
-// Reusable Stats Card component with gradient background and large icon
+// Deterministic color generator for dynamic channels
+const getChannelStyle = (channel: string) => {
+    const styles = [
+        {
+            iconColor: "text-purple-600 dark:text-purple-300",
+            gradientClass: "from-purple-100 to-purple-200 dark:from-purple-900/60 dark:to-purple-800/60",
+            bgIconColor: "text-purple-500/20 dark:text-purple-400/20",
+        },
+        {
+            iconColor: "text-pink-600 dark:text-pink-300",
+            gradientClass: "from-pink-100 to-pink-200 dark:from-pink-900/60 dark:to-pink-800/60",
+            bgIconColor: "text-pink-500/20 dark:text-pink-400/20",
+        },
+        {
+            iconColor: "text-indigo-600 dark:text-indigo-300",
+            gradientClass: "from-indigo-100 to-indigo-200 dark:from-indigo-900/60 dark:to-indigo-800/60",
+            bgIconColor: "text-indigo-500/20 dark:text-indigo-400/20",
+        },
+        {
+            iconColor: "text-teal-600 dark:text-teal-300",
+            gradientClass: "from-teal-100 to-teal-200 dark:from-teal-900/60 dark:to-teal-800/60",
+            bgIconColor: "text-teal-500/20 dark:text-teal-400/20",
+        }
+    ];
+
+    // Hash string to index
+    let hash = 0;
+    for (let i = 0; i < channel.length; i++) {
+        hash = channel.charCodeAt(i) + ((hash << 5) - hash);
+    }
+
+    return styles[Math.abs(hash) % styles.length];
+};
+
 function StatsCard({ card }: { card: StatsCardConfig }) {
-    const content = (
+    const isLarge = card.className?.includes("row-span-2");
+
+    const Content = (
         <Card className={cn(
-            "relative overflow-hidden border-0 shadow-sm h-full",
-            "bg-linear-to-br",
+            "relative overflow-hidden border-0 shadow-sm h-full transition-all duration-200",
+            "bg-linear-to-br hover:shadow-md",
             card.gradientClass,
-            card.span,
-            card.href && "hover:shadow-md transition-shadow cursor-pointer"
+            card.className
         )}>
-            {/* Large background icon */}
+            {/* Abstract Background Decoration */}
+            <div className={cn(
+                "absolute -right-6 -bottom-6 rounded-full opacity-20 blur-2xl",
+                card.bgIconColor.replace("text-", "bg-"),
+                isLarge ? "h-48 w-48" : "h-32 w-32"
+            )} />
+
             <card.icon
                 className={cn(
-                    "absolute -bottom-1 -right-1 h-24 w-24 rotate-10",
-                    card.bgIconColor,
-                    card.span && "h-32 w-32"
+                    "absolute -bottom-2 -right-2 rotate-12 opacity-10 transition-transform group-hover:scale-110 duration-500",
+                    card.iconColor,
+                    isLarge ? "h-32 w-32" : "h-24 w-24"
                 )}
             />
 
             <CardHeader className="flex flex-row items-center gap-2 space-y-0 pb-2 relative z-10">
-                <card.icon className={cn("h-5 w-5", card.iconColor)} />
-                <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
+                <div className={cn("p-2 rounded-lg bg-white/50 dark:bg-black/20 backdrop-blur-sm", card.iconColor)}>
+                    <card.icon className="h-5 w-5" />
+                </div>
+                <CardTitle className="text-sm font-medium text-foreground/80">{card.title}</CardTitle>
             </CardHeader>
 
-            <CardContent className={cn("relative z-10", card.span && "flex flex-col justify-center flex-1")}>
-                <div className={cn("text-4xl font-bold tracking-tight", card.span && "text-5xl")}>{card.value}</div>
-                <p className="text-sm text-muted-foreground mt-1">{card.description}</p>
+            <CardContent className={cn("relative z-10 pt-2", isLarge && "flex flex-col justify-center flex-1")}>
+                <div className={cn("font-bold tracking-tight", isLarge ? "text-5xl" : "text-3xl")}>{card.value}</div>
+                <p className="text-xs font-medium text-muted-foreground mt-2 flex items-center gap-1">
+                    {card.description}
+                </p>
             </CardContent>
         </Card>
     );
 
     if (card.href) {
-        return <Link href={card.href} className={card.span}>{content}</Link>;
+        return <Link href={card.href} className={cn("block group h-full", card.className)}>{Content}</Link>;
     }
 
-    return content;
+    return <div className={cn("h-full group", card.className)}>{Content}</div>;
 }
 
-// Loading skeleton with gradient placeholder
-function StatsCardSkeleton({ span }: { span?: boolean }) {
+function StatsCardSkeleton({ className }: { className?: string }) {
     return (
-        <Card className={cn("relative overflow-hidden", span && "row-span-2")}>
-            <CardHeader className="flex flex-row items-center gap-2 space-y-0 pb-2">
-                <Skeleton className="h-5 w-5 rounded-full" />
-                <Skeleton className="h-4 w-28" />
+        <Card className={cn("h-32", className)}>
+            <CardHeader className="flex flex-row items-center gap-2 pb-2">
+                <Skeleton className="h-8 w-8 rounded-lg" />
+                <Skeleton className="h-4 w-24" />
             </CardHeader>
             <CardContent>
-                <Skeleton className="h-10 w-20" />
-                <Skeleton className="mt-2 h-4 w-36" />
+                <Skeleton className="h-8 w-16 mb-2" />
+                <Skeleton className="h-3 w-32" />
             </CardContent>
         </Card>
     );
 }
 
-interface AlertStats {
-    count: number;
-}
-
-// Combined Stats Grid: 7 cards in 2 rows, Alerts spans 2 rows
 export function StatsGrid() {
     const { data: stats, isLoading: statsLoading, error: statsError } = useSWR<DashboardStats>(
         "/api/dashboard/stats",
         fetcher,
-        { refreshInterval: 30000 }
+        { refreshInterval: 10000 }
     );
 
-    const { data: alertStats, isLoading: alertsLoading } = useSWR<AlertStats>(
+    const { data: alertStats, isLoading: alertsLoading } = useSWR<{ count: number }>(
         "/api/alerts",
         fetcher,
-        { refreshInterval: 30000 }
+        { refreshInterval: 10000 }
     );
 
     const isLoading = statsLoading || alertsLoading;
 
     if (isLoading) {
         return (
-            <div className="grid gap-4 grid-cols-2 md:grid-cols-4 grid-rows-2">
-                <StatsCardSkeleton span />
-                {[...Array(6)].map((_, i) => (
-                    <StatsCardSkeleton key={i} />
-                ))}
+            <div className="space-y-8">
+                <div className="grid gap-4 grid-cols-1 md:grid-cols-3 md:grid-rows-2 h-[300px]">
+                    <div className="md:row-span-2"><StatsCardSkeleton className="h-full" /></div>
+                    <StatsCardSkeleton /><StatsCardSkeleton />
+                    <StatsCardSkeleton /><StatsCardSkeleton />
+                </div>
+                <div className="h-40 bg-muted/10 rounded-xl animate-pulse" />
             </div>
         );
     }
 
-    if (statsError || !stats) {
-        return (
-            <div className="text-center text-muted-foreground">
-                Failed to load statistics
-            </div>
-        );
-    }
-
-    const deliveryRate = stats.total > 0
-        ? ((stats.delivered / stats.total) * 100).toFixed(1)
-        : "0";
+    if (statsError || !stats) return <div className="text-red-500">Failed to load stats</div>;
 
     const alertCount = alertStats?.count ?? 0;
+    const deliveryRate = stats.total > 0 ? ((stats.delivered / stats.total) * 100).toFixed(1) : "0";
 
-    const cards: StatsCardConfig[] = [
-        // Total Notifications - first card
+    // Fixed Cards Configuration
+    const fixedCards: StatsCardConfig[] = [
         {
             title: "Total Notifications",
             value: stats.total.toLocaleString(),
-            description: `${stats.byChannel.email} email, ${stats.byChannel.whatsapp} WhatsApp`,
+            description: `Total notifications`,
             icon: Bell,
             iconColor: "text-blue-600 dark:text-blue-400",
             gradientClass: "from-white to-blue-100 dark:from-blue-950/50 dark:to-blue-900",
             bgIconColor: "text-blue-500/10 dark:text-blue-400/10",
-            span: "row-span-2",
+            className: "md:row-span-2 h-full"
         },
-        // Alerts - second card
         {
             title: "Alerts",
             value: alertCount.toLocaleString(),
@@ -166,7 +199,6 @@ export function StatsGrid() {
             gradientClass: "from-white to-yellow-200 dark:from-yellow-950/50 dark:to-yellow-900",
             bgIconColor: "text-amber-500/10 dark:text-amber-400/10",
         },
-        // Row 2: Failed | Email | WhatsApp
         {
             title: "Failed",
             value: stats.failed.toLocaleString(),
@@ -181,174 +213,93 @@ export function StatsGrid() {
                 : "text-slate-500/10 dark:text-slate-400/10",
             href: "/failed",
         },
-        {
-            title: "Email",
-            value: stats.byChannel.email.toLocaleString(),
-            description: "Total Notifications",
-            icon: Mail,
-            iconColor: "text-purple-600 dark:text-purple-400",
-            gradientClass: "from-white to-purple-100 dark:from-purple-950/50 dark:to-purple-900",
-            bgIconColor: "text-purple-500/10 dark:text-purple-400/10",
-        },
-        {
-            title: "WhatsApp",
-            value: stats.byChannel.whatsapp.toLocaleString(),
-            description: "Total Notifications",
-            icon: MessageCircle,
-            iconColor: "text-emerald-600 dark:text-emerald-400",
-            gradientClass: "from-white to-emerald-100 dark:from-emerald-950/50 dark:to-emerald-900",
-            bgIconColor: "text-emerald-500/10 dark:text-emerald-400/10",
-        },
     ];
 
-    return (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-4 md:grid-rows-2">
-            {cards.map((card) => (
-                <StatsCard key={card.title} card={card} />
-            ))}
-        </div>
-    );
-}
+    // Dynamic Channel Cards
+    const channelCards: StatsCardConfig[] = Object.entries(stats.byChannel).map(([channel, count]) => {
+        // Specific overrides for known plugins
+        const isEmail = channel === 'email';
+        const isWhatsapp = channel === 'whatsapp';
+        const isSms = channel === 'sms';
 
-// Row 1: Total Notifications | Delivered | Pending/Processing
-export function StatsRowOne() {
-    const { data: stats, isLoading, error } = useSWR<DashboardStats>(
-        "/api/dashboard/stats",
-        fetcher,
-        { refreshInterval: 30000 }
-    );
+        let style;
+        let icon = Zap;
 
-    if (isLoading) {
-        return (
-            <div className="grid gap-4 md:grid-cols-3">
-                {[...Array(3)].map((_, i) => (
-                    <StatsCardSkeleton key={i} />
-                ))}
-            </div>
-        );
-    }
+        if (isEmail) {
+            icon = Mail;
+            style = {
+                iconColor: "text-violet-600 dark:text-violet-300",
+                gradientClass: "from-violet-100 to-violet-200 dark:from-violet-900/60 dark:to-violet-800/60",
+                bgIconColor: "text-violet-600",
+            };
+        } else if (isWhatsapp) {
+            icon = MessageCircle;
+            style = {
+                iconColor: "text-emerald-600 dark:text-emerald-300",
+                gradientClass: "from-emerald-100 to-emerald-200 dark:from-emerald-900/60 dark:to-emerald-800/60",
+                bgIconColor: "text-emerald-600",
+            };
+        } else if (isSms) {
+            icon = Smartphone;
+            style = {
+                iconColor: "text-sky-600 dark:text-sky-300",
+                gradientClass: "from-sky-100 to-sky-200 dark:from-sky-900/60 dark:to-sky-800/60",
+                bgIconColor: "text-sky-600",
+            };
+        } else {
+            // Generative style for unknown plugins
+            const genStyle = getChannelStyle(channel);
+            style = {
+                iconColor: genStyle.iconColor,
+                gradientClass: genStyle.gradientClass,
+                bgIconColor: genStyle.bgIconColor.replace("/10", ""), // Clean up format
+            };
+        }
 
-    if (error || !stats) {
-        return (
-            <div className="text-center text-muted-foreground">
-                Failed to load statistics
-            </div>
-        );
-    }
+        const percentage = stats.total > 0 ? ((count / stats.total) * 100).toFixed(1) : "0";
 
-    const deliveryRate = stats.total > 0
-        ? ((stats.delivered / stats.total) * 100).toFixed(1)
-        : "0";
-
-    const cards: StatsCardConfig[] = [
-        {
-            title: "Total Notifications",
-            value: stats.total.toLocaleString(),
-            description: `${stats.byChannel.email} email, ${stats.byChannel.whatsapp} WhatsApp`,
-            icon: Bell,
-            iconColor: "text-blue-600 dark:text-blue-400",
-            gradientClass: "from-white to-blue-100 dark:from-blue-950/50 dark:to-blue-900",
-            bgIconColor: "text-blue-500/10 dark:text-blue-400/10",
-        },
-        {
-            title: "Delivered",
-            value: stats.delivered.toLocaleString(),
-            description: `${deliveryRate}% delivery rate`,
-            icon: CheckCircle,
-            iconColor: "text-green-600 dark:text-green-400",
-            gradientClass: "from-white to-green-100 dark:from-green-950/50 dark:to-green-900",
-            bgIconColor: "text-green-500/10 dark:text-green-400/10",
-        },
-        {
-            title: "Pending / Processing",
-            value: (stats.pending + stats.processing).toLocaleString(),
-            description: `${stats.pending} pending, ${stats.processing} processing`,
-            icon: Clock,
-            iconColor: "text-amber-600 dark:text-amber-400",
-            gradientClass: "from-white to-yellow-200 dark:from-yellow-950/50 dark:to-yellow-900",
-            bgIconColor: "text-amber-500/10 dark:text-amber-400/10",
-        },
-    ];
+        return {
+            title: channel.charAt(0).toUpperCase() + channel.slice(1),
+            value: count.toLocaleString(),
+            description: `${percentage}% of traffic`,
+            icon,
+            ...style
+        };
+    });
 
     return (
-        <div className="grid gap-4 md:grid-cols-3">
-            {cards.map((card) => (
-                <StatsCard key={card.title} card={card} />
-            ))}
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* Main Health Grid - 2x3 Layout */}
+            <section>
+                <div className="grid gap-4 grid-cols-1 md:grid-cols-3 md:grid-rows-2">
+                    {fixedCards.map((card, index) => (
+                        <StatsCard key={card.title} card={card} />
+                    ))}
+                </div>
+            </section>
+
+            {/* Dynamic Channels - Horizontal Scroll */}
+            <section>
+                <h2 className="text-lg font-semibold tracking-tight mb-4 flex items-center gap-2">
+                    <Zap className="h-5 w-5 text-primary" />
+                    Channels
+                </h2>
+                {channelCards.length > 0 ? (
+                    <div className="flex gap-4 overflow-x-auto pb-6 scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+                        {channelCards.map((card) => (
+                            <div key={card.title} className="min-w-[260px] shrink-0">
+                                <StatsCard card={card} />
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-xl bg-muted/20">
+                        <Zap className="h-8 w-8 text-muted-foreground mb-2" />
+                        <p className="text-muted-foreground">No channels active yet.</p>
+                        <p className="text-xs text-muted-foreground/60">Install plugins to see channel metrics.</p>
+                    </div>
+                )}
+            </section>
         </div>
     );
-}
-
-// Row 2: Failed | Email | WhatsApp
-export function StatsRowTwo() {
-    const { data: stats, isLoading, error } = useSWR<DashboardStats>(
-        "/api/dashboard/stats",
-        fetcher,
-        { refreshInterval: 30000 }
-    );
-
-    if (isLoading) {
-        return (
-            <div className="grid gap-4 md:grid-cols-3">
-                {[...Array(3)].map((_, i) => (
-                    <StatsCardSkeleton key={i} />
-                ))}
-            </div>
-        );
-    }
-
-    if (error || !stats) {
-        return null;
-    }
-
-    const cards: StatsCardConfig[] = [
-        {
-            title: "Failed",
-            value: stats.failed.toLocaleString(),
-            description: stats.failed > 0 ? "Requires attention" : "All clear",
-            icon: AlertTriangle,
-            iconColor: stats.failed > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground",
-            gradientClass: stats.failed > 0
-                ? "from-white to-red-200 dark:from-red-950/50 dark:to-red-900"
-                : "from-white to-gray-100 dark:from-gray-900/50 dark:to-gray-800",
-            bgIconColor: stats.failed > 0
-                ? "text-red-500/10 dark:text-red-400/10"
-                : "text-gray-500/10 dark:text-gray-400/10",
-        },
-        {
-            title: "Email",
-            value: stats.byChannel.email.toLocaleString(),
-            description: "Total Notifications",
-            icon: Mail,
-            iconColor: "text-purple-600 dark:text-purple-400",
-            gradientClass: "from-white to-purple-100 dark:from-purple-950/50 dark:to-purple-900",
-            bgIconColor: "text-purple-500/10 dark:text-purple-400/10",
-        },
-        {
-            title: "WhatsApp",
-            value: stats.byChannel.whatsapp.toLocaleString(),
-            description: "Total Notifications",
-            icon: MessageCircle,
-            iconColor: "text-emerald-600 dark:text-emerald-400",
-            gradientClass: "from-white to-emerald-100 dark:from-emerald-950/50 dark:to-emerald-900",
-            bgIconColor: "text-emerald-500/10 dark:text-emerald-400/10",
-        },
-    ];
-
-    return (
-        <div className="grid gap-4 md:grid-cols-3">
-            {cards.map((card) => (
-                <StatsCard key={card.title} card={card} />
-            ))}
-        </div>
-    );
-}
-
-// Legacy exports for backwards compatibility
-export function StatsCards() {
-    return <StatsRowOne />;
-}
-
-export function ChannelCards() {
-    return <StatsRowTwo />;
 }

@@ -1,10 +1,11 @@
 /**
  * Status Producer - Publishes notification status updates to Kafka
+ * Channel-agnostic
  */
 
 import { Producer, Partitioners } from 'kafkajs';
 import { kafka } from '@src/config/kafka.config.js';
-import { TOPICS, type notification_status_topic } from '@src/types/types.js';
+import { CORE_TOPICS, type notification_status_topic } from '@src/types/types.js';
 
 let producer: Producer | null = null;
 
@@ -32,14 +33,13 @@ export const publishStatus = async (status: notification_status_topic): Promise<
         throw new Error('Status producer not initialized. Call initStatusProducer() first.');
     }
 
-    // Use acks: -1 for durability - wait for all in-sync replicas
     await producer.send({
-        topic: TOPICS.notification_status,
+        topic: CORE_TOPICS.notification_status,
         messages: [{
-            key: status.notification_id.toString(),
+            key: status.notification_id?.toString() || '',
             value: JSON.stringify(status)
         }],
-        acks: -1,  // Wait for all replicas to acknowledge
+        acks: -1,
         timeout: 30000
     });
 };

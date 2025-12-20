@@ -74,7 +74,7 @@ export function RecentActivity() {
                                     <div className="flex items-center gap-2">
                                         <ChannelBadge channel={notification.channel} />
                                         <span className="text-sm font-medium truncate max-w-[200px]">
-                                            {notification.recipient.email || notification.recipient.phone}
+                                            {String(notification.recipient.email || notification.recipient.phone || notification.recipient.user_id || '')}
                                         </span>
                                     </div>
                                     <span className="text-xs text-muted-foreground">

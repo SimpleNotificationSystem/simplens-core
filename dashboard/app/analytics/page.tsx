@@ -29,9 +29,15 @@ const STATUS_COLORS = {
     failed: "#ef4444",
 };
 
-const CHANNEL_COLORS = {
-    email: "#a855f7",
-    whatsapp: "#10b981",
+// Dynamic channel colors with fallback
+const getChannelColor = (channel: string, index: number): string => {
+    const knownColors: Record<string, string> = {
+        email: "#a855f7",
+        whatsapp: "#10b981",
+        sms: "#3b82f6",
+    };
+    const fallbackColors = ["#8b5cf6", "#06b6d4", "#f59e0b", "#ec4899", "#84cc16"];
+    return knownColors[channel] || fallbackColors[index % fallbackColors.length];
 };
 
 export default function AnalyticsPage() {
@@ -79,10 +85,14 @@ export default function AnalyticsPage() {
         { name: "Failed", value: stats.failed, color: STATUS_COLORS.failed },
     ].filter((d) => d.value > 0);
 
-    const channelData = [
-        { name: "Email", value: stats.byChannel.email, color: CHANNEL_COLORS.email },
-        { name: "WhatsApp", value: stats.byChannel.whatsapp, color: CHANNEL_COLORS.whatsapp },
-    ].filter((d) => d.value > 0);
+    // Build channel data dynamically from byChannel record
+    const channelData = Object.entries(stats.byChannel)
+        .map(([channel, count], index) => ({
+            name: channel.charAt(0).toUpperCase() + channel.slice(1),
+            value: count,
+            color: getChannelColor(channel, index),
+        }))
+        .filter((d) => d.value > 0);
 
     const deliveryRate = stats.total > 0 ? ((stats.delivered / stats.total) * 100).toFixed(1) : "0";
     const failureRate = stats.total > 0 ? ((stats.failed / stats.total) * 100).toFixed(1) : "0";
@@ -241,7 +251,7 @@ export default function AnalyticsPage() {
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Channel Comparison</CardTitle>
-                                    <CardDescription>Email vs WhatsApp notifications</CardDescription>
+                                    <CardDescription>Notifications by channel</CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     <ResponsiveContainer width="100%" height={300}>

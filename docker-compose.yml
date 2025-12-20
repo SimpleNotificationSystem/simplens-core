@@ -148,6 +148,11 @@ services:
       WHATSAPP_PARTITION: ${WHATSAPP_PARTITION:-1}
       DELAYED_PARTITION: ${DELAYED_PARTITION:-1}
       NOTIFICATION_STATUS_PARTITION: ${NOTIFICATION_STATUS_PARTITION:-1}
+      # Plugin Configuration - needed for dynamic topic creation
+      SIMPLENS_CONFIG_PATH: /app/simplens.config.yaml
+    volumes:
+      # Mount plugin config for dynamic topic creation
+      - ./simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/api/server.js" ]
     depends_on:
       mongo:
@@ -199,65 +204,35 @@ services:
       - ns-network
     restart: unless-stopped
 
-  # Email Processor - Consumes from email_notification topic, sends emails via SMTP
-  email-processor:
+  # Unified Notification Processor - Uses plugin system for all channels
+  notification-processor:
     image: simplens:latest
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
       REDIS_URL: redis://redis:6379
       BROKERS: kafka:9093
-      # Email SMTP Configuration
+      # Plugin Configuration - path to simplens.config.yaml
+      SIMPLENS_CONFIG_PATH: /app/simplens.config.yaml
+      # Processor Mode - 'all' for all channels, or specific channel name
+      PROCESSOR_CHANNEL: ${PROCESSOR_CHANNEL:-all}
+      # Retry Configuration
+      MAX_RETRY_COUNT: ${MAX_RETRY_COUNT:-5}
+      IDEMPOTENCY_TTL_SECONDS: ${IDEMPOTENCY_TTL_SECONDS:-86400}
+      PROCESSING_TTL_SECONDS: ${PROCESSING_TTL_SECONDS:-120}
+      # Gmail Plugin Configuration (simplens-plugin-gmail)
       EMAIL_HOST: ${EMAIL_HOST:-smtp.gmail.com}
       EMAIL_PORT: ${EMAIL_PORT:-587}
       EMAIL_USER: ${EMAIL_USER:-}
       EMAIL_PASS: ${EMAIL_PASS:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
-      # Rate Limiting
-      EMAIL_RATE_LIMIT_TOKENS: ${EMAIL_RATE_LIMIT_TOKENS:-100}
-      EMAIL_RATE_LIMIT_REFILL_RATE: ${EMAIL_RATE_LIMIT_REFILL_RATE:-10}
-      # Retry Configuration
-      MAX_RETRY_COUNT: ${MAX_RETRY_COUNT:-5}
-      IDEMPOTENCY_TTL_SECONDS: ${IDEMPOTENCY_TTL_SECONDS:-86400}
-      PROCESSING_TTL_SECONDS: ${PROCESSING_TTL_SECONDS:-120}
       # Logging
       LOKI_URL: http://loki:3100
       LOG_LEVEL: ${LOG_LEVEL:-info}
-    command: [ "node", "dist/processors/email/email.processor.js" ]
-    depends_on:
-      mongo:
-        condition: service_healthy
-      kafka:
-        condition: service_started
-      redis:
-        condition: service_healthy
-      loki:
-        condition: service_healthy
-      api:
-        condition: service_healthy
-    networks:
-      - ns-network
-    restart: unless-stopped
-
-  # WhatsApp Processor - Consumes from whatsapp_notification topic, sends WhatsApp messages
-  whatsapp-processor:
-    image: simplens:latest
-    environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
-      REDIS_URL: redis://redis:6379
-      BROKERS: kafka:9093
-      # Rate Limiting
-      WHATSAPP_RATE_LIMIT_TOKENS: ${WHATSAPP_RATE_LIMIT_TOKENS:-50}
-      WHATSAPP_RATE_LIMIT_REFILL_RATE: ${WHATSAPP_RATE_LIMIT_REFILL_RATE:-5}
-      # Retry Configuration
-      MAX_RETRY_COUNT: ${MAX_RETRY_COUNT:-5}
-      IDEMPOTENCY_TTL_SECONDS: ${IDEMPOTENCY_TTL_SECONDS:-86400}
-      PROCESSING_TTL_SECONDS: ${PROCESSING_TTL_SECONDS:-120}
-      # Logging
-      LOKI_URL: http://loki:3100
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-    command: [ "node", "dist/processors/whatsapp/whatsapp.processor.js" ]
+    command: [ "node", "dist/processors/unified/unified.processor.js" ]
+    volumes:
+      # Mount plugin config file
+      - ./simplens.config.yaml:/app/simplens.config.yaml:ro
     depends_on:
       mongo:
         condition: service_healthy

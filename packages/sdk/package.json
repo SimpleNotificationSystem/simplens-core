@@ -1,0 +1,35 @@
+{
+    "name": "simplens-sdk",
+    "version": "1.0.1",
+    "description": "SDK for building SimpleNS notification provider plugins",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "type": "module",
+    "scripts": {
+        "build": "tsc",
+        "prepublishOnly": "npm run build"
+    },
+    "keywords": [
+        "simplens",
+        "notification",
+        "plugin",
+        "sdk"
+    ],
+    "author": "SimpleNS Team",
+    "license": "MIT",
+    "dependencies": {
+        "zod": "^3.22.0"
+    },
+    "devDependencies": {
+        "@types/node": "^20.0.0",
+        "typescript": "^5.0.0"
+    },
+    "files": [
+        "dist",
+        "README.md"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/simplens/sdk"
+    }
+}
