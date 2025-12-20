@@ -1,10 +1,22 @@
 {
-    "name": "simplens-sdk",
-    "version": "1.0.1",
+    "name": "@simplens/sdk",
+    "version": "1.0.2",
     "description": "SDK for building SimpleNS notification provider plugins",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "type": "module",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "default": "./dist/index.js"
+        },
+        "./*": {
+            "types": "./dist/*.d.ts",
+            "import": "./dist/*.js",
+            "default": "./dist/*.js"
+        }
+    },
     "scripts": {
         "build": "tsc",
         "prepublishOnly": "npm run build"
@@ -30,6 +42,6 @@
     ],
     "repository": {
         "type": "git",
-        "url": "https://github.com/simplens/sdk"
+        "url": "https://github.com/SimpleNotificationSystem/simplens-core"
     }
 }

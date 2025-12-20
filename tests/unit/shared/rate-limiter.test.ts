@@ -1,9 +1,10 @@
 /**
  * Unit Tests for Rate Limiter Module
  * Tests token bucket rate limiting with mocked Redis
+ * 
+ * Updated for plugin-based architecture - uses dynamic channel strings.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CHANNEL } from '../../../src/types/types.js';
 
 // Mock Redis client
 const mockRedisClient = {
@@ -39,7 +40,7 @@ describe('Rate Limiter Module', () => {
             // Mock: Lua script returns [1, 99] meaning allowed with 99 remaining
             mockRedisClient.eval.mockResolvedValue([1, 99]);
 
-            const result = await consumeToken(CHANNEL.email);
+            const result = await consumeToken('email');
 
             expect(result.allowed).toBe(true);
             expect(result.remainingTokens).toBe(99);
@@ -52,7 +53,7 @@ describe('Rate Limiter Module', () => {
             // Mock: Lua script returns [0, 0, 100] meaning denied, 0 tokens, retry in 100ms
             mockRedisClient.eval.mockResolvedValue([0, 0, 100]);
 
-            const result = await consumeToken(CHANNEL.email);
+            const result = await consumeToken('email');
 
             expect(result.allowed).toBe(false);
             expect(result.remainingTokens).toBe(0);
@@ -64,7 +65,7 @@ describe('Rate Limiter Module', () => {
 
             mockRedisClient.eval.mockResolvedValue([1, 99]);
 
-            await consumeToken(CHANNEL.email);
+            await consumeToken('email');
 
             // Verify the Lua script was called with email configuration
             // eval(script, numKeys, key1, key2, arg1, arg2, arg3)
@@ -75,16 +76,17 @@ describe('Rate Limiter Module', () => {
             expect(callArgs[5]).toBe('10');  // refillRate for email (ARGV[2])
         });
 
-        it('should use whatsapp config for whatsapp channel', async () => {
+        it('should use default config for whatsapp channel', async () => {
             const { consumeToken } = await import('../../../src/processors/shared/rate-limiter.js');
 
-            mockRedisClient.eval.mockResolvedValue([1, 49]);
+            mockRedisClient.eval.mockResolvedValue([1, 99]);
 
-            await consumeToken(CHANNEL.whatsapp);
+            await consumeToken('whatsapp');
 
             const callArgs = mockRedisClient.eval.mock.calls[0];
-            expect(callArgs[4]).toBe('50'); // maxTokens for whatsapp
-            expect(callArgs[5]).toBe('5');  // refillRate for whatsapp
+            // Plugin system defaults all channels to same config now
+            expect(callArgs[4]).toBe('100'); // maxTokens (default)
+            expect(callArgs[5]).toBe('10');  // refillRate (default)
         });
     });
 
@@ -95,7 +97,7 @@ describe('Rate Limiter Module', () => {
             // No existing keys
             mockRedisClient.mget.mockResolvedValue([null, null]);
 
-            const count = await getTokenCount(CHANNEL.email);
+            const count = await getTokenCount('email');
 
             expect(count).toBe(100); // EMAIL_RATE_LIMIT_TOKENS
         });
@@ -107,7 +109,7 @@ describe('Rate Limiter Module', () => {
             // Current tokens = 50, last refill = now (no time passed)
             mockRedisClient.mget.mockResolvedValue(['50', now.toString()]);
 
-            const count = await getTokenCount(CHANNEL.email);
+            const count = await getTokenCount('email');
 
             // Should be approximately 50 (may have slight variation due to timing)
             expect(count).toBeGreaterThanOrEqual(50);
@@ -121,7 +123,7 @@ describe('Rate Limiter Module', () => {
             const oneSecondAgo = Date.now() - 1000;
             mockRedisClient.mget.mockResolvedValue(['50', oneSecondAgo.toString()]);
 
-            const count = await getTokenCount(CHANNEL.email);
+            const count = await getTokenCount('email');
 
             // Should be 50 + 10 = 60 (approximately)
             expect(count).toBeGreaterThanOrEqual(59);
@@ -135,7 +137,7 @@ describe('Rate Limiter Module', () => {
 
             mockRedisClient.del.mockResolvedValue(2);
 
-            await resetRateLimiter(CHANNEL.email);
+            await resetRateLimiter('email');
 
             expect(mockRedisClient.del).toHaveBeenCalledWith(
                 'ratelimit:tokens:email',

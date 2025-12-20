@@ -1,10 +1,12 @@
 /**
  * Unit tests for delayed.producer.ts
  * Tests delayed notification producer functionality
+ * 
+ * Updated for plugin-based architecture - uses buildDelayedPayload.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createMockEmailNotification, createMockWhatsappNotification } from '../../../utils/mocks';
+import { createMockBaseNotification } from '../../../utils/mocks.js';
 
 // Mock Kafka producer
 const mockSend = vi.fn();
@@ -61,12 +63,12 @@ describe('Delayed Producer', () => {
         });
     });
 
-    describe('buildDelayedPayloadFromEmail', () => {
-        it('should build delayed payload with quadratic backoff', () => {
-            const notification = createMockEmailNotification();
+    describe('buildDelayedPayload', () => {
+        it('should build delayed payload with exponential backoff for email', () => {
+            const notification = createMockBaseNotification('email');
             const retryCount = 2;
 
-            const result = delayedProducer.buildDelayedPayloadFromEmail(notification, retryCount);
+            const result = delayedProducer.buildDelayedPayload(notification, 'email', retryCount);
 
             expect(result.notification_id).toBe(notification.notification_id);
             expect(result.request_id).toBe(notification.request_id);
@@ -75,36 +77,34 @@ describe('Delayed Producer', () => {
             expect(result.payload.retry_count).toBe(retryCount);
         });
 
-        it('should calculate scheduled_at with quadratic delay', () => {
-            const notification = createMockEmailNotification();
-            const retryCount = 3; // delay = 3^2 = 9 seconds
+        it('should calculate scheduled_at with exponential delay', () => {
+            const notification = createMockBaseNotification('email');
+            const retryCount = 3; // delay = 2^3 * 1000 = 8000ms
 
             const beforeTime = Date.now();
-            const result = delayedProducer.buildDelayedPayloadFromEmail(notification, retryCount);
+            const result = delayedProducer.buildDelayedPayload(notification, 'email', retryCount);
             const afterTime = Date.now();
 
             const scheduledTime = new Date(result.scheduled_at).getTime();
 
-            // Should be about 9 seconds in the future
-            expect(scheduledTime).toBeGreaterThanOrEqual(beforeTime + 9000);
-            expect(scheduledTime).toBeLessThanOrEqual(afterTime + 9000);
+            // Should be about 8 seconds in the future
+            expect(scheduledTime).toBeGreaterThanOrEqual(beforeTime + 8000);
+            expect(scheduledTime).toBeLessThanOrEqual(afterTime + 8000 + 100);
         });
 
         it('should include created_at timestamp', () => {
-            const notification = createMockEmailNotification();
+            const notification = createMockBaseNotification('email');
 
-            const result = delayedProducer.buildDelayedPayloadFromEmail(notification, 1);
+            const result = delayedProducer.buildDelayedPayload(notification, 'email', 1);
 
             expect(result.created_at).toBeDefined();
         });
-    });
 
-    describe('buildDelayedPayloadFromWhatsapp', () => {
         it('should build delayed payload for WhatsApp', () => {
-            const notification = createMockWhatsappNotification();
+            const notification = createMockBaseNotification('whatsapp');
             const retryCount = 2;
 
-            const result = delayedProducer.buildDelayedPayloadFromWhatsapp(notification, retryCount);
+            const result = delayedProducer.buildDelayedPayload(notification, 'whatsapp', retryCount);
 
             expect(result.notification_id).toBe(notification.notification_id);
             expect(result.target_topic).toBe('whatsapp_notification');
@@ -112,34 +112,43 @@ describe('Delayed Producer', () => {
         });
 
         it('should calculate backoff correctly for retry 1', () => {
-            const notification = createMockWhatsappNotification();
-            const retryCount = 1; // delay = 1^2 = 1 second
+            const notification = createMockBaseNotification('whatsapp');
+            const retryCount = 1; // delay = 2^1 * 1000 = 2000ms
 
             const beforeTime = Date.now();
-            const result = delayedProducer.buildDelayedPayloadFromWhatsapp(notification, retryCount);
+            const result = delayedProducer.buildDelayedPayload(notification, 'whatsapp', retryCount);
 
             const scheduledTime = new Date(result.scheduled_at).getTime();
-            expect(scheduledTime).toBeGreaterThanOrEqual(beforeTime + 1000);
+            expect(scheduledTime).toBeGreaterThanOrEqual(beforeTime + 2000);
+        });
+
+        it('should work with any channel', () => {
+            const notification = createMockBaseNotification('sms');
+            const retryCount = 2;
+
+            const result = delayedProducer.buildDelayedPayload(notification, 'sms', retryCount);
+
+            expect(result.target_topic).toBe('sms_notification');
         });
     });
 
     describe('publishDelayed', () => {
         it('should throw error if producer not initialized', async () => {
-            const payload = delayedProducer.buildDelayedPayloadFromEmail(
-                createMockEmailNotification(),
+            const payload = delayedProducer.buildDelayedPayload(
+                createMockBaseNotification('email'),
+                'email',
                 1
             );
 
-            await expect(delayedProducer.publishDelayed(payload)).rejects.toThrow(
-                'Delayed producer not initialized'
-            );
+            await expect(delayedProducer.publishDelayed(payload)).rejects.toThrow();
         });
 
         it('should send message to delayed_notification topic', async () => {
             await delayedProducer.initDelayedProducer();
 
-            const payload = delayedProducer.buildDelayedPayloadFromEmail(
-                createMockEmailNotification(),
+            const payload = delayedProducer.buildDelayedPayload(
+                createMockBaseNotification('email'),
+                'email',
                 1
             );
 

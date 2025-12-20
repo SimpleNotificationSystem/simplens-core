@@ -1,12 +1,13 @@
 /**
  * Integration Tests for Notification API Controller
  * Tests the complete API endpoint behavior with database mocks
+ * 
+ * Updated for plugin-based architecture - uses dynamic channel strings.
  */
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import { randomUUID } from 'crypto';
-import { CHANNEL } from '../../../src/types/types.js';
 
 // Create a minimal express app for testing
 const createTestApp = async () => {
@@ -86,7 +87,7 @@ describe('Notification API Controller', () => {
             const validRequest = {
                 request_id: randomUUID(),
                 client_id: randomUUID(),
-                channel: [CHANNEL.email],
+                channel: ['email'],
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -113,7 +114,7 @@ describe('Notification API Controller', () => {
             const validRequest = {
                 request_id: randomUUID(),
                 client_id: randomUUID(),
-                channel: [CHANNEL.email],
+                channel: ['email'],
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -138,7 +139,7 @@ describe('Notification API Controller', () => {
             const validRequest = {
                 request_id: randomUUID(),
                 client_id: randomUUID(),
-                channel: [CHANNEL.email],
+                channel: ['email'],
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -163,7 +164,7 @@ describe('Notification API Controller', () => {
         it('should return 400 for invalid request body', async () => {
             const invalidRequest = {
                 // Missing required fields
-                channel: [CHANNEL.email],
+                channel: ['email'],
             };
 
             const response = await request(app)
@@ -175,38 +176,14 @@ describe('Notification API Controller', () => {
             expect(response.body.errors).toBeDefined();
         });
 
-        it('should return 400 when email channel but no email in recipient', async () => {
-            const invalidRequest = {
-                request_id: randomUUID(),
-                client_id: randomUUID(),
-                channel: [CHANNEL.email],
-                recipient: {
-                    user_id: 'user-123',
-                    // email is missing
-                },
-                content: {
-                    email: {
-                        subject: 'Test',
-                        message: 'Test',
-                    },
-                },
-                webhook_url: 'https://webhook.example.com/callback',
-            };
-
-            const response = await request(app)
-                .post('/api/notification')
-                .set('Authorization', 'Bearer test-api-key')
-                .send(invalidRequest);
-
-            expect(response.status).toBe(400);
-        });
+        // Note: Email in recipient validation now happens at plugin level, not API level
     });
 
     describe('POST /api/notification/batch', () => {
         it('should return 202 for valid batch notification', async () => {
             const validRequest = {
                 client_id: randomUUID(),
-                channel: [CHANNEL.email],
+                channel: ['email'],
                 content: {
                     email: {
                         subject: 'Batch Test',
@@ -238,7 +215,7 @@ describe('Notification API Controller', () => {
 
         it('should return 400 for invalid batch request', async () => {
             const invalidRequest = {
-                channel: [CHANNEL.email],
+                channel: ['email'],
                 // Missing required fields
             };
 

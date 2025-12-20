@@ -1,13 +1,15 @@
 /**
  * Integration tests for outbox.models.ts
  * Tests MongoDB outbox model with in-memory database
+ * 
+ * Updated for plugin-based architecture - uses dynamic topic strings.
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import mongoose from 'mongoose';
-import { connectTestDb, disconnectTestDb, clearTestDb } from '../../utils/db';
-import { TOPICS, OUTBOX_STATUS, CHANNEL } from '../../../src/types/types';
-import { createMockEmailNotification } from '../../utils/mocks.js';
+import { connectTestDb, disconnectTestDb, clearTestDb } from '../../utils/db.js';
+import { OUTBOX_STATUS, getTopicForChannel, CORE_TOPICS } from '../../../src/types/types.js';
+import { createMockBaseNotification } from '../../utils/mocks.js';
 
 describe('Outbox Model', () => {
     let outbox_model: typeof import('../../../src/database/models/outbox.models.js').default;
@@ -31,11 +33,11 @@ describe('Outbox Model', () => {
     describe('Create outbox entry', () => {
         it('should create entry with default status pending', async () => {
             const notificationId = new mongoose.Types.ObjectId();
-            const payload = createMockEmailNotification();
+            const payload = createMockBaseNotification('email');
 
             const entry = await outbox_model.create({
                 notification_id: notificationId,
-                topic: TOPICS.email_notification,
+                topic: getTopicForChannel('email'),
                 payload,
             });
 
@@ -45,12 +47,12 @@ describe('Outbox Model', () => {
 
         it('should create entry with all fields', async () => {
             const notificationId = new mongoose.Types.ObjectId();
-            const payload = createMockEmailNotification();
+            const payload = createMockBaseNotification('email');
             const workerId = 'worker-123';
 
             const entry = await outbox_model.create({
                 notification_id: notificationId,
-                topic: TOPICS.email_notification,
+                topic: getTopicForChannel('email'),
                 payload,
                 status: OUTBOX_STATUS.pending,
                 claimed_by: workerId,
@@ -63,11 +65,11 @@ describe('Outbox Model', () => {
 
         it('should set timestamps automatically', async () => {
             const notificationId = new mongoose.Types.ObjectId();
-            const payload = createMockEmailNotification();
+            const payload = createMockBaseNotification('email');
 
             const entry = await outbox_model.create({
                 notification_id: notificationId,
-                topic: TOPICS.email_notification,
+                topic: getTopicForChannel('email'),
                 payload,
             });
 
@@ -76,45 +78,45 @@ describe('Outbox Model', () => {
         });
     });
 
-    describe('Topic enum validation', () => {
+    describe('Topic validation', () => {
         it('should accept valid topic: email_notification', async () => {
             const entry = await outbox_model.create({
                 notification_id: new mongoose.Types.ObjectId(),
-                topic: TOPICS.email_notification,
-                payload: createMockEmailNotification(),
+                topic: getTopicForChannel('email'),
+                payload: createMockBaseNotification('email'),
             });
 
-            expect(entry.topic).toBe(TOPICS.email_notification);
+            expect(entry.topic).toBe('email_notification');
         });
 
         it('should accept valid topic: whatsapp_notification', async () => {
             const entry = await outbox_model.create({
                 notification_id: new mongoose.Types.ObjectId(),
-                topic: TOPICS.whatsapp_notification,
-                payload: { test: true },
+                topic: getTopicForChannel('whatsapp'),
+                payload: createMockBaseNotification('whatsapp'),
             });
 
-            expect(entry.topic).toBe(TOPICS.whatsapp_notification);
+            expect(entry.topic).toBe('whatsapp_notification');
         });
 
         it('should accept valid topic: delayed_notification', async () => {
             const entry = await outbox_model.create({
                 notification_id: new mongoose.Types.ObjectId(),
-                topic: TOPICS.delayed_notification,
+                topic: CORE_TOPICS.delayed_notification,
                 payload: { test: true },
             });
 
-            expect(entry.topic).toBe(TOPICS.delayed_notification);
+            expect(entry.topic).toBe('delayed_notification');
         });
 
-        it('should reject invalid topic', async () => {
-            await expect(
-                outbox_model.create({
-                    notification_id: new mongoose.Types.ObjectId(),
-                    topic: 'invalid_topic',
-                    payload: {},
-                })
-            ).rejects.toThrow();
+        it('should accept any string topic (plugin system allows dynamic topics)', async () => {
+            const entry = await outbox_model.create({
+                notification_id: new mongoose.Types.ObjectId(),
+                topic: 'custom_channel_notification',
+                payload: {},
+            });
+
+            expect(entry.topic).toBe('custom_channel_notification');
         });
     });
 
@@ -122,7 +124,7 @@ describe('Outbox Model', () => {
         it('should accept valid status: pending', async () => {
             const entry = await outbox_model.create({
                 notification_id: new mongoose.Types.ObjectId(),
-                topic: TOPICS.email_notification,
+                topic: getTopicForChannel('email'),
                 payload: {},
                 status: OUTBOX_STATUS.pending,
             });
@@ -133,7 +135,7 @@ describe('Outbox Model', () => {
         it('should accept valid status: published', async () => {
             const entry = await outbox_model.create({
                 notification_id: new mongoose.Types.ObjectId(),
-                topic: TOPICS.email_notification,
+                topic: getTopicForChannel('email'),
                 payload: {},
                 status: OUTBOX_STATUS.published,
             });
@@ -145,7 +147,7 @@ describe('Outbox Model', () => {
             await expect(
                 outbox_model.create({
                     notification_id: new mongoose.Types.ObjectId(),
-                    topic: TOPICS.email_notification,
+                    topic: getTopicForChannel('email'),
                     payload: {},
                     status: 'invalid_status',
                 })
@@ -159,19 +161,19 @@ describe('Outbox Model', () => {
             await outbox_model.create([
                 {
                     notification_id: new mongoose.Types.ObjectId(),
-                    topic: TOPICS.email_notification,
+                    topic: getTopicForChannel('email'),
                     payload: {},
                     status: OUTBOX_STATUS.pending,
                 },
                 {
                     notification_id: new mongoose.Types.ObjectId(),
-                    topic: TOPICS.email_notification,
+                    topic: getTopicForChannel('email'),
                     payload: {},
                     status: OUTBOX_STATUS.published,
                 },
                 {
                     notification_id: new mongoose.Types.ObjectId(),
-                    topic: TOPICS.email_notification,
+                    topic: getTopicForChannel('email'),
                     payload: {},
                     status: OUTBOX_STATUS.pending,
                 },
@@ -188,18 +190,18 @@ describe('Outbox Model', () => {
             await outbox_model.create([
                 {
                     notification_id: new mongoose.Types.ObjectId(),
-                    topic: TOPICS.email_notification,
+                    topic: getTopicForChannel('email'),
                     payload: {},
                 },
                 {
                     notification_id: new mongoose.Types.ObjectId(),
-                    topic: TOPICS.whatsapp_notification,
+                    topic: getTopicForChannel('whatsapp'),
                     payload: {},
                 },
             ]);
 
             const emailEntries = await outbox_model.find({
-                topic: TOPICS.email_notification,
+                topic: getTopicForChannel('email'),
             });
 
             expect(emailEntries).toHaveLength(1);
@@ -209,13 +211,13 @@ describe('Outbox Model', () => {
             await outbox_model.create([
                 {
                     notification_id: new mongoose.Types.ObjectId(),
-                    topic: TOPICS.email_notification,
+                    topic: getTopicForChannel('email'),
                     payload: {},
                     claimed_by: null,
                 },
                 {
                     notification_id: new mongoose.Types.ObjectId(),
-                    topic: TOPICS.email_notification,
+                    topic: getTopicForChannel('email'),
                     payload: {},
                     claimed_by: 'worker-1',
                 },
@@ -233,7 +235,7 @@ describe('Outbox Model', () => {
         it('should update status to published', async () => {
             const entry = await outbox_model.create({
                 notification_id: new mongoose.Types.ObjectId(),
-                topic: TOPICS.email_notification,
+                topic: getTopicForChannel('email'),
                 payload: {},
                 status: OUTBOX_STATUS.pending,
             });
@@ -250,7 +252,7 @@ describe('Outbox Model', () => {
         it('should claim entry by worker', async () => {
             const entry = await outbox_model.create({
                 notification_id: new mongoose.Types.ObjectId(),
-                topic: TOPICS.email_notification,
+                topic: getTopicForChannel('email'),
                 payload: {},
             });
 
@@ -271,7 +273,7 @@ describe('Outbox Model', () => {
         it('should update updated_at on modification', async () => {
             const entry = await outbox_model.create({
                 notification_id: new mongoose.Types.ObjectId(),
-                topic: TOPICS.email_notification,
+                topic: getTopicForChannel('email'),
                 payload: {},
             });
 

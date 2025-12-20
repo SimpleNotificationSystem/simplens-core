@@ -1,11 +1,13 @@
 /**
  * Integration Tests for Notification Model
  * Tests MongoDB model operations with in-memory database
+ * 
+ * Updated for plugin-based architecture - uses dynamic channel strings.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { randomUUID } from 'crypto';
 import { connectTestDb, disconnectTestDb, clearTestDb } from '../../utils/db.js';
-import { CHANNEL, NOTIFICATION_STATUS } from '../../../src/types/types.js';
+import { NOTIFICATION_STATUS } from '../../../src/types/types.js';
 
 describe('Notification Model Integration Tests', () => {
     let notification_model: typeof import('../../../src/database/models/notification.models.js').default;
@@ -30,7 +32,7 @@ describe('Notification Model Integration Tests', () => {
             const notificationData = {
                 request_id: randomUUID(),
                 client_id: randomUUID(),
-                channel: CHANNEL.email,
+                channel: 'email',
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -50,7 +52,7 @@ describe('Notification Model Integration Tests', () => {
 
             expect(notification._id).toBeDefined();
             expect(notification.request_id).toBe(notificationData.request_id);
-            expect(notification.channel).toBe(CHANNEL.email);
+            expect(notification.channel).toBe('email');
             expect(notification.status).toBe(NOTIFICATION_STATUS.pending);
             expect(notification.created_at).toBeDefined();
         });
@@ -59,7 +61,7 @@ describe('Notification Model Integration Tests', () => {
             const notificationData = {
                 request_id: randomUUID(),
                 client_id: randomUUID(),
-                channel: CHANNEL.email,
+                channel: 'email',
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -83,7 +85,7 @@ describe('Notification Model Integration Tests', () => {
             const notificationData = {
                 request_id: 'not-a-valid-uuid',
                 client_id: randomUUID(),
-                channel: CHANNEL.email,
+                channel: 'email',
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -104,7 +106,7 @@ describe('Notification Model Integration Tests', () => {
             const notificationData = {
                 request_id: randomUUID(),
                 client_id: 'invalid-client-id',
-                channel: CHANNEL.email,
+                channel: 'email',
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -130,7 +132,7 @@ describe('Notification Model Integration Tests', () => {
             const emailNotification = {
                 request_id: requestId,
                 client_id: clientId,
-                channel: CHANNEL.email,
+                channel: 'email',
                 recipient: { user_id: 'user-123', email: 'test@example.com' },
                 content: { email: { subject: 'Test', message: 'Test' } },
                 webhook_url: 'https://webhook.example.com/callback',
@@ -139,7 +141,7 @@ describe('Notification Model Integration Tests', () => {
             const whatsappNotification = {
                 request_id: requestId,
                 client_id: clientId,
-                channel: CHANNEL.whatsapp,
+                channel: 'whatsapp',
                 recipient: { user_id: 'user-123', phone: '+1234567890' },
                 content: { whatsapp: { message: 'Test' } },
                 webhook_url: 'https://webhook.example.com/callback',
@@ -159,7 +161,7 @@ describe('Notification Model Integration Tests', () => {
             const notification = await notification_model.create({
                 request_id: randomUUID(),
                 client_id: randomUUID(),
-                channel: CHANNEL.email,
+                channel: 'email',
                 recipient: { user_id: 'user-123', email: 'test@example.com' },
                 content: { email: { subject: 'Test', message: 'Test' } },
                 webhook_url: 'https://webhook.example.com/callback',
@@ -178,7 +180,7 @@ describe('Notification Model Integration Tests', () => {
             const notification = await notification_model.create({
                 request_id: randomUUID(),
                 client_id: randomUUID(),
-                channel: CHANNEL.email,
+                channel: 'email',
                 recipient: { user_id: 'user-123', email: 'test@example.com' },
                 content: { email: { subject: 'Test', message: 'Test' } },
                 webhook_url: 'https://webhook.example.com/callback',
@@ -202,7 +204,7 @@ describe('Notification Model Integration Tests', () => {
                 {
                     request_id: randomUUID(),
                     client_id: clientId,
-                    channel: CHANNEL.email,
+                    channel: 'email',
                     recipient: { user_id: 'user-1', email: 'user1@example.com' },
                     content: { email: { subject: 'Test 1', message: 'Test 1' } },
                     webhook_url: 'https://webhook.example.com/callback',
@@ -210,7 +212,7 @@ describe('Notification Model Integration Tests', () => {
                 {
                     request_id: randomUUID(),
                     client_id: clientId,
-                    channel: CHANNEL.email,
+                    channel: 'email',
                     recipient: { user_id: 'user-2', email: 'user2@example.com' },
                     content: { email: { subject: 'Test 2', message: 'Test 2' } },
                     webhook_url: 'https://webhook.example.com/callback',
@@ -218,7 +220,7 @@ describe('Notification Model Integration Tests', () => {
                 {
                     request_id: randomUUID(),
                     client_id: randomUUID(), // Different client
-                    channel: CHANNEL.email,
+                    channel: 'email',
                     recipient: { user_id: 'user-3', email: 'user3@example.com' },
                     content: { email: { subject: 'Test 3', message: 'Test 3' } },
                     webhook_url: 'https://webhook.example.com/callback',

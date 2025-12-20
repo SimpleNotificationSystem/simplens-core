@@ -1,12 +1,14 @@
 /**
  * Unit tests for validation.ts
  * Tests outbox payload validation utilities
+ * 
+ * Updated for plugin-based architecture - uses dynamic channel strings.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import mongoose from 'mongoose';
-import { OUTBOX_TOPICS, OUTBOX_STATUS, CHANNEL } from '@src/types/types';
-import { createMockEmailNotification, createMockWhatsappNotification, createMockDelayedNotification } from '../../../utils/mocks';
+import { OUTBOX_STATUS, getTopicForChannel } from '../../../../src/types/types.js';
+import { createMockBaseNotification, createMockDelayedNotification } from '../../../utils/mocks.js';
 
 // Mock logger
 vi.mock('@src/workers/utils/logger.js', () => ({
@@ -19,12 +21,12 @@ vi.mock('@src/workers/utils/logger.js', () => ({
 }));
 
 describe('Validation Utilities', () => {
-    let validation: typeof import('@src/workers/utils/validation.js');
+    let validation: typeof import('../../../../src/workers/utils/validation.js');
 
     beforeEach(async () => {
         vi.clearAllMocks();
         vi.resetModules();
-        validation = await import('@src/workers/utils/validation.js');
+        validation = await import('../../../../src/workers/utils/validation.js');
     });
 
     afterEach(() => {
@@ -33,7 +35,7 @@ describe('Validation Utilities', () => {
 
     // Helper to create mock outbox document
     const createMockOutboxDocument = (
-        topic: OUTBOX_TOPICS,
+        topic: string,
         payload: unknown,
         overrides: Partial<any> = {}
     ) => {
@@ -58,34 +60,34 @@ describe('Validation Utilities', () => {
 
     describe('validateOutboxEntry', () => {
         it('should validate and return email notification entry', () => {
-            const emailPayload = createMockEmailNotification();
-            const doc = createMockOutboxDocument(OUTBOX_TOPICS.email_notification, emailPayload);
+            const emailPayload = createMockBaseNotification('email');
+            const doc = createMockOutboxDocument(getTopicForChannel('email'), emailPayload);
 
             const result = validation.validateOutboxEntry(doc);
 
             expect(result).not.toBeNull();
-            expect(result!.topic).toBe(OUTBOX_TOPICS.email_notification);
+            expect(result!.topic).toBe(getTopicForChannel('email'));
             expect(result!.payload).toBeDefined();
         });
 
         it('should validate and return whatsapp notification entry', () => {
-            const whatsappPayload = createMockWhatsappNotification();
-            const doc = createMockOutboxDocument(OUTBOX_TOPICS.whatsapp_notification, whatsappPayload);
+            const whatsappPayload = createMockBaseNotification('whatsapp');
+            const doc = createMockOutboxDocument(getTopicForChannel('whatsapp'), whatsappPayload);
 
             const result = validation.validateOutboxEntry(doc);
 
             expect(result).not.toBeNull();
-            expect(result!.topic).toBe(OUTBOX_TOPICS.whatsapp_notification);
+            expect(result!.topic).toBe(getTopicForChannel('whatsapp'));
         });
 
         it('should validate and return delayed notification entry', () => {
             const delayedPayload = createMockDelayedNotification();
-            const doc = createMockOutboxDocument(OUTBOX_TOPICS.delayed_notification, delayedPayload);
+            const doc = createMockOutboxDocument('delayed_notification', delayedPayload);
 
             const result = validation.validateOutboxEntry(doc);
 
             expect(result).not.toBeNull();
-            expect(result!.topic).toBe(OUTBOX_TOPICS.delayed_notification);
+            expect(result!.topic).toBe('delayed_notification');
         });
 
         it('should return null for invalid outbox schema', () => {
@@ -105,10 +107,10 @@ describe('Validation Utilities', () => {
 
         it('should return null for invalid payload', () => {
             const invalidPayload = {
-                // Missing required fields for email
+                // Missing required fields for notification
                 invalid: true,
             };
-            const doc = createMockOutboxDocument(OUTBOX_TOPICS.email_notification, invalidPayload);
+            const doc = createMockOutboxDocument(getTopicForChannel('email'), invalidPayload);
 
             const result = validation.validateOutboxEntry(doc);
 
@@ -116,8 +118,8 @@ describe('Validation Utilities', () => {
         });
 
         it('should include _id and notification_id in result', () => {
-            const emailPayload = createMockEmailNotification();
-            const doc = createMockOutboxDocument(OUTBOX_TOPICS.email_notification, emailPayload);
+            const emailPayload = createMockBaseNotification('email');
+            const doc = createMockOutboxDocument(getTopicForChannel('email'), emailPayload);
 
             const result = validation.validateOutboxEntry(doc);
 
@@ -128,35 +130,35 @@ describe('Validation Utilities', () => {
 
     describe('validateAndGroupByTopic', () => {
         it('should group valid entries by topic', () => {
-            const emailPayload1 = createMockEmailNotification();
-            const emailPayload2 = createMockEmailNotification();
-            const whatsappPayload = createMockWhatsappNotification();
+            const emailPayload1 = createMockBaseNotification('email');
+            const emailPayload2 = createMockBaseNotification('email');
+            const whatsappPayload = createMockBaseNotification('whatsapp');
 
             const entries = [
-                createMockOutboxDocument(OUTBOX_TOPICS.email_notification, emailPayload1),
-                createMockOutboxDocument(OUTBOX_TOPICS.email_notification, emailPayload2),
-                createMockOutboxDocument(OUTBOX_TOPICS.whatsapp_notification, whatsappPayload),
+                createMockOutboxDocument(getTopicForChannel('email'), emailPayload1),
+                createMockOutboxDocument(getTopicForChannel('email'), emailPayload2),
+                createMockOutboxDocument(getTopicForChannel('whatsapp'), whatsappPayload),
             ];
 
             const result = validation.validateAndGroupByTopic(entries);
 
-            expect(result.groupedByTopic.get(OUTBOX_TOPICS.email_notification)).toHaveLength(2);
-            expect(result.groupedByTopic.get(OUTBOX_TOPICS.whatsapp_notification)).toHaveLength(1);
+            expect(result.groupedByTopic.get(getTopicForChannel('email'))).toHaveLength(2);
+            expect(result.groupedByTopic.get(getTopicForChannel('whatsapp'))).toHaveLength(1);
             expect(result.validationFailedCount).toBe(0);
         });
 
         it('should count validation failures', () => {
-            const validPayload = createMockEmailNotification();
+            const validPayload = createMockBaseNotification('email');
             const invalidPayload = { invalid: true };
 
             const entries = [
-                createMockOutboxDocument(OUTBOX_TOPICS.email_notification, validPayload),
-                createMockOutboxDocument(OUTBOX_TOPICS.email_notification, invalidPayload),
+                createMockOutboxDocument(getTopicForChannel('email'), validPayload),
+                createMockOutboxDocument(getTopicForChannel('email'), invalidPayload),
             ];
 
             const result = validation.validateAndGroupByTopic(entries);
 
-            expect(result.groupedByTopic.get(OUTBOX_TOPICS.email_notification)).toHaveLength(1);
+            expect(result.groupedByTopic.get(getTopicForChannel('email'))).toHaveLength(1);
             expect(result.validationFailedCount).toBe(1);
         });
 
@@ -169,8 +171,8 @@ describe('Validation Utilities', () => {
 
         it('should handle all invalid entries', () => {
             const entries = [
-                createMockOutboxDocument(OUTBOX_TOPICS.email_notification, { invalid: true }),
-                createMockOutboxDocument(OUTBOX_TOPICS.whatsapp_notification, { invalid: true }),
+                createMockOutboxDocument(getTopicForChannel('email'), { invalid: true }),
+                createMockOutboxDocument(getTopicForChannel('whatsapp'), { invalid: true }),
             ];
 
             const result = validation.validateAndGroupByTopic(entries);
@@ -182,12 +184,12 @@ describe('Validation Utilities', () => {
         it('should correctly group delayed notifications', () => {
             const delayedPayload = createMockDelayedNotification();
             const entries = [
-                createMockOutboxDocument(OUTBOX_TOPICS.delayed_notification, delayedPayload),
+                createMockOutboxDocument('delayed_notification', delayedPayload),
             ];
 
             const result = validation.validateAndGroupByTopic(entries);
 
-            expect(result.groupedByTopic.get(OUTBOX_TOPICS.delayed_notification)).toHaveLength(1);
+            expect(result.groupedByTopic.get('delayed_notification')).toHaveLength(1);
         });
     });
 });

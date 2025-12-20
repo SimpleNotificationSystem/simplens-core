@@ -1,6 +1,8 @@
 /**
  * Unit Tests for Zod Schema Validation
  * Tests all notification schemas for proper validation behavior
+ * 
+ * Updated for plugin-based architecture - uses dynamic channel strings.
  */
 import { describe, it, expect } from 'vitest';
 import { randomUUID } from 'crypto';
@@ -8,12 +10,11 @@ import mongoose from 'mongoose';
 import {
     safeValidateNotificationRequest,
     safeValidateBatchNotificationRequest,
-    safeValidateEmailNotification,
-    safeValidateWhatsappNotification,
+    safeValidateBaseNotification,
     safeValidateNotification,
     safeValidateOutbox,
 } from '../../../src/types/schemas.js';
-import { CHANNEL, NOTIFICATION_STATUS, OUTBOX_STATUS, OUTBOX_TOPICS } from '../../../src/types/types.js';
+import { NOTIFICATION_STATUS, OUTBOX_STATUS, getTopicForChannel } from '../../../src/types/types.js';
 
 describe('Notification Request Schema', () => {
     describe('safeValidateNotificationRequest', () => {
@@ -21,7 +22,7 @@ describe('Notification Request Schema', () => {
             const validRequest = {
                 request_id: randomUUID(),
                 client_id: randomUUID(),
-                channel: [CHANNEL.email],
+                channel: ['email'],
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -39,7 +40,7 @@ describe('Notification Request Schema', () => {
             expect(result.success).toBe(true);
             if (result.success) {
                 expect(result.data.request_id).toBe(validRequest.request_id);
-                expect(result.data.channel).toEqual([CHANNEL.email]);
+                expect(result.data.channel).toEqual(['email']);
             }
         });
 
@@ -47,7 +48,7 @@ describe('Notification Request Schema', () => {
             const validRequest = {
                 request_id: randomUUID(),
                 client_id: randomUUID(),
-                channel: [CHANNEL.whatsapp],
+                channel: ['whatsapp'],
                 recipient: {
                     user_id: 'user-123',
                     phone: '+1234567890',
@@ -68,7 +69,7 @@ describe('Notification Request Schema', () => {
             const validRequest = {
                 request_id: randomUUID(),
                 client_id: randomUUID(),
-                channel: [CHANNEL.email, CHANNEL.whatsapp],
+                channel: ['email', 'whatsapp'],
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -90,76 +91,14 @@ describe('Notification Request Schema', () => {
             expect(result.success).toBe(true);
         });
 
-        it('should fail when email channel is specified but email is missing', () => {
-            const invalidRequest = {
-                request_id: randomUUID(),
-                client_id: randomUUID(),
-                channel: [CHANNEL.email],
-                recipient: {
-                    user_id: 'user-123',
-                    // email is missing
-                },
-                content: {
-                    email: {
-                        subject: 'Test Subject',
-                        message: 'Test message body',
-                    },
-                },
-                webhook_url: 'https://webhook.example.com/callback',
-            };
 
-            const result = safeValidateNotificationRequest(invalidRequest);
-            expect(result.success).toBe(false);
-        });
-
-        it('should fail when whatsapp channel is specified but phone is missing', () => {
-            const invalidRequest = {
-                request_id: randomUUID(),
-                client_id: randomUUID(),
-                channel: [CHANNEL.whatsapp],
-                recipient: {
-                    user_id: 'user-123',
-                    // phone is missing
-                },
-                content: {
-                    whatsapp: {
-                        message: 'Test message',
-                    },
-                },
-                webhook_url: 'https://webhook.example.com/callback',
-            };
-
-            const result = safeValidateNotificationRequest(invalidRequest);
-            expect(result.success).toBe(false);
-        });
-
-        it('should fail with invalid UUID format for request_id', () => {
-            const invalidRequest = {
-                request_id: 'not-a-valid-uuid',
-                client_id: randomUUID(),
-                channel: [CHANNEL.email],
-                recipient: {
-                    user_id: 'user-123',
-                    email: 'test@example.com',
-                },
-                content: {
-                    email: {
-                        subject: 'Test',
-                        message: 'Test',
-                    },
-                },
-                webhook_url: 'https://webhook.example.com/callback',
-            };
-
-            const result = safeValidateNotificationRequest(invalidRequest);
-            expect(result.success).toBe(false);
-        });
+        // Note: flexibleUUIDSchema accepts more formats for plugin extensibility
 
         it('should fail with invalid webhook URL', () => {
             const invalidRequest = {
                 request_id: randomUUID(),
                 client_id: randomUUID(),
-                channel: [CHANNEL.email],
+                channel: ['email'],
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -182,7 +121,7 @@ describe('Notification Request Schema', () => {
             const validRequest = {
                 request_id: randomUUID(),
                 client_id: randomUUID(),
-                channel: [CHANNEL.email],
+                channel: ['email'],
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -200,6 +139,51 @@ describe('Notification Request Schema', () => {
             const result = safeValidateNotificationRequest(validRequest);
             expect(result.success).toBe(true);
         });
+
+        it('should accept provider as string', () => {
+            const validRequest = {
+                request_id: randomUUID(),
+                client_id: randomUUID(),
+                channel: ['email'],
+                provider: 'gmail',
+                recipient: {
+                    user_id: 'user-123',
+                    email: 'test@example.com',
+                },
+                content: {
+                    email: {
+                        subject: 'Test',
+                        message: 'Test',
+                    },
+                },
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const result = safeValidateNotificationRequest(validRequest);
+            expect(result.success).toBe(true);
+        });
+
+        it('should accept provider as array matching channel length', () => {
+            const validRequest = {
+                request_id: randomUUID(),
+                client_id: randomUUID(),
+                channel: ['email', 'whatsapp'],
+                provider: ['gmail', 'twilio'],
+                recipient: {
+                    user_id: 'user-123',
+                    email: 'test@example.com',
+                    phone: '+1234567890',
+                },
+                content: {
+                    email: { subject: 'Test', message: 'Test' },
+                    whatsapp: { message: 'Test' },
+                },
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const result = safeValidateNotificationRequest(validRequest);
+            expect(result.success).toBe(true);
+        });
     });
 });
 
@@ -208,7 +192,7 @@ describe('Batch Notification Request Schema', () => {
         it('should validate a valid batch notification request', () => {
             const validRequest = {
                 client_id: randomUUID(),
-                channel: [CHANNEL.email],
+                channel: ['email'],
                 content: {
                     email: {
                         subject: 'Batch Test',
@@ -228,56 +212,17 @@ describe('Batch Notification Request Schema', () => {
                 expect(result.data.recipients.length).toBe(2);
             }
         });
-
-        it('should fail when email channel specified but recipient has no email', () => {
-            const invalidRequest = {
-                client_id: randomUUID(),
-                channel: [CHANNEL.email],
-                content: {
-                    email: {
-                        subject: 'Test',
-                        message: 'Test',
-                    },
-                },
-                recipients: [
-                    { request_id: randomUUID(), user_id: 'user-1' }, // missing email
-                ],
-                webhook_url: 'https://webhook.example.com/callback',
-            };
-
-            const result = safeValidateBatchNotificationRequest(invalidRequest);
-            expect(result.success).toBe(false);
-        });
-
-        it('should fail when whatsapp channel specified but recipient has no phone', () => {
-            const invalidRequest = {
-                client_id: randomUUID(),
-                channel: [CHANNEL.whatsapp],
-                content: {
-                    whatsapp: {
-                        message: 'Test',
-                    },
-                },
-                recipients: [
-                    { request_id: randomUUID(), user_id: 'user-1' }, // missing phone
-                ],
-                webhook_url: 'https://webhook.example.com/callback',
-            };
-
-            const result = safeValidateBatchNotificationRequest(invalidRequest);
-            expect(result.success).toBe(false);
-        });
     });
 });
 
-describe('Email Notification Schema', () => {
-    describe('safeValidateEmailNotification', () => {
-        it('should validate a valid email notification', () => {
+describe('Base Notification Schema', () => {
+    describe('safeValidateBaseNotification', () => {
+        it('should validate a valid base notification', () => {
             const validNotification = {
                 notification_id: new mongoose.Types.ObjectId(),
                 request_id: randomUUID(),
                 client_id: randomUUID(),
-                channel: CHANNEL.email,
+                channel: 'email',
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -292,80 +237,53 @@ describe('Email Notification Schema', () => {
                 created_at: new Date(),
             };
 
-            const result = safeValidateEmailNotification(validNotification);
+            const result = safeValidateBaseNotification(validNotification);
             expect(result.success).toBe(true);
         });
 
-        it('should fail when channel is not email', () => {
-            const invalidNotification = {
+        it('should validate notification with any channel string', () => {
+            const validNotification = {
                 notification_id: new mongoose.Types.ObjectId(),
                 request_id: randomUUID(),
                 client_id: randomUUID(),
-                channel: CHANNEL.whatsapp, // wrong channel
+                channel: 'custom-channel',
+                recipient: {
+                    user_id: 'user-123',
+                },
+                content: {
+                    data: 'some data',
+                },
+                webhook_url: 'https://webhook.example.com/callback',
+                retry_count: 0,
+                created_at: new Date(),
+            };
+
+            const result = safeValidateBaseNotification(validNotification);
+            expect(result.success).toBe(true);
+        });
+
+        it('should validate notification with provider field', () => {
+            const validNotification = {
+                notification_id: new mongoose.Types.ObjectId(),
+                request_id: randomUUID(),
+                client_id: randomUUID(),
+                channel: 'email',
+                provider: 'gmail',
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
                 },
                 content: {
-                    subject: 'Test Subject',
-                    message: 'Test message body',
+                    subject: 'Test',
+                    message: 'Test',
                 },
                 webhook_url: 'https://webhook.example.com/callback',
                 retry_count: 0,
                 created_at: new Date(),
             };
 
-            const result = safeValidateEmailNotification(invalidNotification);
-            expect(result.success).toBe(false);
-        });
-    });
-});
-
-describe('WhatsApp Notification Schema', () => {
-    describe('safeValidateWhatsappNotification', () => {
-        it('should validate a valid whatsapp notification', () => {
-            const validNotification = {
-                notification_id: new mongoose.Types.ObjectId(),
-                request_id: randomUUID(),
-                client_id: randomUUID(),
-                channel: CHANNEL.whatsapp,
-                recipient: {
-                    user_id: 'user-123',
-                    phone: '+1234567890',
-                },
-                content: {
-                    message: 'Test WhatsApp message',
-                },
-                variables: {},
-                webhook_url: 'https://webhook.example.com/callback',
-                retry_count: 0,
-                created_at: new Date(),
-            };
-
-            const result = safeValidateWhatsappNotification(validNotification);
+            const result = safeValidateBaseNotification(validNotification);
             expect(result.success).toBe(true);
-        });
-
-        it('should fail when channel is not whatsapp', () => {
-            const invalidNotification = {
-                notification_id: new mongoose.Types.ObjectId(),
-                request_id: randomUUID(),
-                client_id: randomUUID(),
-                channel: CHANNEL.email, // wrong channel
-                recipient: {
-                    user_id: 'user-123',
-                    phone: '+1234567890',
-                },
-                content: {
-                    message: 'Test message',
-                },
-                webhook_url: 'https://webhook.example.com/callback',
-                retry_count: 0,
-                created_at: new Date(),
-            };
-
-            const result = safeValidateWhatsappNotification(invalidNotification);
-            expect(result.success).toBe(false);
         });
     });
 });
@@ -376,7 +294,7 @@ describe('Notification Schema', () => {
             const validNotification = {
                 request_id: randomUUID(),
                 client_id: randomUUID(),
-                channel: CHANNEL.email,
+                channel: 'email',
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -400,7 +318,7 @@ describe('Notification Schema', () => {
             const baseNotification = {
                 request_id: randomUUID(),
                 client_id: randomUUID(),
-                channel: CHANNEL.email,
+                channel: 'email',
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -429,12 +347,12 @@ describe('Outbox Schema', () => {
         it('should validate a valid outbox entry', () => {
             const validOutbox = {
                 notification_id: new mongoose.Types.ObjectId(),
-                topic: OUTBOX_TOPICS.email_notification,
+                topic: getTopicForChannel('email'),
                 payload: {
                     notification_id: new mongoose.Types.ObjectId(),
                     request_id: randomUUID(),
                     client_id: randomUUID(),
-                    channel: CHANNEL.email,
+                    channel: 'email',
                     recipient: {
                         user_id: 'user-123',
                         email: 'test@example.com',
@@ -457,12 +375,12 @@ describe('Outbox Schema', () => {
         it('should validate all outbox statuses', () => {
             const baseOutbox = {
                 notification_id: new mongoose.Types.ObjectId(),
-                topic: OUTBOX_TOPICS.email_notification,
+                topic: getTopicForChannel('email'),
                 payload: {
                     notification_id: new mongoose.Types.ObjectId(),
                     request_id: randomUUID(),
                     client_id: randomUUID(),
-                    channel: CHANNEL.email,
+                    channel: 'email',
                     recipient: {
                         user_id: 'user-123',
                         email: 'test@example.com',

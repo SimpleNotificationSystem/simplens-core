@@ -93,7 +93,7 @@ const start_server = async () => {
         });
     }
     catch (err) {
-        logger.error(`Error in connecting to MongoDB`, err);
+        logger.error(`Error in initializing api server:`, err);
         exit(1);
     }
 }

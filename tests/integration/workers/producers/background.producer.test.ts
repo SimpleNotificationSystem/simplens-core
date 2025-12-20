@@ -1,12 +1,14 @@
 /**
  * Integration tests for background.producer.ts
  * Tests background outbox producer with mocked dependencies
+ * 
+ * Updated for plugin-based architecture - uses dynamic topic strings.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import mongoose from 'mongoose';
-import { OUTBOX_TOPICS, OUTBOX_STATUS } from '../../../../src/types/types';
-import { createMockEmailNotification, createMockWhatsappNotification } from '../../../utils/mocks';
+import { OUTBOX_STATUS, getTopicForChannel } from '../../../../src/types/types.js';
+import { createMockBaseNotification } from '../../../utils/mocks.js';
 
 // Mock Kafka producer
 const mockSend = vi.fn();
@@ -154,7 +156,7 @@ describe('Background Producer', () => {
 
     describe('sendOutboxEvents', () => {
         // Helper to create mock outbox document
-        const createMockOutboxDoc = (topic: OUTBOX_TOPICS, payload: any) => ({
+        const createMockOutboxDoc = (topic: string, payload: any) => ({
             _id: new mongoose.Types.ObjectId(),
             notification_id: new mongoose.Types.ObjectId(),
             topic,
@@ -179,8 +181,8 @@ describe('Background Producer', () => {
             await backgroundProducer.initProducer();
 
             const emailDoc = createMockOutboxDoc(
-                OUTBOX_TOPICS.email_notification,
-                createMockEmailNotification()
+                getTopicForChannel('email'),
+                createMockBaseNotification('email')
             );
 
             const result = await backgroundProducer.sendOutboxEvents([emailDoc as any]);
@@ -194,8 +196,8 @@ describe('Background Producer', () => {
             mockSend.mockRejectedValueOnce(new Error('Kafka error'));
 
             const emailDoc = createMockOutboxDoc(
-                OUTBOX_TOPICS.email_notification,
-                createMockEmailNotification()
+                getTopicForChannel('email'),
+                createMockBaseNotification('email')
             );
 
             const result = await backgroundProducer.sendOutboxEvents([emailDoc as any]);
@@ -205,8 +207,8 @@ describe('Background Producer', () => {
 
         it('should throw error if producer not initialized', async () => {
             const emailDoc = createMockOutboxDoc(
-                OUTBOX_TOPICS.email_notification,
-                createMockEmailNotification()
+                getTopicForChannel('email'),
+                createMockBaseNotification('email')
             );
 
             await expect(

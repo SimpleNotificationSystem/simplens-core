@@ -1,17 +1,20 @@
 /**
  * Unit Tests for API Utility Functions
  * Tests conversion functions and error handling
+ * 
+ * Updated for plugin-based architecture - uses dynamic channel strings.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { randomUUID } from 'crypto';
 import mongoose from 'mongoose';
-import { CHANNEL, NOTIFICATION_STATUS, TOPICS, DELAYED_TOPICS } from '../../../src/types/types.js';
+import { NOTIFICATION_STATUS, getTopicForChannel } from '../../../src/types/types.js';
 import type { notification_request, batch_notification_request, notification } from '../../../src/types/types.js';
 
 // We need to mock the database models before importing utils
 vi.mock('../../../src/database/models/notification.models.js', () => ({
     default: {
         insertMany: vi.fn(),
+        findOne: vi.fn(),
     },
 }));
 
@@ -44,7 +47,7 @@ describe('API Utility Functions', () => {
             const request: notification_request = {
                 request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
                 client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
-                channel: [CHANNEL.email],
+                channel: ['email'],
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -61,7 +64,7 @@ describe('API Utility Functions', () => {
             const notifications = convert_notification_request_to_notification_schema(request);
 
             expect(notifications).toHaveLength(1);
-            expect(notifications[0].channel).toBe(CHANNEL.email);
+            expect(notifications[0].channel).toBe('email');
             expect(notifications[0].request_id).toBe(request.request_id);
             expect(notifications[0].recipient.email).toBe('test@example.com');
             expect(notifications[0].status).toBe(NOTIFICATION_STATUS.pending);
@@ -73,7 +76,7 @@ describe('API Utility Functions', () => {
             const request: notification_request = {
                 request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
                 client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
-                channel: [CHANNEL.email, CHANNEL.whatsapp],
+                channel: ['email', 'whatsapp'],
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -94,7 +97,7 @@ describe('API Utility Functions', () => {
             const notifications = convert_notification_request_to_notification_schema(request);
 
             expect(notifications).toHaveLength(2);
-            expect(notifications.map(n => n.channel).sort()).toEqual([CHANNEL.email, CHANNEL.whatsapp].sort());
+            expect(notifications.map(n => n.channel).sort()).toEqual(['email', 'whatsapp'].sort());
         });
 
         it('should preserve scheduled_at for delayed notifications', async () => {
@@ -104,7 +107,7 @@ describe('API Utility Functions', () => {
             const request: notification_request = {
                 request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
                 client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
-                channel: [CHANNEL.email],
+                channel: ['email'],
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -123,6 +126,61 @@ describe('API Utility Functions', () => {
 
             expect(notifications[0].scheduled_at).toEqual(futureDate);
         });
+
+        it('should handle provider as string (applies to all channels)', async () => {
+            const { convert_notification_request_to_notification_schema } = await import('../../../src/api/utils/utils.js');
+
+            const request: notification_request = {
+                request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                channel: ['email'],
+                provider: 'gmail',
+                recipient: {
+                    user_id: 'user-123',
+                    email: 'test@example.com',
+                },
+                content: {
+                    email: {
+                        subject: 'Test',
+                        message: 'Test',
+                    },
+                },
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const notifications = convert_notification_request_to_notification_schema(request);
+
+            expect(notifications[0].provider).toBe('gmail');
+        });
+
+        it('should handle provider as array (maps to channels)', async () => {
+            const { convert_notification_request_to_notification_schema } = await import('../../../src/api/utils/utils.js');
+
+            const request: notification_request = {
+                request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                channel: ['email', 'whatsapp'],
+                provider: ['gmail', 'twilio'],
+                recipient: {
+                    user_id: 'user-123',
+                    email: 'test@example.com',
+                    phone: '+1234567890',
+                },
+                content: {
+                    email: { subject: 'Test', message: 'Test' },
+                    whatsapp: { message: 'Test' },
+                },
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const notifications = convert_notification_request_to_notification_schema(request);
+
+            expect(notifications).toHaveLength(2);
+            const emailNotif = notifications.find(n => n.channel === 'email');
+            const whatsappNotif = notifications.find(n => n.channel === 'whatsapp');
+            expect(emailNotif?.provider).toBe('gmail');
+            expect(whatsappNotif?.provider).toBe('twilio');
+        });
     });
 
     describe('convert_batch_notification_schema_to_notification_schema', () => {
@@ -131,7 +189,7 @@ describe('API Utility Functions', () => {
 
             const request: batch_notification_request = {
                 client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
-                channel: [CHANNEL.email],
+                channel: ['email'],
                 content: {
                     email: {
                         subject: 'Batch Subject',
@@ -159,7 +217,7 @@ describe('API Utility Functions', () => {
 
             const request: batch_notification_request = {
                 client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
-                channel: [CHANNEL.email, CHANNEL.whatsapp],
+                channel: ['email', 'whatsapp'],
                 content: {
                     email: {
                         subject: 'Test',
@@ -170,8 +228,8 @@ describe('API Utility Functions', () => {
                     },
                 },
                 recipients: [
-                    { request_id: randomUUID(),user_id: 'user-1', email: 'user1@example.com', phone: '+1111111111' },
-                    { request_id: randomUUID(),user_id: 'user-2', email: 'user2@example.com', phone: '+2222222222' },
+                    { request_id: randomUUID(), user_id: 'user-1', email: 'user1@example.com', phone: '+1111111111' },
+                    { request_id: randomUUID(), user_id: 'user-2', email: 'user2@example.com', phone: '+2222222222' },
                 ],
                 webhook_url: 'https://webhook.example.com/callback',
             };
@@ -188,8 +246,8 @@ describe('API Utility Functions', () => {
             const { DuplicateNotificationError } = await import('../../../src/api/utils/utils.js');
 
             const duplicates = [
-                { request_id: randomUUID(), channel: CHANNEL.email },
-                { request_id: randomUUID(), channel: CHANNEL.whatsapp },
+                { request_id: randomUUID(), channel: 'email' },
+                { request_id: randomUUID(), channel: 'whatsapp' },
             ];
 
             const error = new DuplicateNotificationError('Duplicate found', duplicates);
@@ -210,14 +268,14 @@ describe('API Utility Functions', () => {
         });
     });
 
-    describe('to_email_notification', () => {
-        it('should convert notification to email format', async () => {
-            const { to_email_notification } = await import('../../../src/api/utils/utils.js');
+    describe('to_channel_notification', () => {
+        it('should convert notification to channel format', async () => {
+            const { to_channel_notification } = await import('../../../src/api/utils/utils.js');
 
             const notification: notification = {
                 request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
                 client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
-                channel: CHANNEL.email,
+                channel: 'email',
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -235,31 +293,28 @@ describe('API Utility Functions', () => {
             };
 
             const notificationId = new mongoose.Types.ObjectId();
-            const emailNotification = to_email_notification(notification, notificationId);
+            const channelNotification = to_channel_notification(notification, notificationId);
 
-            expect(emailNotification.notification_id).toEqual(notificationId);
-            expect(emailNotification.channel).toBe(CHANNEL.email);
-            expect(emailNotification.content.subject).toBe('Test Subject');
-            expect(emailNotification.content.message).toBe('Test message');
-            expect(emailNotification.recipient.email).toBe('test@example.com');
+            expect(channelNotification.notification_id).toEqual(notificationId);
+            expect(channelNotification.channel).toBe('email');
+            expect((channelNotification.recipient as any).email).toBe('test@example.com');
         });
-    });
 
-    describe('to_whatsapp_notification', () => {
-        it('should convert notification to whatsapp format', async () => {
-            const { to_whatsapp_notification } = await import('../../../src/api/utils/utils.js');
+        it('should extract channel-specific content', async () => {
+            const { to_channel_notification } = await import('../../../src/api/utils/utils.js');
 
             const notification: notification = {
                 request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
                 client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
-                channel: CHANNEL.whatsapp,
+                channel: 'email',
                 recipient: {
                     user_id: 'user-123',
-                    phone: '+1234567890',
+                    email: 'test@example.com',
                 },
                 content: {
-                    whatsapp: {
-                        message: 'WhatsApp message',
+                    email: {
+                        subject: 'Nested Subject',
+                        message: 'Nested message',
                     },
                 },
                 webhook_url: 'https://webhook.example.com/callback',
@@ -268,12 +323,11 @@ describe('API Utility Functions', () => {
             };
 
             const notificationId = new mongoose.Types.ObjectId();
-            const whatsappNotification = to_whatsapp_notification(notification, notificationId);
+            const channelNotification = to_channel_notification(notification, notificationId);
 
-            expect(whatsappNotification.notification_id).toEqual(notificationId);
-            expect(whatsappNotification.channel).toBe(CHANNEL.whatsapp);
-            expect(whatsappNotification.content.message).toBe('WhatsApp message');
-            expect(whatsappNotification.recipient.phone).toBe('+1234567890');
+            // Content should be extracted from content.email
+            expect((channelNotification.content as any).subject).toBe('Nested Subject');
+            expect((channelNotification.content as any).message).toBe('Nested message');
         });
     });
 
@@ -285,7 +339,7 @@ describe('API Utility Functions', () => {
             const notification: notification = {
                 request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
                 client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
-                channel: CHANNEL.email,
+                channel: 'email',
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -307,7 +361,7 @@ describe('API Utility Functions', () => {
 
             expect(delayedNotification.notification_id).toEqual(notificationId);
             expect(delayedNotification.scheduled_at).toEqual(scheduledAt);
-            expect(delayedNotification.target_topic).toBe(DELAYED_TOPICS.email_notification);
+            expect(delayedNotification.target_topic).toBe(getTopicForChannel('email'));
         });
     });
 });

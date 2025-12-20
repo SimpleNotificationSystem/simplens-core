@@ -3,8 +3,8 @@
 
 providers:
   # Gmail provider for email notifications
-  - package: "simplens-plugin-gmail"
-    id: "gmail-primary"
+  - package: "@simplens/nodemailer-gmail"
+    id: "gmail-nodemailer"
     credentials:
       EMAIL_HOST: "${EMAIL_HOST}"
       EMAIL_PORT: "${EMAIL_PORT}"
@@ -20,5 +20,5 @@ providers:
 # Channel to provider mapping
 channels:
   email:
-    default: "gmail-primary"
+    default: "gmail-nodemailer"
     # fallback: "sendgrid-backup"  # Uncomment when you have a fallback provider

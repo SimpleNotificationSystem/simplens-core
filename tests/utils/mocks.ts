@@ -1,6 +1,8 @@
 /**
  * Mock Factories for Testing
  * Creates mock data structures for notifications, outbox entries, etc.
+ * 
+ * Updated for plugin-based architecture - uses dynamic channel strings.
  */
 import { randomUUID } from 'crypto';
 import mongoose from 'mongoose';
@@ -8,12 +10,11 @@ import type {
     notification_request,
     batch_notification_request,
     notification,
-    email_notification,
-    whatsapp_notification,
     delayed_notification_topic,
-    outbox
+    outbox,
+    base_notification
 } from '../../src/types/types.js';
-import { CHANNEL, NOTIFICATION_STATUS, OUTBOX_STATUS, OUTBOX_TOPICS, DELAYED_TOPICS } from '../../src/types/types.js';
+import { NOTIFICATION_STATUS, OUTBOX_STATUS, getTopicForChannel } from '../../src/types/types.js';
 
 /**
  * Create a mock notification request
@@ -23,7 +24,7 @@ export const createMockNotificationRequest = (
 ): notification_request => ({
     request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
     client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
-    channel: [CHANNEL.email],
+    channel: ['email'],
     recipient: {
         user_id: 'test-user-123',
         email: 'test@example.com',
@@ -45,7 +46,7 @@ export const createMockBatchNotificationRequest = (
     overrides: Partial<batch_notification_request> = {}
 ): batch_notification_request => ({
     client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
-    channel: [CHANNEL.email],
+    channel: ['email'],
     content: {
         email: {
             subject: 'Batch Test',
@@ -53,8 +54,8 @@ export const createMockBatchNotificationRequest = (
         },
     },
     recipients: [
-        { request_id: randomUUID(),user_id: 'user-1', email: 'user1@example.com', variables: { name: 'User 1' } },
-        { request_id: randomUUID(),user_id: 'user-2', email: 'user2@example.com', variables: { name: 'User 2' } },
+        { request_id: randomUUID(), user_id: 'user-1', email: 'user1@example.com', variables: { name: 'User 1' } },
+        { request_id: randomUUID(), user_id: 'user-2', email: 'user2@example.com', variables: { name: 'User 2' } },
     ],
     webhook_url: 'https://webhook.example.com/callback',
     ...overrides,
@@ -68,16 +69,14 @@ export const createMockNotification = (
 ): notification => ({
     request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
     client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
-    channel: CHANNEL.email,
+    channel: 'email',
     recipient: {
         user_id: 'test-user-123',
         email: 'test@example.com',
     },
     content: {
-        email: {
-            subject: 'Test Subject',
-            message: 'Test message body'
-        },
+        subject: 'Test Subject',
+        message: 'Test message body'
     },
     webhook_url: 'https://webhook.example.com/callback',
     status: NOTIFICATION_STATUS.pending,
@@ -86,15 +85,16 @@ export const createMockNotification = (
 });
 
 /**
- * Create a mock email notification (Kafka topic schema)
+ * Create a mock base notification (Kafka topic schema - channel-agnostic)
  */
-export const createMockEmailNotification = (
-    overrides: Partial<email_notification> = {}
-): email_notification => ({
-    notification_id: new mongoose.Types.ObjectId(),
+export const createMockBaseNotification = (
+    channel: string = 'email',
+    overrides: Partial<base_notification> = {}
+): base_notification => ({
+    notification_id: new mongoose.Types.ObjectId().toString(),
     request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
     client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
-    channel: CHANNEL.email,
+    channel: channel,
     recipient: {
         user_id: 'test-user-123',
         email: 'test@example.com',
@@ -111,41 +111,18 @@ export const createMockEmailNotification = (
 });
 
 /**
- * Create a mock whatsapp notification (Kafka topic schema)
- */
-export const createMockWhatsappNotification = (
-    overrides: Partial<whatsapp_notification> = {}
-): whatsapp_notification => ({
-    notification_id: new mongoose.Types.ObjectId(),
-    request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
-    client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
-    channel: CHANNEL.whatsapp,
-    recipient: {
-        user_id: 'test-user-123',
-        phone: '+1234567890',
-    },
-    content: {
-        message: 'Test WhatsApp message',
-    },
-    variables: {},
-    webhook_url: 'https://webhook.example.com/callback',
-    retry_count: 0,
-    created_at: new Date(),
-    ...overrides,
-});
-
-/**
  * Create a mock delayed notification (for delayed queue)
  */
 export const createMockDelayedNotification = (
+    channel: string = 'email',
     overrides: Partial<delayed_notification_topic> = {}
 ): delayed_notification_topic => ({
     notification_id: new mongoose.Types.ObjectId(),
     request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
     client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
-    target_topic: DELAYED_TOPICS.email_notification,
+    target_topic: getTopicForChannel(channel),
     scheduled_at: new Date(Date.now() + 60000), // 1 minute from now
-    payload: createMockEmailNotification(),
+    payload: createMockBaseNotification(channel),
     created_at: new Date(),
     ...overrides,
 });
@@ -154,11 +131,12 @@ export const createMockDelayedNotification = (
  * Create a mock outbox entry
  */
 export const createMockOutbox = (
+    channel: string = 'email',
     overrides: Partial<outbox> = {}
 ): outbox => ({
     notification_id: new mongoose.Types.ObjectId(),
-    topic: OUTBOX_TOPICS.email_notification,
-    payload: createMockEmailNotification(),
+    topic: getTopicForChannel(channel),
+    payload: createMockBaseNotification(channel),
     status: OUTBOX_STATUS.pending,
     ...overrides,
 });
@@ -176,3 +154,20 @@ export const createObjectId = (): mongoose.Types.ObjectId => {
 export const createUUID = (): `${string}-${string}-${string}-${string}-${string}` => {
     return randomUUID() as `${string}-${string}-${string}-${string}-${string}`;
 };
+
+// ============================================================================
+// BACKWARD-COMPATIBLE EXPORTS (for legacy tests)
+// ============================================================================
+
+/**
+ * @deprecated Use createMockBaseNotification('email') instead
+ */
+export const createMockEmailNotification = (overrides: Record<string, unknown> = {}) =>
+    createMockBaseNotification('email', overrides as any);
+
+/**
+ * @deprecated Use createMockBaseNotification('whatsapp') instead
+ */
+export const createMockWhatsappNotification = (overrides: Record<string, unknown> = {}) =>
+    createMockBaseNotification('whatsapp', overrides as any);
+

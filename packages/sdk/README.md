@@ -1,11 +1,11 @@
-# simplens-sdk
+# @simplens/sdk
 
 SDK for building SimpleNS notification provider plugins.
 
 ## Installation
 
 ```bash
-npm install simplens-sdk
+npm install @simplens/sdk
 ```
 
 ## Usage
@@ -20,7 +20,7 @@ import {
   emailContentSchema,
   replaceVariables,
   z
-} from 'simplens-sdk';
+} from '@simplens/sdk';
 
 // Define your notification type
 const notificationSchema = createNotificationSchema(

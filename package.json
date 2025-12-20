@@ -64,8 +64,6 @@
     "vitest": "^4.0.15"
   },
   "dependencies": {
-    "simplens-plugin-gmail": "^1.0.0",
-    "simplens-sdk": "^1.0.1",
     "axios": "^1.13.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",

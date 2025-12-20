@@ -24,7 +24,7 @@ export const baseNotificationSchema = z.object({
     variables: z.record(z.string(), z.string()).optional(),
     webhook_url: z.string().url(),
     retry_count: z.number().int().min(0),
-    created_at: z.coerce.date(),
+    created_at: z.date(),
 });
 
 /**

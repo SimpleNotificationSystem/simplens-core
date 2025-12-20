@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { NOTIFICATION_STATUS_SF, CHANNEL } from '../../../../src/types/types.js';
+import { NOTIFICATION_STATUS_SF } from '../../../../src/types/types.js';
 
 // Mock Kafka producer
 const mockSend = vi.fn();
@@ -56,7 +56,7 @@ describe('Status Producer', () => {
             notification_id: '507f1f77bcf86cd799439011',
             request_id: 'test-request-123',
             client_id: 'test-client',
-            channel: CHANNEL.email as CHANNEL,
+            channel: 'email',
             status: NOTIFICATION_STATUS_SF.delivered as NOTIFICATION_STATUS_SF,
             external_id: 'ext-123',
             delivered_at: new Date(),
