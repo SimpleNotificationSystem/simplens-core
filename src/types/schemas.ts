@@ -33,10 +33,6 @@ export const UUIDV4Schema = z.custom<UUID>(
 
 export const variablesSchema = z.record(z.string(), z.string());
 
-// Flexible ID schema that accepts both ObjectId and string
-export const flexibleIdSchema = z.union([objectIdSchema, z.string()]);
-export const flexibleUUIDSchema = z.union([UUIDV4Schema, z.string()]);
-
 // ============================================================================
 // BASE NOTIFICATION SCHEMA (Channel-Agnostic)
 // ============================================================================
@@ -45,16 +41,18 @@ export const flexibleUUIDSchema = z.union([UUIDV4Schema, z.string()]);
  * Base notification schema - plugins extend this with channel-specific fields
  */
 export const baseNotificationSchema = z.object({
-    notification_id: flexibleIdSchema,
-    request_id: flexibleUUIDSchema,
-    client_id: flexibleUUIDSchema,
+    notification_id: objectIdSchema,
+    request_id: UUIDV4Schema,
+    client_id: UUIDV4Schema,
+    client_name: z.string().optional(),
     channel: z.string(),
     provider: z.string().optional(),
     recipient: z.record(z.string(), z.unknown()),
     content: z.record(z.string(), z.unknown()),
     variables: variablesSchema.optional(),
-    webhook_url: z.string().url(),
+    webhook_url: z.url(),
     retry_count: z.number().int().min(0),
+    scheduled_at: z.coerce.date().optional(),
     created_at: z.coerce.date(),
 });
 
@@ -66,9 +64,9 @@ export const baseNotificationSchema = z.object({
  * Delayed notification - supports any channel
  */
 export const delayedNotificationTopicSchema = z.object({
-    notification_id: flexibleIdSchema,
-    request_id: flexibleUUIDSchema,
-    client_id: flexibleUUIDSchema,
+    notification_id: objectIdSchema,
+    request_id: UUIDV4Schema,
+    client_id: UUIDV4Schema,
     scheduled_at: z.coerce.date(),
     target_topic: z.string(),
     payload: z.record(z.string(), z.unknown()),
@@ -79,14 +77,14 @@ export const delayedNotificationTopicSchema = z.object({
  * Notification status - channel-agnostic
  */
 export const notificationStatusTopicSchema = z.object({
-    notification_id: flexibleIdSchema,
-    request_id: flexibleUUIDSchema,
-    client_id: flexibleUUIDSchema,
+    notification_id: objectIdSchema,
+    request_id: UUIDV4Schema,
+    client_id: UUIDV4Schema,
     channel: z.string(),
     status: z.enum(NOTIFICATION_STATUS_SF),
     message: z.string(),
     retry_count: z.number().int().min(0),
-    webhook_url: z.string().url(),
+    webhook_url: z.url(),
     created_at: z.coerce.date(),
 });
 
@@ -98,15 +96,15 @@ export const notificationStatusTopicSchema = z.object({
  * Notification record in MongoDB
  */
 export const notificationSchema = z.object({
-    request_id: flexibleUUIDSchema,
-    client_id: flexibleUUIDSchema,
+    request_id: UUIDV4Schema,
+    client_id: UUIDV4Schema,
     client_name: z.string().optional(),
     channel: z.string(),
     provider: z.string().optional(),
     recipient: z.record(z.string(), z.unknown()),
     content: z.record(z.string(), z.unknown()),
     variables: variablesSchema.optional(),
-    webhook_url: z.string().url(),
+    webhook_url: z.url(),
     status: z.enum(NOTIFICATION_STATUS),
     scheduled_at: z.coerce.date().optional(),
     error_message: z.string().optional(),
@@ -119,7 +117,7 @@ export const notificationSchema = z.object({
  * Outbox entry for reliable delivery
  */
 export const outboxSchema = z.object({
-    notification_id: flexibleIdSchema,
+    notification_id: objectIdSchema,
     topic: z.string(),
     payload: z.record(z.string(), z.unknown()),
     status: z.enum(OUTBOX_STATUS),
@@ -133,7 +131,7 @@ export const outboxSchema = z.object({
  * Alert schema
  */
 export const alertSchema = z.object({
-    notification_id: flexibleIdSchema,
+    notification_id: objectIdSchema,
     alert_type: z.enum(ALERT_TYPE),
     reason: z.string(),
     redis_status: z.string().nullable().optional(),
@@ -149,8 +147,8 @@ export const alertSchema = z.object({
  * Status outbox
  */
 export const statusOutboxSchema = z.object({
-    _id: flexibleIdSchema,
-    notification_id: flexibleIdSchema,
+    _id: objectIdSchema,
+    notification_id: objectIdSchema,
     status: z.enum(NOTIFICATION_STATUS_SF),
     processed: z.boolean().default(false),
     claimed_by: z.string().nullable().optional(),
@@ -167,16 +165,16 @@ export const statusOutboxSchema = z.object({
  * Single notification request - channel-agnostic
  */
 export const baseNotificationRequestSchema = z.object({
-    request_id: flexibleUUIDSchema,
-    client_id: flexibleUUIDSchema,
+    request_id: UUIDV4Schema,
+    client_id: UUIDV4Schema,
     client_name: z.string().optional(),
     channel: z.array(z.string()),
-    provider: z.union([z.string(), z.array(z.string().nullable().optional())]).optional(),
+    provider: z.array(z.string()).optional(),
     recipient: z.record(z.string(), z.unknown()),
     content: z.record(z.string(), z.unknown()),
     variables: variablesSchema.optional(),
     scheduled_at: z.coerce.date().optional(),
-    webhook_url: z.string().url()
+    webhook_url: z.url()
 }).refine(
     (data) => {
         if (Array.isArray(data.provider) && Array.isArray(data.channel)) {
@@ -194,20 +192,20 @@ export const baseNotificationRequestSchema = z.object({
  * Batch notification request - channel-agnostic
  */
 export const baseBatchNotificationRequestSchema = z.object({
-    client_id: flexibleUUIDSchema,
+    client_id: UUIDV4Schema,
     client_name: z.string().optional(),
     channel: z.array(z.string()),
     provider: z.union([z.string(), z.array(z.string().nullable().optional())]).optional(),
     content: z.record(z.string(), z.unknown()),
     recipients: z.array(
-        z.object({
-            request_id: flexibleUUIDSchema,
+        z.looseObject({
+            request_id: UUIDV4Schema,
             user_id: z.string(),
             variables: variablesSchema.optional(),
-        }).passthrough()
+        })
     ),
     scheduled_at: z.coerce.date().optional(),
-    webhook_url: z.string().url()
+    webhook_url: z.url()
 }).refine(
     (data) => {
         // limit check

@@ -20,8 +20,6 @@ export const env = {
     PORT: <number>parseInt(process.env.PORT || "3000"),
     NS_API_KEY: <string>(process.env.NS_API_KEY || ""),
     MAX_BATCH_REQ_LIMIT: <number>parseInt(process.env.MAX_BATCH_REQ_LIMIT || "1000"),
-    EMAIL_PARTITION: <number>parseInt(process.env.EMAIL_PARTITION || "1"),
-    WHATSAPP_PARTITION: <number>parseInt(process.env.WHATSAPP_PARTITION || "1"),
     DELAYED_PARTITION: <number>parseInt(process.env.DELAYED_PARTITION || "1"),
     NOTIFICATION_STATUS_PARTITION: <number>parseInt(process.env.NOTIFICATION_STATUS_PARTITION || "1"),
 
@@ -35,19 +33,6 @@ export const env = {
     OUTBOX_BATCH_SIZE: <number>parseInt(process.env.OUTBOX_BATCH_SIZE || "100"),
     OUTBOX_RETENTION_MS: <number>parseInt(process.env.OUTBOX_RETENTION_MS || "300000"),
     OUTBOX_CLAIM_TIMEOUT_MS: <number>parseInt(process.env.OUTBOX_CLAIM_TIMEOUT_MS || "30000"),
-
-    // Email Configuration (Gmail SMTP)
-    EMAIL_HOST: <string>process.env.EMAIL_HOST || "smtp.gmail.com",
-    EMAIL_PORT: <number>parseInt(process.env.EMAIL_PORT || "587"),
-    EMAIL_USER: <string>process.env.EMAIL_USER || "",
-    EMAIL_PASS: <string>process.env.EMAIL_PASS || "",
-    EMAIL_FROM: <string>process.env.EMAIL_FROM || process.env.EMAIL_USER || "",
-
-    // Rate Limiting - Token Bucket
-    EMAIL_RATE_LIMIT_TOKENS: <number>parseInt(process.env.EMAIL_RATE_LIMIT_TOKENS || "100"),
-    EMAIL_RATE_LIMIT_REFILL_RATE: <number>parseInt(process.env.EMAIL_RATE_LIMIT_REFILL_RATE || "10"),
-    WHATSAPP_RATE_LIMIT_TOKENS: <number>parseInt(process.env.WHATSAPP_RATE_LIMIT_TOKENS || "50"),
-    WHATSAPP_RATE_LIMIT_REFILL_RATE: <number>parseInt(process.env.WHATSAPP_RATE_LIMIT_REFILL_RATE || "5"),
 
     // Idempotency & Retry
     IDEMPOTENCY_TTL_SECONDS: <number>parseInt(process.env.IDEMPOTENCY_TTL_SECONDS || "86400"),

@@ -6,7 +6,6 @@
  * - Multi:  PROCESSOR_CHANNEL=all (or omit to process all configured channels)
  */
 
-import { connectMongoDB } from '@src/config/db.config.js';
 import { connectRedis, disconnectRedis } from '@src/config/redis.config.js';
 import { initStatusProducer, disconnectStatusProducer } from '@src/processors/shared/status.producer.js';
 import { initDelayedProducer, disconnectDelayedProducer } from '@src/processors/shared/delayed.producer.js';

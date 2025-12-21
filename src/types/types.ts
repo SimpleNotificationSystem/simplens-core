@@ -100,24 +100,3 @@ export type alert = z.infer<typeof alertSchema>;
 export type status_outbox = z.infer<typeof statusOutboxSchema>;
 
 export type base_notification = z.infer<typeof baseNotificationSchema>;
-
-// ============================================================================
-// GENERIC NOTIFICATION TYPE
-// ============================================================================
-
-/**
- * Base notification structure that all channels must follow.
- */
-export interface GenericNotification {
-    notification_id: string;
-    request_id: string;
-    client_id: string;
-    channel: Channel;
-    provider?: string;
-    recipient: Record<string, unknown>;
-    content: Record<string, unknown>;
-    variables?: Record<string, string>;
-    webhook_url: string;
-    retry_count: number;
-    created_at: Date;
-}

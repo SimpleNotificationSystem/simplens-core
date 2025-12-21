@@ -1,5 +1,5 @@
 {
-  "name": "backend-notification-service",
+  "name": "simplens-core",
   "version": "1.0.0",
   "description": "Lightweight, backend notification service for sending EMAIL and WHATSAPP messages. It supports single and batch notifications, scheduled deliveries and webhook callbacks for final delivery status.",
   "main": "dist/api/server.js",
@@ -18,10 +18,6 @@
     "dev": "tsx watch src/api/server.ts",
     "worker": "node dist/workers/worker.js",
     "worker:dev": "tsx watch src/workers/worker.ts",
-    "email-processor": "node dist/processors/email/email.processor.js",
-    "email-processor:dev": "tsx watch src/processors/email/email.processor.ts",
-    "whatsapp-processor": "node dist/processors/whatsapp/whatsapp.processor.js",
-    "whatsapp-processor:dev": "tsx watch src/processors/whatsapp/whatsapp.processor.ts",
     "delayed-processor": "node dist/processors/delayed/delayed.processor.js",
     "delayed-processor:dev": "tsx watch src/processors/delayed/delayed.processor.ts",
     "processor": "node dist/processors/unified/unified.processor.js",
@@ -32,15 +28,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Adhish-Krishna/backend-notification-service.git"
+    "url": "git+https://github.com/SimpleNotificationSystem/simplens-core.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/Adhish-Krishna/backend-notification-service/issues"
+    "url": "https://github.com/SimpleNotificationSystem/simplens-core/issues"
   },
-  "homepage": "https://github.com/Adhish-Krishna/backend-notification-service#readme",
+  "homepage": "https://github.com/SimpleNotificationSystem/simplens-core#readme",
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
@@ -64,6 +60,7 @@
     "vitest": "^4.0.15"
   },
   "dependencies": {
+    "@simplens/mock": "^1.0.0",
     "axios": "^1.13.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",

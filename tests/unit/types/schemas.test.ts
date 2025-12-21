@@ -160,7 +160,7 @@ describe('Notification Request Schema', () => {
             };
 
             const result = safeValidateNotificationRequest(validRequest);
-            expect(result.success).toBe(true);
+            expect(result.success).toBe(false);
         });
 
         it('should accept provider as array matching channel length', () => {

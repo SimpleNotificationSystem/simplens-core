@@ -18,20 +18,19 @@ const TOTAL_REQUESTS = parseInt(process.argv[2] || '1000');
 const CONCURRENCY = parseInt(process.argv[3] || '50');
 
 const createPayload = () => ({
-  request_id: randomUUID(),
-  client_id: "5f2c1d77-8a4b-4a5a-9b1c-2c3d4e5f6a7b",
-  channel: ["whatsapp"],
-  recipient: {
-    user_id: "user_12345",
-    phone: "+15551234567"
-  },
-  content: {
-    whatsapp: {
-      message: "Thanks for signing up! Reply HELP for assistance."
-    }
-  },
-  webhook_url: "http://host.docker.internal:4000/webhook",
-  retry_count: 0
+    request_id: randomUUID(),
+    client_id: "5f2c1d77-8a4b-4a5a-9b1c-2c3d4e5f6a7b",
+    channel: ["mock"],
+    recipient: {
+        user_id: "user_12345",
+    },
+    content: {
+        mock: {
+            message: "Thanks for signing up! Reply HELP for assistance."
+        }
+    },
+    webhook_url: "http://host.docker.internal:4000/webhook",
+    retry_count: 3
 });
 
 const sendRequest = async (index) => {
@@ -45,10 +44,10 @@ const sendRequest = async (index) => {
             },
             body: JSON.stringify(createPayload())
         });
-        
+
         const duration = Date.now() - start;
         const status = response.status;
-        
+
         return { index, status, duration, success: status >= 200 && status < 300 };
     } catch (err) {
         const duration = Date.now() - start;
@@ -80,13 +79,13 @@ const main = async () => {
         const batchSize = Math.min(CONCURRENCY, TOTAL_REQUESTS - i);
         const batchResults = await runBatch(i, batchSize);
         results.push(...batchResults);
-        
+
         completed += batchSize;
-        process.stdout.write(`\r⏳ Progress: ${completed}/${TOTAL_REQUESTS} (${Math.round(completed/TOTAL_REQUESTS*100)}%)`);
+        process.stdout.write(`\r⏳ Progress: ${completed}/${TOTAL_REQUESTS} (${Math.round(completed / TOTAL_REQUESTS * 100)}%)`);
     }
 
     const totalTime = Date.now() - startTime;
-    
+
     // Calculate stats
     const successful = results.filter(r => r.success).length;
     const failed = results.filter(r => !r.success).length;
@@ -104,7 +103,7 @@ const main = async () => {
 
     console.log('\n\n📊 Results:');
     console.log('─'.repeat(40));
-    console.log(`   Total Time:     ${totalTime}ms (${(totalTime/1000).toFixed(2)}s)`);
+    console.log(`   Total Time:     ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`);
     console.log(`   Requests/sec:   ${requestsPerSecond.toFixed(2)}`);
     console.log(`   Successful:     ${successful} ✅`);
     console.log(`   Failed:         ${failed} ❌`);

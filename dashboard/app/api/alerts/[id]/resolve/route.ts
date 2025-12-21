@@ -14,6 +14,14 @@ import OutboxModel from "@/lib/models/outbox";
 // Helper to get topic from channel
 const getTopicForChannel = (channel: string): string => `${channel}_notification`;
 
+// Helper to extract channel-specific content for plugins
+// Dashboard stores: content: { mock: { message: "..." } }
+// Plugin expects: content: { message: "..." }
+const extractChannelContent = (content: Record<string, unknown>, channel: string): Record<string, unknown> => {
+    const channelContent = content[channel] as Record<string, unknown> | undefined;
+    return channelContent || content;
+};
+
 // Helper to get message from content (handles any channel)
 const getMessageFromContent = (content: Record<string, unknown>, channel: string): string | undefined => {
     // Try channel-specific key first (e.g., content.email.message)
@@ -96,13 +104,17 @@ export async function POST(
 
                 // Create outbox entry with dynamic topic
                 const topic = getTopicForChannel(notification.channel);
+                // Extract channel-specific content for plugin validation
+                const rawContent = notification.content as Record<string, unknown>;
+                const extractedContent = extractChannelContent(rawContent, notification.channel);
+
                 const payload = {
                     notification_id: notification._id,
                     request_id: notification.request_id,
                     client_id: notification.client_id,
                     channel: notification.channel,
                     recipient: notification.recipient,
-                    content: notification.content,
+                    content: extractedContent,
                     variables: notification.variables,
                     webhook_url: notification.webhook_url,
                     retry_count: notification.retry_count,

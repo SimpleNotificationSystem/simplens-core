@@ -5,7 +5,7 @@
  */
 
 import { PluginRegistry } from './registry.js';
-import type { SimpleNSProvider, DeliveryResult, BaseNotification } from '../interfaces/provider.types.js';
+import type { DeliveryResult, BaseNotification } from '../interfaces/provider.types.js';
 
 /**
  * Send notification with automatic fallback

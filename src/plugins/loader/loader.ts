@@ -67,10 +67,10 @@ function loadConfig(configPath: string): SimpleNSConfig {
  * Resolve environment variables in credentials
  * Supports ${VAR_NAME} syntax
  */
-function resolveCredentials(credentials: Record<string, string>): Record<string, string> {
+function resolveCredentials(credentials: Record<string, string> | undefined): Record<string, string> {
     const resolved: Record<string, string> = {};
 
-    for (const [key, value] of Object.entries(credentials)) {
+    for (const [key, value] of Object.entries(credentials || {})) {
         if (typeof value === 'string' && value.startsWith('${') && value.endsWith('}')) {
             const envVar = value.slice(2, -1);
             const envValue = process.env[envVar];
@@ -212,7 +212,7 @@ export async function loadProviders(configPath: string = './simplens.config.yaml
  */
 export async function loadProvidersFromEnv(options: { initialize?: boolean } = {}): Promise<void> {
     const configPath = process.env.SIMPLENS_CONFIG_PATH || './simplens.config.yaml';
-    return loadProviders(configPath, options);
+    await loadProviders(configPath, options);
 }
 
 /**

@@ -92,7 +92,7 @@ export const convert_batch_notification_schema_to_notification_schema = (data: b
 /**
  * Create outbox entry for a notification
  */
-export const to_outbox = (data: notification, notification_id: mongoose.Types.ObjectId): outbox => {
+export const convert_notification_schema_to_outbox_schema = (data: notification, notification_id: mongoose.Types.ObjectId): outbox => {
     // Determine topic based on scheduling
     const isScheduled = data.scheduled_at && new Date(data.scheduled_at) > new Date();
     const topic = isScheduled
@@ -175,59 +175,81 @@ export class DuplicateNotificationError extends Error {
 
 /**
  * Process notifications and create outbox entries
+ * Uses MongoDB transactions to ensure atomicity - both notification and outbox
+ * entries are saved together, or both are rolled back on failure.
+ * 
+ * Note: Requires MongoDB replica set for transactions to work.
  */
-export const process_notifications = async (notifications: notification[]) => {
-    const notification_ids: mongoose.Types.ObjectId[] = [];
-    const outbox_entries: outbox[] = [];
-    const duplicate_keys: { request_id: string; channel: string }[] = [];
+export const process_notifications = async (notifications: notification[]): Promise<{notification_ids: mongoose.Types.ObjectId[], created_count: number, duplicate_count: number, duplicate_keys: { request_id: string; channel: string }[] | undefined}> => {
+    const session = await mongoose.startSession();
 
-    for (const notification of notifications) {
-        // Check for duplicates
-        const existingNotification = await notification_model.findOne({
-            request_id: notification.request_id,
-            channel: notification.channel
-        });
+    try {
+        session.startTransaction();
 
-        if (existingNotification) {
-            duplicate_keys.push({
-                request_id: notification.request_id as string,
-                channel: notification.channel
-            });
-            continue;
+        const notification_ids: mongoose.Types.ObjectId[] = [];
+        const outbox_entries: outbox[] = [];
+        const duplicate_keys: { request_id: string; channel: string }[] = [];
+
+        for (const notification of notifications) {
+            // Check for duplicates (include session for transactional read)
+            const existingNotification = await notification_model.findOne({
+                request_id: notification.request_id,
+                channel: notification.channel,
+                status: { $ne: NOTIFICATION_STATUS.failed } // Allow retrying failed notifications
+            }).session(session);
+
+            if (existingNotification) {
+                duplicate_keys.push({
+                    request_id: notification.request_id as string,
+                    channel: notification.channel
+                });
+                continue;
+            }
+
+            // Create notification document within transaction
+            const notification_doc = new notification_model(notification);
+            await notification_doc.save({ session });
+
+            const notification_id = notification_doc._id as mongoose.Types.ObjectId;
+            notification_ids.push(notification_id);
+
+            // Create outbox entry
+            const outbox_entry = convert_notification_schema_to_outbox_schema(notification, notification_id);
+            outbox_entries.push(outbox_entry);
         }
 
-        // Create notification document
-        const notification_doc = new notification_model(notification);
-        await notification_doc.save();
-
-        const notification_id = notification_doc._id as mongoose.Types.ObjectId;
-        notification_ids.push(notification_id);
-
-        // Create outbox entry
-        const outbox_entry = to_outbox(notification, notification_id);
-        outbox_entries.push(outbox_entry);
-    }
-
-    // Insert outbox entries in bulk
-    if (outbox_entries.length > 0) {
-        await outbox_model.insertMany(outbox_entries);
-    }
-
-    // Handle duplicates
-    if (duplicate_keys.length > 0) {
-        if (duplicate_keys.length === notifications.length) {
-            throw new DuplicateNotificationError(
-                'All notifications are duplicates',
-                duplicate_keys
-            );
+        // Insert outbox entries in bulk within transaction
+        if (outbox_entries.length > 0) {
+            await outbox_model.insertMany(outbox_entries, { session });
         }
-        logger.warn(`Skipped ${duplicate_keys.length} duplicate notifications`);
-    }
 
-    return {
-        notification_ids,
-        created_count: notification_ids.length,
-        duplicate_count: duplicate_keys.length,
-        duplicate_keys: duplicate_keys.length > 0 ? duplicate_keys : undefined
-    };
+        // Commit transaction - both succeed or both fail
+        await session.commitTransaction();
+
+        // Handle duplicates after successful commit
+        if (duplicate_keys.length > 0) {
+            if (duplicate_keys.length === notifications.length) {
+                throw new DuplicateNotificationError(
+                    'All notifications are duplicates',
+                    duplicate_keys
+                );
+            }
+            logger.warn(`Skipped ${duplicate_keys.length} duplicate notifications`);
+        }
+
+        return {
+            notification_ids,
+            created_count: notification_ids.length,
+            duplicate_count: duplicate_keys.length,
+            duplicate_keys: duplicate_keys.length > 0 ? duplicate_keys : undefined
+        };
+
+    } catch (error) {
+        // Abort transaction on any error - rolls back all changes
+        await session.abortTransaction();
+        throw error;
+    } finally {
+        // Always end the session
+        session.endSession();
+    }
 }

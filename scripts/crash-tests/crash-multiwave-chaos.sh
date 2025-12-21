@@ -24,18 +24,16 @@ WAVE_PAUSE=${2:-30}
 SCRIPTS_DIR=$(cd "$(dirname "$0")/.." && pwd)
 PROJECT_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 
-# Container names
+# Container names - Updated for unified notification-processor
 CONTAINERS=(
     "backend-notification-service-worker-1"
-    "backend-notification-service-email-processor-1"
-    "backend-notification-service-whatsapp-processor-1"
+    "backend-notification-service-notification-processor-1"
     "backend-notification-service-delayed-processor-1"
 )
 
 SERVICES=(
     "worker"
-    "email-processor"
-    "whatsapp-processor"
+    "notification-processor"
     "delayed-processor"
 )
 
@@ -157,12 +155,8 @@ wave_sustained_load() {
     
     # Crash services one by one with small delays
     sleep 5
-    log_crash "Killing email-processor mid-processing..."
+    log_crash "Killing notification-processor mid-processing..."
     kill_container "${CONTAINERS[1]}"
-    
-    sleep 3
-    log_crash "Killing whatsapp-processor mid-processing..."
-    kill_container "${CONTAINERS[2]}"
     
     sleep 3
     log_crash "Killing worker mid-outbox-poll..."
@@ -171,9 +165,9 @@ wave_sustained_load() {
     # Let the chaos continue for a bit
     sleep 10
     
-    # Restart in wrong order (processors before worker)
+    # Restart in wrong order (processor before worker)
     log_info "Restarting in wrong order to create backpressure..."
-    restart_services "email-processor" "whatsapp-processor"
+    restart_services "notification-processor"
     sleep 5
     restart_services "worker"
     
@@ -236,16 +230,16 @@ wave_split_brain() {
     # Start load
     start_load $((LOAD_REQUESTS / 2))
     
-    # Pattern 1: Only email works
-    log_info "Pattern 1: Only email processor alive..."
-    kill_containers "${CONTAINERS[0]}" "${CONTAINERS[2]}" "${CONTAINERS[3]}"
+    # Pattern 1: Only notification processor works
+    log_info "Pattern 1: Only notification processor alive..."
+    kill_containers "${CONTAINERS[0]}" "${CONTAINERS[2]}"
     sleep 15
     restart_all_services
     sleep 5
     
-    # Pattern 2: Only whatsapp works
-    log_info "Pattern 2: Only whatsapp processor alive..."
-    kill_containers "${CONTAINERS[0]}" "${CONTAINERS[1]}" "${CONTAINERS[3]}"
+    # Pattern 2: Only delayed processor works
+    log_info "Pattern 2: Only delayed processor alive..."
+    kill_containers "${CONTAINERS[0]}" "${CONTAINERS[1]}"
     sleep 15
     restart_all_services
     sleep 5
@@ -300,12 +294,8 @@ wave_total_blackout() {
     restart_services "worker"
     sleep 10
     
-    log_info "Stage 3: Bringing email processor online..."
-    restart_services "email-processor"
-    sleep 5
-    
-    log_info "Stage 4: Bringing whatsapp processor online..."
-    restart_services "whatsapp-processor"
+    log_info "Stage 3: Bringing notification processor online..."
+    restart_services "notification-processor"
     
     log_info "Wave 4 complete - system recovering from total blackout..."
     sleep 20
@@ -401,6 +391,11 @@ main() {
     echo "  Load Requests per Wave: $LOAD_REQUESTS"
     echo "  Pause Between Waves: ${WAVE_PAUSE}s"
     echo "  Project Root: $PROJECT_ROOT"
+    echo ""
+    echo "Services to be crashed:"
+    echo "  - worker"
+    echo "  - notification-processor (unified plugin-based processor)"
+    echo "  - delayed-processor"
     echo ""
     
     log_warn "This test WILL crash your services multiple times!"

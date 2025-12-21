@@ -2,23 +2,16 @@
 # Configure notification providers and channel routing
 
 providers:
-  # Gmail provider for email notifications
-  - package: "@simplens/nodemailer-gmail"
-    id: "gmail-nodemailer"
-    credentials:
-      EMAIL_HOST: "${EMAIL_HOST}"
-      EMAIL_PORT: "${EMAIL_PORT}"
-      EMAIL_USER: "${EMAIL_USER}"
-      EMAIL_PASS: "${EMAIL_PASS}"
-      EMAIL_FROM: "${EMAIL_FROM}"
+  - package: "@simplens/mock"
+    id: "mock"
+    credentials: {}
     options:
-      priority: 1
+      priority: 2
       rateLimit:
         maxTokens: 100
         refillRate: 10
 
 # Channel to provider mapping
 channels:
-  email:
-    default: "gmail-nodemailer"
-    # fallback: "sendgrid-backup"  # Uncomment when you have a fallback provider
+  mock:
+    default: "mock"

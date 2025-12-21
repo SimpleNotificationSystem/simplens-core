@@ -16,8 +16,8 @@
 #   7. Database Partition Wave - MongoDB crash and recovery patterns
 #   8. Complete Apocalypse Wave - Everything simultaneously, recovery race
 #
-# Usage: ./crash-multiwave-chaos.sh [load_requests] [pause_between_waves]
-# Example: ./crash-multiwave-chaos.sh 500 30
+# Usage: ./crash-multiwave-all.sh [load_requests] [pause_between_waves]
+# Example: ./crash-multiwave-all.sh 500 30
 # ==============================================================================
 
 set -e
@@ -28,18 +28,16 @@ WAVE_PAUSE=${2:-30}
 SCRIPTS_DIR=$(cd "$(dirname "$0")/.." && pwd)
 PROJECT_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 
-# Container names - Application Services
+# Container names - Application Services (updated for unified notification-processor)
 APP_CONTAINERS=(
     "backend-notification-service-worker-1"
-    "backend-notification-service-email-processor-1"
-    "backend-notification-service-whatsapp-processor-1"
+    "backend-notification-service-notification-processor-1"
     "backend-notification-service-delayed-processor-1"
 )
 
 APP_SERVICES=(
     "worker"
-    "email-processor"
-    "whatsapp-processor"
+    "notification-processor"
     "delayed-processor"
 )
 
@@ -249,12 +247,8 @@ wave_sustained_load() {
     
     # Crash services one by one with small delays
     sleep 5
-    log_crash "Killing email-processor mid-processing..."
+    log_crash "Killing notification-processor mid-processing..."
     kill_container "${APP_CONTAINERS[1]}"
-    
-    sleep 3
-    log_crash "Killing whatsapp-processor mid-processing..."
-    kill_container "${APP_CONTAINERS[2]}"
     
     sleep 3
     log_crash "Killing worker mid-outbox-poll..."
@@ -274,7 +268,7 @@ wave_sustained_load() {
     wait_for_infra_health
     
     log_info "Restarting in wrong order to create backpressure..."
-    restart_services "email-processor" "whatsapp-processor"
+    restart_services "notification-processor"
     sleep 5
     restart_services "worker"
     
@@ -337,16 +331,16 @@ wave_split_brain() {
     # Start load
     start_load $((LOAD_REQUESTS / 2))
     
-    # Pattern 1: Only email works
-    log_info "Pattern 1: Only email processor alive..."
-    kill_containers "${APP_CONTAINERS[0]}" "${APP_CONTAINERS[2]}" "${APP_CONTAINERS[3]}"
+    # Pattern 1: Only notification processor works
+    log_info "Pattern 1: Only notification processor alive..."
+    kill_containers "${APP_CONTAINERS[0]}" "${APP_CONTAINERS[2]}"
     sleep 15
     restart_all_app_services
     sleep 5
     
-    # Pattern 2: Only whatsapp works
-    log_info "Pattern 2: Only whatsapp processor alive..."
-    kill_containers "${APP_CONTAINERS[0]}" "${APP_CONTAINERS[1]}" "${APP_CONTAINERS[3]}"
+    # Pattern 2: Only delayed processor works
+    log_info "Pattern 2: Only delayed processor alive..."
+    kill_containers "${APP_CONTAINERS[0]}" "${APP_CONTAINERS[1]}"
     sleep 15
     restart_all_app_services
     sleep 5
@@ -433,12 +427,8 @@ wave_total_blackout() {
     restart_services "worker"
     sleep 5
     
-    log_info "Stage 6: Bringing email processor online..."
-    restart_services "email-processor"
-    sleep 3
-    
-    log_info "Stage 7: Bringing whatsapp processor online..."
-    restart_services "whatsapp-processor"
+    log_info "Stage 6: Bringing notification processor online..."
+    restart_services "notification-processor"
     
     log_info "Wave 4 complete - system recovering from total blackout..."
     sleep 20
@@ -697,7 +687,7 @@ wave_complete_apocalypse() {
     echo -e "${RED}║    💀 COMPLETE APOCALYPSE - KILLING EVERYTHING 💀    ║${NC}"
     echo -e "${RED}║                                                                ║${NC}"
     echo -e "${RED}║    MongoDB  🔴   Redis  🔴   Kafka  🔴                    ║${NC}"
-    echo -e "${RED}║    Worker   🔴   Email  🔴   WhatsApp  🔴   Delayed  🔴    ║${NC}"
+    echo -e "${RED}║    Worker   🔴   Notification  🔴   Delayed  🔴          ║${NC}"
     echo -e "${RED}║                                                                ║${NC}"
     echo -e "${RED}╚════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
@@ -754,7 +744,7 @@ main() {
     echo "  Project Root: $PROJECT_ROOT"
     echo ""
     echo "Services to be crashed:"
-    echo "  Application: worker, email-processor, whatsapp-processor, delayed-processor"
+    echo "  Application: worker, notification-processor (unified), delayed-processor"
     echo "  Infrastructure: MongoDB, Redis, Kafka"
     echo ""
     
@@ -849,4 +839,3 @@ main() {
 
 # Run main
 main "$@"
-

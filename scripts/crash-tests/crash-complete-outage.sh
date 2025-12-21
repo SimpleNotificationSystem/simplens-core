@@ -11,11 +11,8 @@ echo ""
 echo "Killing Worker..."
 docker kill backend-notification-service-worker-1 2>/dev/null
 
-echo "Killing Email Processor..."
-docker kill backend-notification-service-email-processor-1 2>/dev/null
-
-echo "Killing WhatsApp Processor..."
-docker kill backend-notification-service-whatsapp-processor-1 2>/dev/null
+echo "Killing Notification Processor..."
+docker kill backend-notification-service-notification-processor-1 2>/dev/null
 
 echo "Killing Delayed Processor..."
 docker kill backend-notification-service-delayed-processor-1 2>/dev/null
@@ -31,7 +28,7 @@ sleep $DELAY
 
 echo ""
 echo "🔄 Restoring all services..."
-docker compose up -d worker email-processor whatsapp-processor delayed-processor
+docker compose up -d worker notification-processor delayed-processor
 
 echo ""
 echo "✅ All services restored. Check status with: docker compose ps"

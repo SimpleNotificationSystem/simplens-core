@@ -172,22 +172,15 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                 payload.scheduled_at = scheduledDate.toISOString();
             }
 
-            // Add provider(s)
+            // Add provider(s) - backend expects string[]
             if (Object.keys(selectedProviders).length > 0) {
                 // Map providers to channel order
                 const orderedProviders = selectedChannels.map(channel => {
-                    const explicit = selectedProviders[channel];
-                    return explicit || null;
-                });
+                    return selectedProviders[channel] || undefined;
+                }).filter((p): p is string => p !== undefined);
 
-                const hasAnyExplicit = orderedProviders.some(p => p !== null);
-
-                if (hasAnyExplicit) {
-                    if (selectedChannels.length === 1 && orderedProviders[0]) {
-                        payload.provider = orderedProviders[0];
-                    } else {
-                        payload.provider = orderedProviders;
-                    }
+                if (orderedProviders.length > 0) {
+                    payload.provider = orderedProviders;
                 }
             }
 

@@ -11,8 +11,7 @@ Scripts to test the notification service's resilience by simulating various cras
 
 | Script | Description |
 |--------|-------------|
-| `crash-email-processor.sh` | Crash and restart the email processor |
-| `crash-whatsapp-processor.sh` | Crash and restart the WhatsApp processor |
+| `crash-notification-processor.sh` | Crash and restart the unified notification processor (plugin-based) |
 | `crash-worker.sh` | Crash and restart the background worker |
 | `crash-delayed-processor.sh` | Crash and restart the delayed processor |
 
@@ -24,18 +23,36 @@ Scripts to test the notification service's resilience by simulating various cras
 | `crash-complete-outage.sh` | Crash worker + all processors (API stays up) |
 | `crash-cascading.sh` | Simulate cascading failure with staggered crashes |
 
+## Advanced Chaos Tests
+
+| Script | Description |
+|--------|-------------|
+| `crash-multiwave-chaos.sh` | Multi-wave chaos test with 5 different crash patterns |
+| `crash-multiwave-all.sh` | Complete infrastructure chaos (8 waves) including MongoDB, Redis, Kafka |
+
 ## Usage
 
 ### Bash (Linux/Mac/Git Bash)
 ```bash
 cd scripts/crash-tests
 
-# Crash email processor, wait 30s, restart
-./crash-email-processor.sh
+# Crash notification processor, wait 30s, restart
+./crash-notification-processor.sh
 
 # Custom delay (60 seconds)
-./crash-email-processor.sh 60
+./crash-notification-processor.sh 60
+
+# Run multi-wave chaos test with 500 requests per wave
+./crash-multiwave-chaos.sh 500 30
 ```
+
+## Architecture
+
+The notification service uses a **unified notification-processor** with a plugin system:
+
+- **notification-processor**: Handles all notification channels via plugins (e.g., `@simplens/mock`)
+- **worker**: Polls the outbox and publishes messages to Kafka
+- **delayed-processor**: Handles scheduled notifications
 
 ## What to Observe
 
@@ -55,8 +72,6 @@ cd scripts/crash-tests
 
 1. **Send test notifications** before crashing:
    ```bash
-   node scripts/client.js
-   # or
    node scripts/load-test.js
    ```
 
@@ -70,3 +85,10 @@ When services crash and restart:
 - **Kafka consumers** will resume from their last committed offset
 - **Outbox processor** will reclaim unprocessed entries
 - **Delayed processor** will continue processing scheduled notifications
+- **Plugin system** will re-initialize all configured providers
+
+## Legacy Scripts (Deprecated)
+
+The following scripts reference the old architecture with separate email/whatsapp processors and are deprecated:
+- `crash-email-processor.sh` - Use `crash-notification-processor.sh` instead
+- `crash-whatsapp-processor.sh` - Use `crash-notification-processor.sh` instead

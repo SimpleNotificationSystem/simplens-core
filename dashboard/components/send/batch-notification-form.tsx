@@ -209,25 +209,15 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                 payload.scheduled_at = scheduledDate.toISOString();
             }
 
-            // Add provider(s)
+            // Add provider(s) - backend expects string[]
             if (Object.keys(selectedProviders).length > 0) {
-                // Map providers to channel order
+                // Map providers to channel order, filter out undefined
                 const orderedProviders = selectedChannels.map(channel => {
-                    const explicit = selectedProviders[channel];
-                    // If no explicit provider selected, we can send null values (backend handles gaps)
-                    return explicit || null;
-                });
+                    return selectedProviders[channel] || undefined;
+                }).filter((p): p is string => p !== undefined);
 
-                // If all are null, don't send anything (allow backend defaults)
-                const hasAnyExplicit = orderedProviders.some(p => p !== null);
-
-                if (hasAnyExplicit) {
-                    if (selectedChannels.length === 1 && orderedProviders[0]) {
-                        payload.provider = orderedProviders[0];
-                    } else {
-                        // Send array matching channel length
-                        payload.provider = orderedProviders;
-                    }
+                if (orderedProviders.length > 0) {
+                    payload.provider = orderedProviders;
                 }
             }
 
