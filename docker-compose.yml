@@ -131,9 +131,11 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: api
-    image: simplens:latest
+    image: simplens-core:latest
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-3000}
@@ -144,12 +146,9 @@ services:
       MAX_BATCH_REQ_LIMIT: ${MAX_BATCH_REQ_LIMIT:-1000}
       LOKI_URL: http://loki:3100
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      EMAIL_PARTITION: ${EMAIL_PARTITION:-1}
-      WHATSAPP_PARTITION: ${WHATSAPP_PARTITION:-1}
       DELAYED_PARTITION: ${DELAYED_PARTITION:-1}
       NOTIFICATION_STATUS_PARTITION: ${NOTIFICATION_STATUS_PARTITION:-1}
-      # Plugin Configuration - needed for dynamic topic creation
-      SIMPLENS_CONFIG_PATH: /app/simplens.config.yaml
+      SIMPLENS_CONFIG_PATH: ${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}
     volumes:
       # Mount plugin config for dynamic topic creation
       - ./simplens.config.yaml:/app/simplens.config.yaml:ro
@@ -175,9 +174,11 @@ services:
 
   # Background Worker - Polls outbox, publishes to Kafka, updates status in MongoDB
   worker:
-    image: simplens:latest
+    image: simplens-core:latest
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    env_file:
+      - .env
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
@@ -206,26 +207,22 @@ services:
 
   # Unified Notification Processor - Uses plugin system for all channels
   notification-processor:
-    image: simplens:latest
+    image: simplens-core:latest
+    env_file:
+      - .env
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
       REDIS_URL: redis://redis:6379
       BROKERS: kafka:9093
       # Plugin Configuration - path to simplens.config.yaml
-      SIMPLENS_CONFIG_PATH: /app/simplens.config.yaml
+      SIMPLENS_CONFIG_PATH: ${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}
       # Processor Mode - 'all' for all channels, or specific channel name
       PROCESSOR_CHANNEL: ${PROCESSOR_CHANNEL:-all}
       # Retry Configuration
       MAX_RETRY_COUNT: ${MAX_RETRY_COUNT:-5}
       IDEMPOTENCY_TTL_SECONDS: ${IDEMPOTENCY_TTL_SECONDS:-86400}
       PROCESSING_TTL_SECONDS: ${PROCESSING_TTL_SECONDS:-120}
-      # Gmail Plugin Configuration (simplens-plugin-gmail)
-      EMAIL_HOST: ${EMAIL_HOST:-smtp.gmail.com}
-      EMAIL_PORT: ${EMAIL_PORT:-587}
-      EMAIL_USER: ${EMAIL_USER:-}
-      EMAIL_PASS: ${EMAIL_PASS:-}
-      EMAIL_FROM: ${EMAIL_FROM:-}
       # Logging
       LOKI_URL: http://loki:3100
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -250,7 +247,9 @@ services:
 
   # Delayed Processor - Handles scheduled notifications via Redis ZSET queue
   delayed-processor:
-    image: simplens:latest
+    image: simplens-core:latest
+    env_file:
+      - .env
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
@@ -281,10 +280,12 @@ services:
 
   # Recovery Service - Detects stuck notifications and creates alerts
   recovery:
-    image: simplens:latest
+    image: simplens-core:latest
     deploy:
       replicas: 1
-    container_name: ns-recovery
+    container_name: recovery
+    env_file:
+      - .env
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
@@ -320,20 +321,23 @@ services:
     build:
       context: ./dashboard
       dockerfile: Dockerfile
-    container_name: ns-dashboard
+    container_name: dashboard
     ports:
       - "3002:3002"
+    env_file:
+      - .env
     environment:
       NODE_ENV: production
+      PORT: ${DASHBOARD_PORT:-3002}
       MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
       AUTH_SECRET: ${AUTH_SECRET:-change-this-in-production}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
       AUTH_TRUST_HOST: ${AUTH_TRUST_HOST:-true}
       # For sending notifications
-      API_BASE_URL: http://api:3000
+      API_BASE_URL: http://api:${PORT:-3000}
       NS_API_KEY: ${NS_API_KEY:-dev-api-key-change-in-production}
-      WEBHOOK_HOST: ns-dashboard
+      WEBHOOK_HOST: dashboard
       WEBHOOK_PORT: "3002"
     depends_on:
       mongo:
