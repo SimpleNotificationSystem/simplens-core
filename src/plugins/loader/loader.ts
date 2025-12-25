@@ -5,15 +5,79 @@
  * Supports dynamic import of npm packages.
  */
 
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { execSync } from 'child_process';
 import { pathToFileURL } from 'url';
 import { parse as parseYaml } from 'yaml';
 import { PluginRegistry, type ChannelConfig } from './registry.js';
 import type { SimpleNSProvider, ProviderConfig } from '../interfaces/provider.types.js';
 
 // Plugins directory for user-installed plugins
-const PLUGINS_NODE_MODULES = join(process.cwd(), '.plugins', 'node_modules');
+const PLUGINS_DIR = join(process.cwd(), '.plugins');
+const PLUGINS_NODE_MODULES = join(PLUGINS_DIR, 'node_modules');
+
+/**
+ * Initialize plugins directory with package.json if needed
+ */
+function initPluginsDir(): void {
+    if (!existsSync(PLUGINS_DIR)) {
+        mkdirSync(PLUGINS_DIR, { recursive: true });
+    }
+
+    const packageJsonPath = join(PLUGINS_DIR, 'package.json');
+    if (!existsSync(packageJsonPath)) {
+        const initialPackage = {
+            name: 'simplens-plugins',
+            version: '1.0.0',
+            description: 'User-installed SimpleNS plugins',
+            private: true,
+            type: 'module',
+            dependencies: {}
+        };
+        writeFileSync(packageJsonPath, JSON.stringify(initialPackage, null, 2));
+    }
+}
+
+/**
+ * Install missing plugins from configuration
+ * Checks which packages in config are not installed and installs them
+ */
+async function installMissingPlugins(config: SimpleNSConfig): Promise<void> {
+    if (!config.providers || config.providers.length === 0) {
+        return;
+    }
+
+    const missingPackages: string[] = [];
+
+    for (const entry of config.providers) {
+        const pluginPath = join(PLUGINS_NODE_MODULES, entry.package);
+        if (!existsSync(pluginPath)) {
+            missingPackages.push(entry.package);
+        }
+    }
+
+    if (missingPackages.length === 0) {
+        return;
+    }
+
+    console.log(`[PluginLoader] Auto-installing ${missingPackages.length} missing plugin(s)...`);
+    initPluginsDir();
+
+    for (const pkg of missingPackages) {
+        console.log(`[PluginLoader] Installing ${pkg}...`);
+        try {
+            execSync(`npm install ${pkg}`, {
+                cwd: PLUGINS_DIR,
+                stdio: 'pipe' // Suppress output for cleaner logs
+            });
+            console.log(`[PluginLoader] ✅ Installed ${pkg}`);
+        } catch (err) {
+            console.error(`[PluginLoader] ❌ Failed to install ${pkg}:`, err);
+            throw new Error(`Failed to auto-install plugin: ${pkg}`);
+        }
+    }
+}
 
 /**
  * Provider entry in configuration
@@ -267,6 +331,9 @@ export async function loadProviders(configPath: string = './simplens.config.yaml
         PluginRegistry.setInitialized(true);
         return;
     }
+
+    // Auto-install missing plugins from config
+    await installMissingPlugins(config);
 
     // Load each provider
     for (const entry of config.providers) {

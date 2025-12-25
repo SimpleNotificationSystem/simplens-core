@@ -154,7 +154,7 @@ function generateCredentialPlaceholders(requiredCredentials) {
     for (const cred of requiredCredentials) {
         // Convert credential name to env var format
         // e.g., "apiKey" -> "${API_KEY}", "refreshToken" -> "${REFRESH_TOKEN}"
-        const envVar = cred.replace(/([A-Z])/g, '_$1').toUpperCase();
+        const envVar = cred.toUpperCase();
         creds[cred] = `\${${envVar}}`;
     }
     return creds;
@@ -181,7 +181,11 @@ function updateConfig(configPath, packageName, manifest) {
         id: providerId,
         credentials: generateCredentialPlaceholders(manifest.requiredCredentials || []),
         options: {
-            priority: 1
+            priority: 1,
+            rateLimit: {
+                maxTokens: 100,
+                refillRate: 10
+            }
         }
     };
 

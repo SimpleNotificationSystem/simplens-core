@@ -151,7 +151,7 @@ services:
       SIMPLENS_CONFIG_PATH: ${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}
     volumes:
       # Mount plugins directory for user-installed plugins (optional)
-      - ./.plugins:/app/.plugins:ro
+      - ./.plugins:/app/.plugins
       - ./simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/api/server.js" ]
     depends_on:
@@ -230,7 +230,7 @@ services:
     command: [ "node", "dist/processors/unified/unified.processor.js" ]
     volumes:
       # Mount plugins directory for user-installed plugins (optional)
-      - ./.plugins:/app/.plugins:ro
+      - ./.plugins:/app/.plugins
       - ./simplens.config.yaml:/app/simplens.config.yaml:ro
     depends_on:
       mongo:
