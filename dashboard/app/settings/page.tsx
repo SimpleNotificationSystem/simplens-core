@@ -11,7 +11,7 @@ export default function SettingsPage() {
             title="Settings"
             description="System configuration and information"
         >
-            <div className="space-y-6 max-w-2xl">
+            <div className="space-y-6 max-w-4xl">
                 {/* System Info */}
                 <Card>
                     <CardHeader>

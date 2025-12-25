@@ -32,6 +32,7 @@ import {
     PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Search, Eye, RefreshCw, ArrowUpDown } from "lucide-react";
+import { PageToolbar, PageToolbarSection, PageToolbarSpacer } from "@/components/ui/page-toolbar";
 import { format } from "date-fns";
 import type { PaginatedResponse, Notification, NOTIFICATION_STATUS } from "@/lib/types";
 import Link from "next/link";
@@ -93,10 +94,10 @@ export default function EventsPage() {
             title="Events"
             description="Browse and search all notification events"
         >
-            <div className="space-y-4">
-                {/* Filters */}
-                <div className="flex flex-wrap items-center gap-4">
-                    <div className="flex items-center gap-2 flex-1 min-w-[200px] max-w-md">
+            <div className="space-y-6">
+                {/* Toolbar */}
+                <PageToolbar>
+                    <PageToolbarSection className="flex-1 min-w-[200px] max-w-md">
                         <Input
                             placeholder="Search by request ID, email, phone..."
                             value={searchInput}
@@ -106,49 +107,51 @@ export default function EventsPage() {
                         <Button onClick={handleSearch} size="icon" variant="outline">
                             <Search className="h-4 w-4" />
                         </Button>
-                    </div>
+                    </PageToolbarSection>
 
-                    <Select value={status} onValueChange={handleStatusChange}>
-                        <SelectTrigger className="w-[150px]">
-                            <SelectValue placeholder="Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Status</SelectItem>
-                            <SelectItem value="pending">Pending</SelectItem>
-                            <SelectItem value="processing">Processing</SelectItem>
-                            <SelectItem value="delivered">Delivered</SelectItem>
-                            <SelectItem value="failed">Failed</SelectItem>
-                        </SelectContent>
-                    </Select>
+                    <PageToolbarSection>
+                        <Select value={status} onValueChange={handleStatusChange}>
+                            <SelectTrigger className="w-[150px]">
+                                <SelectValue placeholder="Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Status</SelectItem>
+                                <SelectItem value="pending">Pending</SelectItem>
+                                <SelectItem value="processing">Processing</SelectItem>
+                                <SelectItem value="delivered">Delivered</SelectItem>
+                                <SelectItem value="failed">Failed</SelectItem>
+                            </SelectContent>
+                        </Select>
 
-                    <Select value={channel} onValueChange={handleChannelChange}>
-                        <SelectTrigger className="w-[150px]">
-                            <SelectValue placeholder="Channel" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Channels</SelectItem>
-                            <SelectItem value="email">Email</SelectItem>
-                            <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                        </SelectContent>
-                    </Select>
+                        <Select value={channel} onValueChange={handleChannelChange}>
+                            <SelectTrigger className="w-[150px]">
+                                <SelectValue placeholder="Channel" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Channels</SelectItem>
+                                <SelectItem value="email">Email</SelectItem>
+                                <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                            </SelectContent>
+                        </Select>
 
-                    <Select value={sortBy} onValueChange={handleSortChange}>
-                        <SelectTrigger className="w-[180px]">
-                            <ArrowUpDown className="h-4 w-4 mr-2" />
-                            <SelectValue placeholder="Sort by" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="created_at_desc">Created (Newest)</SelectItem>
-                            <SelectItem value="created_at_asc">Created (Oldest)</SelectItem>
-                            <SelectItem value="updated_at_desc">Updated (Newest)</SelectItem>
-                            <SelectItem value="updated_at_asc">Updated (Oldest)</SelectItem>
-                        </SelectContent>
-                    </Select>
+                        <Select value={sortBy} onValueChange={handleSortChange}>
+                            <SelectTrigger className="w-[180px]">
+                                <ArrowUpDown className="h-4 w-4 mr-2" />
+                                <SelectValue placeholder="Sort by" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="created_at_desc">Created (Newest)</SelectItem>
+                                <SelectItem value="created_at_asc">Created (Oldest)</SelectItem>
+                                <SelectItem value="updated_at_desc">Updated (Newest)</SelectItem>
+                                <SelectItem value="updated_at_asc">Updated (Oldest)</SelectItem>
+                            </SelectContent>
+                        </Select>
 
-                    <Button variant="outline" size="icon" onClick={() => mutate()}>
-                        <RefreshCw className="h-4 w-4" />
-                    </Button>
-                </div>
+                        <Button variant="outline" size="icon" onClick={() => mutate()}>
+                            <RefreshCw className="h-4 w-4" />
+                        </Button>
+                    </PageToolbarSection>
+                </PageToolbar>
 
                 {/* Table */}
                 <div className="rounded-md border">

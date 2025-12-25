@@ -12,8 +12,8 @@ export default function SendPage() {
             title="Send Notification"
             description="Send single or batch notifications"
         >
-            <div className="w-full sm:w-[80%] mx-auto">
-                <Tabs defaultValue="single" className=" w-fullspace-y-6">
+            <div className="max-w-4xl mx-auto space-y-6">
+                <Tabs defaultValue="single" className="w-full">
                     <TabsList className="w-full mb-4">
                         <TabsTrigger value="single" className="flex items-center gap-2">
                             <User className="h-4 w-4" />

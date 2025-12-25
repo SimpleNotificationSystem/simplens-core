@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageToolbar, PageToolbarSection, PageToolbarSpacer } from "@/components/ui/page-toolbar";
 import {
     Dialog,
     DialogContent,
@@ -101,39 +102,37 @@ export default function FailedPage() {
             description="Inspect and retry failed notifications"
         >
             <div className="space-y-6">
-                {/* Summary Card */}
-                <Card className="border-red-200 dark:border-red-900">
-                    <CardHeader className="pb-2">
-                        <div className="flex items-center gap-2">
-                            <AlertTriangle className="h-5 w-5 text-red-500" />
-                            <CardTitle>Failed Notifications</CardTitle>
+                {/* Toolbar */}
+                <PageToolbar>
+                    <PageToolbarSection>
+                        <div className="flex items-center gap-2 text-sm">
+                            <AlertTriangle className="h-4 w-4 text-red-500" />
+                            <span className="text-muted-foreground">
+                                {failedCount === 0
+                                    ? "No failed notifications - all clear!"
+                                    : `${failedCount} notification(s) require attention`}
+                            </span>
                         </div>
-                        <CardDescription>
-                            {failedCount === 0
-                                ? "No failed notifications - all clear!"
-                                : `${failedCount} notification(s) require attention`}
-                        </CardDescription>
-                    </CardHeader>
-                    {failedCount > 0 && (
-                        <CardContent>
-                            <div className="flex items-center gap-2">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={selectedIds.length === 0 || isRetrying}
-                                    onClick={() => setRetryDialogOpen(true)}
-                                >
-                                    <RefreshCw className={`mr-2 h-4 w-4 ${isRetrying ? "animate-spin" : ""}`} />
-                                    Retry Selected ({selectedIds.length})
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => mutate()}>
-                                    <RefreshCw className="mr-2 h-4 w-4" />
-                                    Refresh
-                                </Button>
-                            </div>
-                        </CardContent>
-                    )}
-                </Card>
+                    </PageToolbarSection>
+
+                    <PageToolbarSpacer />
+
+                    <PageToolbarSection>
+                        <Button
+                            variant="default"
+                            size="sm"
+                            disabled={selectedIds.length === 0 || isRetrying}
+                            onClick={() => setRetryDialogOpen(true)}
+                        >
+                            <RefreshCw className={`mr-2 h-4 w-4 ${isRetrying ? "animate-spin" : ""}`} />
+                            Retry Selected ({selectedIds.length})
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => mutate()}>
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            Refresh
+                        </Button>
+                    </PageToolbarSection>
+                </PageToolbar>
 
                 {/* Table */}
                 {isLoading ? (

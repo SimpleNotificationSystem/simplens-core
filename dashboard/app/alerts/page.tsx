@@ -16,6 +16,7 @@ import {
     Filter,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { PageToolbar, PageToolbarSection, PageToolbarSpacer } from "@/components/ui/page-toolbar";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -200,20 +201,11 @@ export default function AlertsPage() {
     };
 
     return (
-        <DashboardLayout title="Alerts">
-            <div className="flex flex-1 flex-col gap-4 p-4">
-                {/* Header */}
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <h1 className="text-2xl font-bold flex items-center gap-2">
-                            <ShieldAlert className="h-6 w-6" />
-                            Alerts
-                        </h1>
-                        <p className="text-muted-foreground">
-                            Notifications requiring manual inspection
-                        </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
+        <DashboardLayout title="Alerts" description="Notifications requiring manual inspection">
+            <div className="space-y-6">
+                {/* Toolbar */}
+                <PageToolbar>
+                    <PageToolbarSection>
                         {/* Filter Dropdown */}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -226,7 +218,7 @@ export default function AlertsPage() {
                                     <ChevronDown className="h-4 w-4 ml-1" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
+                            <DropdownMenuContent align="start">
                                 <DropdownMenuItem onClick={() => handleFilterChange("all")}>
                                     <ShieldAlert className="h-4 w-4 mr-2" />
                                     All Types
@@ -245,7 +237,11 @@ export default function AlertsPage() {
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
+                    </PageToolbarSection>
 
+                    <PageToolbarSpacer />
+
+                    <PageToolbarSection>
                         {/* Retry All Dropdown */}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -283,8 +279,8 @@ export default function AlertsPage() {
                             <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
                             Refresh
                         </Button>
-                    </div>
-                </div>
+                    </PageToolbarSection>
+                </PageToolbar>
 
                 {/* Summary Card */}
                 <Card>

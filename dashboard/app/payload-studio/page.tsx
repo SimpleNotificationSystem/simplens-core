@@ -223,7 +223,7 @@ export default function ApiDesignerPage() {
             title="Payload Studio"
             description="Generate notification request schemas for your integrations"
         >
-            <div className="px-1 sm:px-0">
+            <div className="space-y-6">
                 <div className="grid gap-6 lg:grid-cols-2 items-start">
                     {/* Configuration Panel */}
                     <div className="space-y-6 min-w-0">
