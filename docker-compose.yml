@@ -150,7 +150,8 @@ services:
       NOTIFICATION_STATUS_PARTITION: ${NOTIFICATION_STATUS_PARTITION:-1}
       SIMPLENS_CONFIG_PATH: ${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}
     volumes:
-      # Mount plugin config for dynamic topic creation
+      # Mount plugins directory for user-installed plugins (optional)
+      - ./.plugins:/app/.plugins:ro
       - ./simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/api/server.js" ]
     depends_on:
@@ -228,7 +229,8 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     command: [ "node", "dist/processors/unified/unified.processor.js" ]
     volumes:
-      # Mount plugin config file
+      # Mount plugins directory for user-installed plugins (optional)
+      - ./.plugins:/app/.plugins:ro
       - ./simplens.config.yaml:/app/simplens.config.yaml:ro
     depends_on:
       mongo:

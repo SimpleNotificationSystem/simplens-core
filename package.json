@@ -24,7 +24,10 @@
     "processor:dev": "tsx watch src/processors/unified/unified.processor.ts",
     "recovery": "node dist/workers/recovery/recovery.service.js",
     "recovery:dev": "tsx watch src/workers/recovery/recovery.service.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "plugin:install": "node scripts/plugin-install.js",
+    "plugin:uninstall": "node scripts/plugin-uninstall.js",
+    "plugin:list": "node scripts/plugin-list.js"
   },
   "repository": {
     "type": "git",
@@ -46,7 +49,6 @@
     "@types/kafkajs": "^1.8.2",
     "@types/mongoose": "^5.11.96",
     "@types/node": "^24.10.1",
-    "@types/nodemailer": "^7.0.4",
     "@types/supertest": "^6.0.3",
     "@types/uuid": "^10.0.0",
     "@vitest/coverage-v8": "^4.0.15",
@@ -60,7 +62,6 @@
     "vitest": "^4.0.15"
   },
   "dependencies": {
-    "@simplens/mock": "^1.0.0",
     "axios": "^1.13.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
@@ -70,7 +71,6 @@
     "ioredis": "^5.8.2",
     "kafkajs": "^2.2.4",
     "mongoose": "^9.0.0",
-    "nodemailer": "^7.0.11",
     "uuid": "^13.0.0",
     "winston": "^3.18.3",
     "winston-loki": "^6.1.3",

@@ -6,9 +6,14 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+import { pathToFileURL } from 'url';
 import { parse as parseYaml } from 'yaml';
 import { PluginRegistry, type ChannelConfig } from './registry.js';
 import type { SimpleNSProvider, ProviderConfig } from '../interfaces/provider.types.js';
+
+// Plugins directory for user-installed plugins
+const PLUGINS_NODE_MODULES = join(process.cwd(), '.plugins', 'node_modules');
 
 /**
  * Provider entry in configuration
@@ -45,18 +50,50 @@ interface SimpleNSConfig {
 }
 
 /**
- * Load configuration from file
+ * Find local config file if it exists
+ * Checks for simplens.config.yaml/.yml/.json
  */
-function loadConfig(configPath: string): SimpleNSConfig {
-    if (!existsSync(configPath)) {
-        throw new Error(`Configuration file not found: ${configPath}`);
+function findLocalConfig(basePath: string): string | null {
+    const dir = basePath.substring(0, basePath.lastIndexOf('/') + 1) || './';
+    const localPatterns = [
+        'simplens.config.yaml',
+        'simplens.config.yml',
+        'simplens.config.json'
+    ];
+
+    for (const filename of localPatterns) {
+        const localPath = dir + filename;
+        if (existsSync(localPath)) {
+            return localPath;
+        }
+    }
+    return null;
+}
+
+/**
+ * Load configuration from file
+ * Returns null if no config file exists
+ */
+function loadConfig(configPath: string): SimpleNSConfig | null {
+    // Check for local config first (takes precedence)
+    const localConfigPath = findLocalConfig(configPath);
+    const pathToUse = localConfigPath || configPath;
+
+    if (localConfigPath) {
+        console.log(`[PluginLoader] Using local config: ${localConfigPath}`);
     }
 
-    const content = readFileSync(configPath, 'utf-8');
+    if (!existsSync(pathToUse)) {
+        // No config file - this is okay, just means no plugins configured
+        console.log(`[PluginLoader] No configuration file found at ${pathToUse}`);
+        return null;
+    }
 
-    if (configPath.endsWith('.yaml') || configPath.endsWith('.yml')) {
+    const content = readFileSync(pathToUse, 'utf-8');
+
+    if (pathToUse.endsWith('.yaml') || pathToUse.endsWith('.yml')) {
         return parseYaml(content) as SimpleNSConfig;
-    } else if (configPath.endsWith('.json')) {
+    } else if (pathToUse.endsWith('.json')) {
         return JSON.parse(content) as SimpleNSConfig;
     } else {
         throw new Error(`Unsupported config format. Use .yaml, .yml, or .json`);
@@ -87,43 +124,83 @@ function resolveCredentials(credentials: Record<string, string> | undefined): Re
 }
 
 /**
+ * Helper to instantiate provider from module
+ */
+function instantiateFromModule(module: Record<string, unknown>, packageName: string): SimpleNSProvider {
+    if (module.default) {
+        if (typeof module.default === 'function') {
+            const DefaultExport = module.default as new () => SimpleNSProvider;
+            if (DefaultExport.prototype?.constructor) {
+                return new DefaultExport();
+            }
+            // Factory function
+            return (module.default as () => SimpleNSProvider)();
+        }
+        return module.default as SimpleNSProvider;
+    }
+    if (module.createProvider) {
+        return (module.createProvider as () => SimpleNSProvider)();
+    }
+    throw new Error(`Package ${packageName} does not export a provider`);
+}
+
+/**
+ * Resolve the entry file for a package from its package.json
+ */
+function resolvePackageEntry(packagePath: string): string {
+    const pkgJsonPath = join(packagePath, 'package.json');
+    if (!existsSync(pkgJsonPath)) {
+        return join(packagePath, 'index.js'); // Fallback
+    }
+
+    const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
+
+    // Resolve entry point: exports > main > index.js
+    let entryPoint = 'index.js';
+    if (pkg.exports) {
+        if (typeof pkg.exports === 'string') {
+            entryPoint = pkg.exports;
+        } else if (pkg.exports['.']) {
+            const dotExport = pkg.exports['.'];
+            entryPoint = typeof dotExport === 'string'
+                ? dotExport
+                : (dotExport.import || dotExport.default || 'index.js');
+        }
+    } else if (pkg.main) {
+        entryPoint = pkg.main;
+    }
+
+    return join(packagePath, entryPoint);
+}
+
+/**
  * Dynamically import a provider package and instantiate
+ * First checks plugins directory, then falls back to core node_modules
  */
 async function importAndInstantiateProvider(packageName: string): Promise<SimpleNSProvider> {
     try {
-        // Try to import as npm package
-        const module = await import(packageName);
-
-        // Provider should export default class or createProvider function
-        if (module.default) {
-            if (typeof module.default === 'function') {
-                // Check if it's a class (has prototype) or factory function
-                if (module.default.prototype && module.default.prototype.constructor) {
-                    return new module.default();
-                }
-                // It's a factory function
-                return module.default();
-            }
-            // Already an instance
-            return module.default;
+        // First, try to import from plugins directory
+        const pluginPath = join(PLUGINS_NODE_MODULES, packageName);
+        if (existsSync(pluginPath)) {
+            console.log(`[PluginLoader] Loading from plugins directory: ${packageName}`);
+            // Resolve the actual entry file from package.json
+            const entryFile = resolvePackageEntry(pluginPath);
+            // Convert to file:// URL for cross-platform compatibility
+            const pluginUrl = pathToFileURL(entryFile).href;
+            const module = await import(pluginUrl) as Record<string, unknown>;
+            return instantiateFromModule(module, packageName);
         }
 
-        if (module.createProvider) {
-            return module.createProvider();
-        }
-
-        throw new Error(`Package ${packageName} does not export a provider`);
+        // Fall back to core node_modules (for bundled plugins or testing)
+        const module = await import(packageName) as Record<string, unknown>;
+        return instantiateFromModule(module, packageName);
     } catch (err) {
-        // If npm import fails, try local path
+        // Handle local path imports
         if (packageName.startsWith('./') || packageName.startsWith('../')) {
-            const module = await import(packageName);
-            const provider = module.default || module.createProvider;
-            if (typeof provider === 'function') {
-                return provider.prototype ? new provider() : provider();
-            }
-            return provider;
+            const module = await import(packageName) as Record<string, unknown>;
+            return instantiateFromModule(module, packageName);
         }
-        throw err;
+        throw new Error(`Plugin not found: ${packageName}. Install with: npm run plugin:install ${packageName}`);
     }
 }
 
@@ -184,8 +261,10 @@ export async function loadProviders(configPath: string = './simplens.config.yaml
 
     const config = loadConfig(configPath);
 
-    if (!config.providers || config.providers.length === 0) {
-        console.warn('[PluginLoader] No providers configured');
+    // No config file or empty config - just mark as initialized with no providers
+    if (!config || !config.providers || config.providers.length === 0) {
+        console.warn('[PluginLoader] No providers configured - starting without plugins');
+        PluginRegistry.setInitialized(true);
         return;
     }
 
@@ -224,11 +303,13 @@ export function getConfiguredChannels(configPath?: string): string[] {
 
     try {
         const config = loadConfig(path);
-        return Object.keys(config.channels || {});
+        if (config) {
+            return Object.keys(config.channels || {});
+        }
     } catch (err) {
         console.warn(`[PluginLoader] Could not read config for channels: ${err}`);
-        return [];
     }
+    return [];
 }
 
 /**
