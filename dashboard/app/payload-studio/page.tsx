@@ -221,7 +221,7 @@ export default function ApiDesignerPage() {
     return (
         <DashboardLayout
             title="Payload Studio"
-            description="Generate notification request schemas for your integrations"
+            description="Generate notification schemas"
         >
             <div className="space-y-6">
                 <div className="grid gap-6 lg:grid-cols-2 items-start">

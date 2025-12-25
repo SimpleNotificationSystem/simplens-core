@@ -272,19 +272,19 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
 
                                     {isSelected && (
                                         <div className="pl-6">
-                                            <div className="flex items-center gap-2">
-                                                <Label className="text-xs text-muted-foreground w-16">Provider:</Label>
+                                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                                <Label className="text-xs text-muted-foreground sm:w-16 shrink-0">Provider:</Label>
                                                 <Select
                                                     value={selectedProviders[channel]}
                                                     onValueChange={(val) => setSelectedProviders(prev => ({ ...prev, [channel]: val }))}
                                                 >
-                                                    <SelectTrigger className="h-8 text-xs">
-                                                        <SelectValue placeholder="Select provider" />
+                                                    <SelectTrigger className="h-8 text-xs w-full sm:flex-1 max-w-[200px]">
+                                                        <SelectValue placeholder="Select provider" className="truncate" />
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         {providers.map(p => (
                                                             <SelectItem key={p.id} value={p.id} className="text-xs">
-                                                                {p.displayName} {p.id === channelConfig?.default && "(Default)"}
+                                                                <span className="truncate">{p.displayName} {p.id === channelConfig?.default && "(Default)"}</span>
                                                             </SelectItem>
                                                         ))}
                                                     </SelectContent>

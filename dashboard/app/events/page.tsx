@@ -96,22 +96,23 @@ export default function EventsPage() {
         >
             <div className="space-y-6">
                 {/* Toolbar */}
-                <PageToolbar>
-                    <PageToolbarSection className="flex-1 min-w-[200px] max-w-md">
+                <PageToolbar className="flex-col sm:flex-row gap-3">
+                    <PageToolbarSection className="w-full sm:w-auto sm:flex-1 sm:max-w-md">
                         <Input
                             placeholder="Search by request ID, email, phone..."
                             value={searchInput}
                             onChange={(e) => setSearchInput(e.target.value)}
                             onKeyDown={handleKeyDown}
+                            className="flex-1"
                         />
                         <Button onClick={handleSearch} size="icon" variant="outline">
                             <Search className="h-4 w-4" />
                         </Button>
                     </PageToolbarSection>
 
-                    <PageToolbarSection>
+                    <PageToolbarSection className="w-full sm:w-auto flex-wrap">
                         <Select value={status} onValueChange={handleStatusChange}>
-                            <SelectTrigger className="w-[150px]">
+                            <SelectTrigger className="w-[120px] sm:w-[130px]">
                                 <SelectValue placeholder="Status" />
                             </SelectTrigger>
                             <SelectContent>
@@ -124,7 +125,7 @@ export default function EventsPage() {
                         </Select>
 
                         <Select value={channel} onValueChange={handleChannelChange}>
-                            <SelectTrigger className="w-[150px]">
+                            <SelectTrigger className="w-[120px] sm:w-[140px]">
                                 <SelectValue placeholder="Channel" />
                             </SelectTrigger>
                             <SelectContent>
@@ -135,7 +136,7 @@ export default function EventsPage() {
                         </Select>
 
                         <Select value={sortBy} onValueChange={handleSortChange}>
-                            <SelectTrigger className="w-[180px]">
+                            <SelectTrigger className="w-[140px] sm:w-[160px]">
                                 <ArrowUpDown className="h-4 w-4 mr-2" />
                                 <SelectValue placeholder="Sort by" />
                             </SelectTrigger>
@@ -154,7 +155,7 @@ export default function EventsPage() {
                 </PageToolbar>
 
                 {/* Table */}
-                <div className="rounded-md border">
+                <div className="rounded-md border overflow-x-auto">
                     <Table>
                         <TableHeader>
                             <TableRow>
