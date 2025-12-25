@@ -13,6 +13,8 @@ import {
     Settings,
     Send,
     Book,
+    Puzzle,
+    Code,
 } from "lucide-react";
 import {
     Sidebar,
@@ -75,6 +77,16 @@ const navItems: NavItem[] = [
         title: "Analytics",
         href: "/analytics",
         icon: BarChart3,
+    },
+    {
+        title: "Plugins",
+        href: "/plugins",
+        icon: Puzzle,
+    },
+    {
+        title: "Payload Studio",
+        href: "/payload-studio",
+        icon: Code,
     },
 ];
 

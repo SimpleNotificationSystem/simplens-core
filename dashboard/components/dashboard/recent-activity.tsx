@@ -68,12 +68,12 @@ export function RecentActivity() {
                             <Link
                                 key={notification._id}
                                 href={`/events/${notification._id}`}
-                                className="flex items-center justify-between gap-4 hover:bg-muted/50 rounded-md p-2 transition-colors cursor-pointer"
+                                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 hover:bg-muted/50 rounded-md p-2 transition-colors cursor-pointer"
                             >
-                                <div className="flex flex-col gap-1">
-                                    <div className="flex items-center gap-2">
+                                <div className="flex flex-col gap-1 min-w-0 flex-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                         <ChannelBadge channel={notification.channel} />
-                                        <span className="text-sm font-medium truncate max-w-[200px]">
+                                        <span className="text-sm font-medium truncate">
                                             {String(notification.recipient.email || notification.recipient.phone || notification.recipient.user_id || '')}
                                         </span>
                                     </div>

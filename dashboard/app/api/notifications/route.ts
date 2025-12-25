@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
             channel: doc.channel,
             recipient: doc.recipient,
             content: doc.content,
-            variables: doc.variables ? Object.fromEntries(doc.variables) : undefined,
+            variables: doc.variables ?? undefined,
             webhook_url: doc.webhook_url,
             status: doc.status,
             scheduled_at: doc.scheduled_at,

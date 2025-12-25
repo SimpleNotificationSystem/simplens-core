@@ -35,7 +35,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             channel: notification.channel,
             recipient: notification.recipient,
             content: notification.content,
-            variables: notification.variables ? Object.fromEntries(notification.variables) : undefined,
+            variables: notification.variables ?? undefined,
             webhook_url: notification.webhook_url,
             status: notification.status,
             scheduled_at: notification.scheduled_at,
