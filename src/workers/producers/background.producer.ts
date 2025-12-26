@@ -78,7 +78,10 @@ const updateStatusesAfterPublish = async (
             // Skip notification status update for delayed notifications
             if (topic !== CORE_TOPICS.delayed_notification) {
                 await notification_model.updateMany(
-                    { _id: { $in: notificationIds } },
+                    { 
+                        _id: { $in: notificationIds },
+                        status: NOTIFICATION_STATUS.pending  // Only update if still pending
+                    },
                     { status: NOTIFICATION_STATUS.processing, updated_at: new Date() },
                     { session }
                 );
