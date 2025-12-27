@@ -322,5 +322,57 @@ describe('Status Consumer', () => {
 
             expect(global.fetch).toHaveBeenCalledTimes(1);
         });
+
+        it('should handle webhook timeout (AbortError)', async () => {
+            const statusData = createStatusMessage();
+            const kafkaMessage = createKafkaMessage(statusData);
+
+            const abortError = new Error('Request was aborted');
+            abortError.name = 'AbortError';
+            (global.fetch as any).mockRejectedValue(abortError);
+
+            // Should not throw - handle timeout gracefully
+            await expect(capturedMessageHandler!(kafkaMessage)).resolves.not.toThrow();
+        });
+
+        it('should retry on network errors with exponential backoff', async () => {
+            const statusData = createStatusMessage();
+            const kafkaMessage = createKafkaMessage(statusData);
+
+            const networkError = new Error('Network failure');
+            (global.fetch as any)
+                .mockRejectedValueOnce(networkError)
+                .mockRejectedValueOnce(networkError)
+                .mockResolvedValueOnce({ ok: true, status: 200 });
+
+            await capturedMessageHandler!(kafkaMessage);
+
+            // Should have retried 3 times
+            expect(global.fetch).toHaveBeenCalledTimes(3);
+        });
+
+        it('should give up after max retries on persistent network errors', async () => {
+            const statusData = createStatusMessage();
+            const kafkaMessage = createKafkaMessage(statusData);
+
+            const networkError = new Error('Network failure');
+            (global.fetch as any).mockRejectedValue(networkError);
+
+            // Should not throw
+            await expect(capturedMessageHandler!(kafkaMessage)).resolves.not.toThrow();
+
+            // Should have tried max times (3 attempts)
+            expect(global.fetch).toHaveBeenCalledTimes(3);
+        });
+    });
+
+    describe('Error Handling', () => {
+        it('should handle stopConsumer error gracefully', async () => {
+            await statusConsumer.startStatusConsumer();
+
+            mockConsumerStop.mockRejectedValueOnce(new Error('Stop failed'));
+
+            await expect(statusConsumer.stopStatusConsumer()).rejects.toThrow('Stop failed');
+        });
     });
 });

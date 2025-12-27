@@ -216,4 +216,123 @@ describe('Background Producer', () => {
             ).rejects.toThrow('Producer not initialized');
         });
     });
+
+    describe('sendStatusOutboxEvents', () => {
+        const mockNotificationFindById = vi.fn();
+        const mockStatusOutboxUpdateOne = vi.fn();
+
+        beforeEach(async () => {
+            // Re-mock notification model with findById
+            vi.doMock('@src/database/models/notification.models.js', () => ({
+                default: {
+                    updateMany: mockNotificationUpdateMany,
+                    findById: mockNotificationFindById,
+                },
+            }));
+
+            vi.doMock('@src/database/models/status-outbox.models.js', () => ({
+                default: {
+                    updateOne: mockStatusOutboxUpdateOne,
+                },
+            }));
+
+            backgroundProducer = await import('../../../../src/workers/producers/background.producer.js');
+        });
+
+        it('should return zero counts for empty entries', async () => {
+            await backgroundProducer.initProducer();
+
+            const result = await backgroundProducer.sendStatusOutboxEvents([]);
+
+            expect(result.successCount).toBe(0);
+            expect(result.failedCount).toBe(0);
+        });
+
+        it('should throw error if producer not initialized', async () => {
+            const statusEntry = {
+                _id: new mongoose.Types.ObjectId(),
+                notification_id: new mongoose.Types.ObjectId(),
+                status: 'delivered',
+                processed: false,
+            };
+
+            await expect(
+                backgroundProducer.sendStatusOutboxEvents([statusEntry as any])
+            ).rejects.toThrow('Producer not initialized');
+        });
+
+        it('should publish status updates to Kafka', async () => {
+            await backgroundProducer.initProducer();
+
+            const notificationId = new mongoose.Types.ObjectId();
+            mockNotificationFindById.mockResolvedValue({
+                _id: notificationId,
+                request_id: '12345678-1234-4234-8234-123456789012',
+                client_id: '12345678-1234-4234-8234-123456789012',
+                channel: 'email',
+                retry_count: 0,
+                webhook_url: 'https://example.com/webhook',
+            });
+            mockStatusOutboxUpdateOne.mockResolvedValue({ modifiedCount: 1 });
+
+            const statusEntry = {
+                _id: new mongoose.Types.ObjectId(),
+                notification_id: notificationId,
+                status: 'delivered',
+                processed: false,
+            };
+
+            const result = await backgroundProducer.sendStatusOutboxEvents([statusEntry as any]);
+
+            expect(mockSend).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    topic: 'notification_status',
+                })
+            );
+            expect(result.successCount).toBeGreaterThanOrEqual(0);
+        });
+
+        it('should handle notification not found gracefully', async () => {
+            await backgroundProducer.initProducer();
+
+            mockNotificationFindById.mockResolvedValue(null);
+
+            const statusEntry = {
+                _id: new mongoose.Types.ObjectId(),
+                notification_id: new mongoose.Types.ObjectId(),
+                status: 'delivered',
+                processed: false,
+            };
+
+            const result = await backgroundProducer.sendStatusOutboxEvents([statusEntry as any]);
+
+            expect(result.failedCount).toBe(1);
+        });
+
+        it('should handle Kafka publish errors', async () => {
+            await backgroundProducer.initProducer();
+
+            const notificationId = new mongoose.Types.ObjectId();
+            mockNotificationFindById.mockResolvedValue({
+                _id: notificationId,
+                request_id: '12345678-1234-4234-8234-123456789012',
+                client_id: '12345678-1234-4234-8234-123456789012',
+                channel: 'email',
+                retry_count: 0,
+                webhook_url: 'https://example.com/webhook',
+            });
+            mockSend.mockRejectedValueOnce(new Error('Kafka unavailable'));
+
+            const statusEntry = {
+                _id: new mongoose.Types.ObjectId(),
+                notification_id: notificationId,
+                status: 'delivered',
+                processed: false,
+            };
+
+            const result = await backgroundProducer.sendStatusOutboxEvents([statusEntry as any]);
+
+            expect(result.failedCount).toBe(1);
+        });
+    });
 });

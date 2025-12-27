@@ -1,15 +1,15 @@
 /**
  * Database Test Utilities
- * Provides in-memory MongoDB for isolated testing
+ * Provides in-memory MongoDB replica set for isolated testing with transaction support
  */
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
 
-let mongoServer: MongoMemoryServer | null = null;
+let mongoReplSet: MongoMemoryReplSet | null = null;
 
 /**
- * Connect to an in-memory MongoDB instance
- * Used for integration tests that need real database operations
+ * Connect to an in-memory MongoDB replica set
+ * Used for integration tests that need real database operations including transactions
  */
 export const connectTestDb = async (): Promise<typeof mongoose> => {
     // Disconnect existing connection if any
@@ -17,9 +17,20 @@ export const connectTestDb = async (): Promise<typeof mongoose> => {
         await mongoose.disconnect();
     }
 
-    mongoServer = await MongoMemoryServer.create();
-    const uri = mongoServer.getUri();
+    mongoReplSet = await MongoMemoryReplSet.create({
+        replSet: {
+            count: 1, // Single node replica set for testing
+            storageEngine: 'wiredTiger',
+            dbName: 'simplens_test', // Use a consistent database name
+        },
+    });
 
+    // Wait for replica set to be fully running and stable
+    await mongoReplSet.waitUntilRunning();
+
+    const uri = mongoReplSet.getUri('simplens_test');
+
+    // Connect without directConnection to allow replica set operations
     await mongoose.connect(uri);
 
     return mongoose;
@@ -33,9 +44,9 @@ export const disconnectTestDb = async (): Promise<void> => {
         await mongoose.disconnect();
     }
 
-    if (mongoServer) {
-        await mongoServer.stop();
-        mongoServer = null;
+    if (mongoReplSet) {
+        await mongoReplSet.stop();
+        mongoReplSet = null;
     }
 };
 

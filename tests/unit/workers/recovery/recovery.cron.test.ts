@@ -89,6 +89,291 @@ describe('Recovery Cron - Cleanup Functions', () => {
         vi.useRealTimers();
     });
 
+    describe('recoverStuckProcessing', () => {
+        it('should handle ghost delivery - Redis says delivered but DB says processing', async () => {
+            const { getIdempotencyStatus } = await import('../../../../src/processors/shared/idempotency.js');
+
+            // Mock getIdempotencyStatus to return delivered
+            (getIdempotencyStatus as ReturnType<typeof vi.fn>).mockResolvedValue({ status: 'delivered' });
+
+            // Mock finding a stuck processing notification
+            const mockNotificationId = '507f1f77bcf86cd799439011';
+            mockNotificationModel.find.mockReturnValue({
+                limit: vi.fn().mockResolvedValue([{
+                    _id: mockNotificationId,
+                    status: 'processing',
+                    retry_count: 0,
+                    updated_at: new Date('2024-01-15T11:00:00.000Z'), // 1 hour ago
+                }]),
+            });
+
+            // Mock findOneAndUpdate to return the locked notification
+            mockNotificationModel.findOneAndUpdate.mockResolvedValue({
+                _id: mockNotificationId,
+                status: 'processing',
+                retry_count: 0,
+            });
+
+            // Mock updateOne for status update
+            mockNotificationModel.updateOne.mockResolvedValue({ modifiedCount: 1 });
+
+            // Mock status outbox create
+            mockStatusOutboxModel.create.mockResolvedValue([{}]);
+
+            mockAlertModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+            mockStatusOutboxModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+
+            const { startRecoveryCron, stopRecoveryCron, setHealthChecker } = await import(
+                '../../../../src/workers/recovery/recovery.cron.js'
+            );
+
+            setHealthChecker(async () => true);
+
+            startRecoveryCron();
+            await vi.advanceTimersByTimeAsync(100);
+            await stopRecoveryCron();
+
+            // Should have logged ghost delivery detection
+            expect(mockLogger.info).toHaveBeenCalledWith(
+                expect.stringContaining('Ghost delivery detected')
+            );
+        });
+
+        it('should handle exhausted retries - mark as failed', async () => {
+            const { getIdempotencyStatus } = await import('../../../../src/processors/shared/idempotency.js');
+
+            // Mock getIdempotencyStatus to return failed
+            (getIdempotencyStatus as ReturnType<typeof vi.fn>).mockResolvedValue({ status: 'failed' });
+
+            // Mock finding a stuck notification with max retries
+            const mockNotificationId = '507f1f77bcf86cd799439012';
+            mockNotificationModel.find.mockReturnValue({
+                limit: vi.fn().mockResolvedValue([{
+                    _id: mockNotificationId,
+                    status: 'processing',
+                    retry_count: 5, // At max retry count
+                    updated_at: new Date('2024-01-15T11:00:00.000Z'),
+                }]),
+            });
+
+            mockNotificationModel.findOneAndUpdate.mockResolvedValue({
+                _id: mockNotificationId,
+                status: 'processing',
+                retry_count: 5,
+            });
+
+            mockNotificationModel.updateOne.mockResolvedValue({ modifiedCount: 1 });
+            mockStatusOutboxModel.create.mockResolvedValue([{}]);
+            mockAlertModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+            mockStatusOutboxModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+
+            const { startRecoveryCron, stopRecoveryCron, setHealthChecker } = await import(
+                '../../../../src/workers/recovery/recovery.cron.js'
+            );
+
+            setHealthChecker(async () => true);
+
+            startRecoveryCron();
+            await vi.advanceTimersByTimeAsync(100);
+            await stopRecoveryCron();
+
+            // Should have logged exhausted retries
+            expect(mockLogger.info).toHaveBeenCalledWith(
+                expect.stringContaining('exhausted retries')
+            );
+        });
+
+        it('should create alert for failed notification with retries remaining', async () => {
+            const { getIdempotencyStatus } = await import('../../../../src/processors/shared/idempotency.js');
+
+            // Mock getIdempotencyStatus to return failed
+            (getIdempotencyStatus as ReturnType<typeof vi.fn>).mockResolvedValue({ status: 'failed' });
+
+            // Mock finding a stuck notification with retries remaining
+            const mockNotificationId = '507f1f77bcf86cd799439013';
+            mockNotificationModel.find.mockReturnValue({
+                limit: vi.fn().mockResolvedValue([{
+                    _id: mockNotificationId,
+                    status: 'processing',
+                    retry_count: 2, // Less than max
+                    updated_at: new Date('2024-01-15T11:00:00.000Z'),
+                }]),
+            });
+
+            mockNotificationModel.findOneAndUpdate.mockResolvedValue({
+                _id: mockNotificationId,
+                status: 'processing',
+                retry_count: 2,
+            });
+
+            mockAlertModel.updateOne.mockResolvedValue({ upsertedCount: 1 });
+            mockAlertModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+            mockStatusOutboxModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+
+            const { startRecoveryCron, stopRecoveryCron, setHealthChecker } = await import(
+                '../../../../src/workers/recovery/recovery.cron.js'
+            );
+
+            setHealthChecker(async () => true);
+
+            startRecoveryCron();
+            await vi.advanceTimersByTimeAsync(100);
+            await stopRecoveryCron();
+
+            // Should have logged creating alert
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                expect.stringContaining('Creating alert for failed notification')
+            );
+        });
+
+        it('should create alert for stuck notification with no Redis record', async () => {
+            const { getIdempotencyStatus } = await import('../../../../src/processors/shared/idempotency.js');
+
+            // Mock getIdempotencyStatus to return null (no record)
+            (getIdempotencyStatus as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+            const mockNotificationId = '507f1f77bcf86cd799439014';
+            mockNotificationModel.find.mockReturnValue({
+                limit: vi.fn().mockResolvedValue([{
+                    _id: mockNotificationId,
+                    status: 'processing',
+                    retry_count: 0,
+                    updated_at: new Date('2024-01-15T11:00:00.000Z'),
+                }]),
+            });
+
+            mockNotificationModel.findOneAndUpdate.mockResolvedValue({
+                _id: mockNotificationId,
+                status: 'processing',
+                retry_count: 0,
+            });
+
+            mockAlertModel.updateOne.mockResolvedValue({ upsertedCount: 1 });
+            mockAlertModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+            mockStatusOutboxModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+
+            const { startRecoveryCron, stopRecoveryCron, setHealthChecker } = await import(
+                '../../../../src/workers/recovery/recovery.cron.js'
+            );
+
+            setHealthChecker(async () => true);
+
+            startRecoveryCron();
+            await vi.advanceTimersByTimeAsync(100);
+            await stopRecoveryCron();
+
+            // Should have logged creating alert for stuck notification
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                expect.stringContaining('Creating alert for stuck notification')
+            );
+        });
+
+        it('should skip already recovered notifications (lock race)', async () => {
+            // Mock finding stuck notifications
+            mockNotificationModel.find.mockReturnValue({
+                limit: vi.fn().mockResolvedValue([{
+                    _id: '507f1f77bcf86cd799439015',
+                    status: 'processing',
+                    retry_count: 0,
+                    updated_at: new Date('2024-01-15T11:00:00.000Z'),
+                }]),
+            });
+
+            // Mock findOneAndUpdate to return null (already recovered by another instance)
+            mockNotificationModel.findOneAndUpdate.mockResolvedValue(null);
+
+            mockAlertModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+            mockStatusOutboxModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+
+            const { startRecoveryCron, stopRecoveryCron, setHealthChecker } = await import(
+                '../../../../src/workers/recovery/recovery.cron.js'
+            );
+
+            setHealthChecker(async () => true);
+
+            startRecoveryCron();
+            await vi.advanceTimersByTimeAsync(100);
+            await stopRecoveryCron();
+
+            // Should have logged that it was already recovered
+            expect(mockLogger.debug).toHaveBeenCalledWith(
+                expect.stringContaining('already recovered by another instance')
+            );
+        });
+    });
+
+    describe('detectOrphanedPending', () => {
+        it('should create alert for orphaned pending notifications', async () => {
+            // First find returns no processing notifications
+            // Second find returns orphaned pending
+            let findCallCount = 0;
+            mockNotificationModel.find.mockReturnValue({
+                limit: vi.fn().mockImplementation(() => {
+                    findCallCount++;
+                    if (findCallCount === 1) {
+                        return Promise.resolve([]); // No processing notifications
+                    }
+                    return Promise.resolve([{
+                        _id: '507f1f77bcf86cd799439016',
+                        status: 'pending',
+                        retry_count: 0,
+                        updated_at: new Date('2024-01-15T11:00:00.000Z'),
+                    }]);
+                }),
+            });
+
+            mockNotificationModel.findOneAndUpdate.mockResolvedValue({
+                _id: '507f1f77bcf86cd799439016',
+                status: 'pending',
+                retry_count: 0,
+            });
+
+            mockAlertModel.updateOne.mockResolvedValue({ upsertedCount: 1 });
+            mockAlertModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+            mockStatusOutboxModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+
+            const { startRecoveryCron, stopRecoveryCron, setHealthChecker } = await import(
+                '../../../../src/workers/recovery/recovery.cron.js'
+            );
+
+            setHealthChecker(async () => true);
+
+            startRecoveryCron();
+            await vi.advanceTimersByTimeAsync(100);
+            await stopRecoveryCron();
+
+            // Should have logged creating alert for orphaned pending
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                expect.stringContaining('Created alert for orphaned pending notification')
+            );
+        });
+    });
+
+    describe('runRecovery health check behavior', () => {
+        it('should log warning when consecutive failures reach threshold', async () => {
+            const { startRecoveryCron, stopRecoveryCron, setHealthChecker } = await import(
+                '../../../../src/workers/recovery/recovery.cron.js'
+            );
+
+            // Set unhealthy checker
+            setHealthChecker(async () => false);
+
+            startRecoveryCron();
+
+            // Run multiple cycles to accumulate failures
+            for (let i = 0; i < 6; i++) {
+                await vi.advanceTimersByTimeAsync(60000);
+            }
+
+            await stopRecoveryCron();
+
+            // Should have logged about unhealthy databases after threshold
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                expect.stringContaining('databases unhealthy')
+            );
+        });
+    });
+
     describe('cleanupResolvedAlerts', () => {
         it('should delete resolved alerts older than retention period', async () => {
             // Mock deleteMany to return deleted count
@@ -276,3 +561,4 @@ describe('Recovery Cron - Cleanup Functions', () => {
         });
     });
 });
+

@@ -227,4 +227,132 @@ describe('Notification API Controller', () => {
             expect(response.status).toBe(400);
         });
     });
+
+    describe('Error Handling', () => {
+        it('should return 409 for duplicate notification error', async () => {
+            // Mock process_notifications to throw DuplicateNotificationError
+            const utils = await import('../../../src/api/utils/utils.js');
+            const duplicateError = new utils.DuplicateNotificationError('All notifications are duplicates', [
+                { request_id: 'test-id', channel: 'email' }
+            ]);
+            (utils.process_notifications as ReturnType<typeof vi.fn>).mockRejectedValueOnce(duplicateError);
+
+            const validRequest = {
+                request_id: randomUUID(),
+                client_id: randomUUID(),
+                channel: ['email'],
+                recipient: {
+                    user_id: 'user-123',
+                    email: 'test@example.com',
+                },
+                content: {
+                    email: {
+                        subject: 'Test Subject',
+                        message: 'Test message body',
+                    },
+                },
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const response = await request(app)
+                .post('/api/notification')
+                .set('Authorization', 'Bearer test-api-key')
+                .send(validRequest);
+
+            expect(response.status).toBe(409);
+            expect(response.body.message).toContain('duplicates');
+            expect(response.body.duplicateCount).toBe(1);
+        });
+
+        it('should return 500 for internal server errors', async () => {
+            // Mock process_notifications to throw a generic error
+            const utils = await import('../../../src/api/utils/utils.js');
+            (utils.process_notifications as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Database connection failed'));
+
+            const validRequest = {
+                request_id: randomUUID(),
+                client_id: randomUUID(),
+                channel: ['email'],
+                recipient: {
+                    user_id: 'user-123',
+                    email: 'test@example.com',
+                },
+                content: {
+                    email: {
+                        subject: 'Test Subject',
+                        message: 'Test message body',
+                    },
+                },
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const response = await request(app)
+                .post('/api/notification')
+                .set('Authorization', 'Bearer test-api-key')
+                .send(validRequest);
+
+            expect(response.status).toBe(500);
+            expect(response.body.message).toBe('Internal Server Error');
+        });
+
+        it('should return 409 for duplicate batch notification error', async () => {
+            const utils = await import('../../../src/api/utils/utils.js');
+            const duplicateError = new utils.DuplicateNotificationError('All notifications are duplicates', [
+                { request_id: 'test-id-1', channel: 'email' },
+                { request_id: 'test-id-2', channel: 'email' }
+            ]);
+            (utils.process_notifications as ReturnType<typeof vi.fn>).mockRejectedValueOnce(duplicateError);
+
+            const validRequest = {
+                client_id: randomUUID(),
+                channel: ['email'],
+                content: {
+                    email: {
+                        subject: 'Batch Test',
+                        message: 'Hello {{name}}',
+                    },
+                },
+                recipients: [
+                    { request_id: randomUUID(), user_id: 'user-1', email: 'user1@example.com' },
+                ],
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const response = await request(app)
+                .post('/api/notification/batch')
+                .set('Authorization', 'Bearer test-api-key')
+                .send(validRequest);
+
+            expect(response.status).toBe(409);
+            expect(response.body.duplicateCount).toBe(2);
+        });
+
+        it('should return 500 for batch internal server errors', async () => {
+            const utils = await import('../../../src/api/utils/utils.js');
+            (utils.process_notifications as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Kafka unavailable'));
+
+            const validRequest = {
+                client_id: randomUUID(),
+                channel: ['email'],
+                content: {
+                    email: {
+                        subject: 'Batch Test',
+                        message: 'Hello {{name}}',
+                    },
+                },
+                recipients: [
+                    { request_id: randomUUID(), user_id: 'user-1', email: 'user1@example.com' },
+                ],
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const response = await request(app)
+                .post('/api/notification/batch')
+                .set('Authorization', 'Bearer test-api-key')
+                .send(validRequest);
+
+            expect(response.status).toBe(500);
+            expect(response.body.message).toBe('Internal Server Error');
+        });
+    });
 });

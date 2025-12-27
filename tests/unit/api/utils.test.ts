@@ -134,7 +134,7 @@ describe('API Utility Functions', () => {
                 request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
                 client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
                 channel: ['email'],
-                provider: 'gmail',
+                provider: ['gmail'],
                 recipient: {
                     user_id: 'user-123',
                     email: 'test@example.com',
@@ -362,6 +362,158 @@ describe('API Utility Functions', () => {
             expect(delayedNotification.notification_id).toEqual(notificationId);
             expect(delayedNotification.scheduled_at).toEqual(scheduledAt);
             expect(delayedNotification.target_topic).toBe(getTopicForChannel('email'));
+        });
+    });
+
+    describe('convert_notification_schema_to_outbox_schema', () => {
+        it('should create outbox entry for immediate notification', async () => {
+            const { convert_notification_schema_to_outbox_schema } = await import('../../../src/api/utils/utils.js');
+
+            const notification: notification = {
+                request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                channel: 'email',
+                recipient: { user_id: 'user-123', email: 'test@example.com' },
+                content: { subject: 'Test', message: 'Test message' },
+                webhook_url: 'https://webhook.example.com/callback',
+                status: NOTIFICATION_STATUS.pending,
+                retry_count: 0,
+                created_at: new Date(),
+            };
+
+            const notificationId = new mongoose.Types.ObjectId();
+            const outbox = convert_notification_schema_to_outbox_schema(notification, notificationId);
+
+            expect(outbox.notification_id).toEqual(notificationId);
+            expect(outbox.topic).toBe(getTopicForChannel('email'));
+            expect(outbox.status).toBe('pending');
+        });
+
+        it('should create outbox entry for scheduled notification with delayed topic', async () => {
+            const { convert_notification_schema_to_outbox_schema } = await import('../../../src/api/utils/utils.js');
+
+            const futureDate = new Date(Date.now() + 60000);
+            const notification: notification = {
+                request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                channel: 'email',
+                recipient: { user_id: 'user-123', email: 'test@example.com' },
+                content: { subject: 'Test', message: 'Test message' },
+                webhook_url: 'https://webhook.example.com/callback',
+                status: NOTIFICATION_STATUS.pending,
+                retry_count: 0,
+                scheduled_at: futureDate,
+                created_at: new Date(),
+            };
+
+            const notificationId = new mongoose.Types.ObjectId();
+            const outbox = convert_notification_schema_to_outbox_schema(notification, notificationId);
+
+            expect(outbox.topic).toBe('delayed_notification');
+        });
+    });
+
+    describe('process_notifications', () => {
+        // NOTE: These tests are skipped because process_notifications uses `new notification_model()` 
+        // which requires a mongoose model constructor, not a simple object mock.
+        // Full integration tests for this function should be in integration tests with a real DB.
+
+        it.skip('should process notifications successfully - requires model constructor mock', () => {
+            // This test would require mocking mongoose.model as a constructor
+        });
+
+        it.skip('should handle partial duplicates - requires model constructor mock', () => {
+            // This test would require mocking mongoose.model as a constructor
+        });
+
+        it('should throw DuplicateNotificationError when all notifications are duplicates', async () => {
+            const mockSession = {
+                startTransaction: vi.fn(),
+                commitTransaction: vi.fn().mockResolvedValue(undefined),
+                abortTransaction: vi.fn().mockResolvedValue(undefined),
+                endSession: vi.fn(),
+            };
+            vi.spyOn(mongoose, 'startSession').mockResolvedValue(mockSession as unknown as mongoose.ClientSession);
+
+            const notification_model = (await import('../../../src/database/models/notification.models.js')).default;
+
+            // All calls return existing (duplicate)
+            (notification_model.findOne as ReturnType<typeof vi.fn>).mockReturnValue({
+                session: vi.fn().mockResolvedValue({ _id: new mongoose.Types.ObjectId() })
+            });
+
+            const { process_notifications, DuplicateNotificationError } = await import('../../../src/api/utils/utils.js');
+
+            const notifications: notification[] = [{
+                request_id: 'duplicate-id' as `${string}-${string}-${string}-${string}-${string}`,
+                client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                channel: 'email',
+                recipient: { user_id: 'user-1', email: 'test@example.com' },
+                content: { subject: 'Test', message: 'Test' },
+                webhook_url: 'https://webhook.example.com/callback',
+                status: NOTIFICATION_STATUS.pending,
+                retry_count: 0,
+                created_at: new Date(),
+            }];
+
+            await expect(process_notifications(notifications)).rejects.toThrow(DuplicateNotificationError);
+        });
+
+        it('should rollback transaction on error', async () => {
+            const mockSession = {
+                startTransaction: vi.fn(),
+                commitTransaction: vi.fn().mockResolvedValue(undefined),
+                abortTransaction: vi.fn().mockResolvedValue(undefined),
+                endSession: vi.fn(),
+            };
+            vi.spyOn(mongoose, 'startSession').mockResolvedValue(mockSession as unknown as mongoose.ClientSession);
+
+            const notification_model = (await import('../../../src/database/models/notification.models.js')).default;
+
+            // Simulate error during findOne
+            (notification_model.findOne as ReturnType<typeof vi.fn>).mockReturnValue({
+                session: vi.fn().mockRejectedValue(new Error('Database error'))
+            });
+
+            const { process_notifications } = await import('../../../src/api/utils/utils.js');
+
+            const notifications: notification[] = [{
+                request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                channel: 'email',
+                recipient: { user_id: 'user-1', email: 'test@example.com' },
+                content: { subject: 'Test', message: 'Test' },
+                webhook_url: 'https://webhook.example.com/callback',
+                status: NOTIFICATION_STATUS.pending,
+                retry_count: 0,
+                created_at: new Date(),
+            }];
+
+            await expect(process_notifications(notifications)).rejects.toThrow('Database error');
+            expect(mockSession.abortTransaction).toHaveBeenCalled();
+            expect(mockSession.endSession).toHaveBeenCalled();
+        });
+
+        it('should handle empty notifications array', async () => {
+            const mockSession = {
+                startTransaction: vi.fn(),
+                commitTransaction: vi.fn().mockResolvedValue(undefined),
+                abortTransaction: vi.fn().mockResolvedValue(undefined),
+                endSession: vi.fn(),
+            };
+            vi.spyOn(mongoose, 'startSession').mockResolvedValue(mockSession as unknown as mongoose.ClientSession);
+
+            const outbox_model = (await import('../../../src/database/models/outbox.models.js')).default;
+
+            const { process_notifications } = await import('../../../src/api/utils/utils.js');
+
+            const result = await process_notifications([]);
+
+            expect(result.notification_ids).toHaveLength(0);
+            expect(result.created_count).toBe(0);
+            expect(result.duplicate_count).toBe(0);
+            // insertMany should not be called for empty array
+            expect(outbox_model.insertMany).not.toHaveBeenCalled();
         });
     });
 });
