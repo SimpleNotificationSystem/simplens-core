@@ -53,6 +53,7 @@ export const env = {
     // Cleanup Configuration (run as part of recovery cron)
     CLEANUP_RESOLVED_ALERTS_RETENTION_MS: <number>parseInt(process.env.CLEANUP_RESOLVED_ALERTS_RETENTION_MS || "86400000"), // 24 hours
     CLEANUP_PROCESSED_STATUS_OUTBOX_RETENTION_MS: <number>parseInt(process.env.CLEANUP_PROCESSED_STATUS_OUTBOX_RETENTION_MS || "86400000"), // 24 hours
+    RECOVERY_CLAIM_TIMEOUT_MS: <number>parseInt(process.env.RECOVERY_CLAIM_TIMEOUT_MS || "60000"), // 1 minute
 
     // Logging - Grafana Loki
     LOKI_URL: <string>process.env.LOKI_URL || "",

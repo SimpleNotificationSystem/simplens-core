@@ -43,44 +43,43 @@ const state: CronState = {
 };
 
 /**
- * Recover stuck processing notifications
+ * Recover stuck processing notifications (horizontally scalable)
+ * Uses atomic claiming with worker ID to prevent race conditions
  */
 const recoverStuckProcessing = async (): Promise<void> => {
-    const threshold = new Date(Date.now() - env.PROCESSING_STUCK_THRESHOLD_MS);
+    const now = new Date();
+    const threshold = new Date(now.getTime() - env.PROCESSING_STUCK_THRESHOLD_MS);
+    const staleClaimThreshold = new Date(now.getTime() - env.RECOVERY_CLAIM_TIMEOUT_MS);
 
-    // Find stuck notifications
-    const stuckNotifications = await notification_model.find({
-        status: NOTIFICATION_STATUS.processing,
-        updated_at: { $lt: threshold }
-    }).limit(env.RECOVERY_BATCH_SIZE);
+    let processedCount = 0;
 
-    if (stuckNotifications.length === 0) {
-        return;
-    }
+    for (let i = 0; i < env.RECOVERY_BATCH_SIZE; i++) {
+        // Atomically claim a stuck notification
+        const notification = await notification_model.findOneAndUpdate(
+            {
+                status: NOTIFICATION_STATUS.processing,
+                updated_at: { $lt: threshold },
+                $or: [
+                    { recovery_claimed_by: null },
+                    { recovery_claimed_at: { $lt: staleClaimThreshold } }
+                ]
+            },
+            {
+                $set: {
+                    recovery_claimed_by: env.WORKER_ID,
+                    recovery_claimed_at: now
+                }
+            },
+            { new: true }
+        );
 
-    logger.info(`Found ${stuckNotifications.length} stuck processing notifications`);
+        if (!notification) break;
 
-    for (const notification of stuckNotifications) {
+        processedCount++;
         const session = await mongoose.startSession();
 
         try {
             await session.withTransaction(async () => {
-                // Re-fetch with lock to prevent race conditions
-                const locked = await notification_model.findOneAndUpdate(
-                    {
-                        _id: notification._id,
-                        status: NOTIFICATION_STATUS.processing,
-                        updated_at: { $lt: threshold }
-                    },
-                    { $set: { updated_at: new Date() } }, // Touch to claim
-                    { session, new: true }
-                );
-
-                if (!locked) {
-                    logger.debug(`Notification ${notification._id} already recovered by another instance`);
-                    return;
-                }
-
                 // Get Redis status
                 const redisStatus = await getIdempotencyStatus(notification._id.toString());
 
@@ -90,7 +89,11 @@ const recoverStuckProcessing = async (): Promise<void> => {
 
                     await notification_model.updateOne(
                         { _id: notification._id },
-                        { status: NOTIFICATION_STATUS.delivered },
+                        {
+                            status: NOTIFICATION_STATUS.delivered,
+                            recovery_claimed_by: null,
+                            recovery_claimed_at: null
+                        },
                         { session }
                     );
 
@@ -109,7 +112,9 @@ const recoverStuckProcessing = async (): Promise<void> => {
                             { _id: notification._id },
                             {
                                 status: NOTIFICATION_STATUS.failed,
-                                error_message: 'Recovered by recovery service - max retries exceeded'
+                                error_message: 'Recovered by recovery service - max retries exceeded',
+                                recovery_claimed_by: null,
+                                recovery_claimed_at: null
                             },
                             { session }
                         );
@@ -138,6 +143,17 @@ const recoverStuckProcessing = async (): Promise<void> => {
                             },
                             { upsert: true, session }
                         );
+
+                        // Clear claim and touch updated_at to prevent reprocessing
+                        await notification_model.updateOne(
+                            { _id: notification._id },
+                            {
+                                recovery_claimed_by: null,
+                                recovery_claimed_at: null,
+                                updated_at: new Date() // Touch to prevent immediate reprocessing
+                            },
+                            { session }
+                        );
                     }
 
                 } else {
@@ -158,76 +174,106 @@ const recoverStuckProcessing = async (): Promise<void> => {
                         },
                         { upsert: true, session }
                     );
+
+                    // Clear claim and touch updated_at to prevent reprocessing
+                    await notification_model.updateOne(
+                        { _id: notification._id },
+                        {
+                            recovery_claimed_by: null,
+                            recovery_claimed_at: null,
+                            updated_at: new Date() // Touch to prevent immediate reprocessing
+                        },
+                        { session }
+                    );
                 }
             });
         } catch (err) {
             logger.error(`Error recovering notification ${notification._id}:`, err);
+            // Clear claim on error
+            await notification_model.updateOne(
+                { _id: notification._id },
+                { recovery_claimed_by: null, recovery_claimed_at: null }
+            );
         } finally {
             await session.endSession();
         }
+    }
+
+    if (processedCount > 0) {
+        logger.info(`Processed ${processedCount} stuck processing notifications (worker: ${env.WORKER_ID})`);
     }
 };
 
 /**
- * Detect orphaned pending notifications
+ * Detect orphaned pending notifications (horizontally scalable)
+ * Uses atomic claiming with worker ID to prevent race conditions
  */
 const detectOrphanedPending = async (): Promise<void> => {
-    const threshold = new Date(Date.now() - env.PENDING_STUCK_THRESHOLD_MS);
+    const now = new Date();
+    const threshold = new Date(now.getTime() - env.PENDING_STUCK_THRESHOLD_MS);
+    const staleClaimThreshold = new Date(now.getTime() - env.RECOVERY_CLAIM_TIMEOUT_MS);
 
-    // Find stuck pending notifications
-    const orphanedNotifications = await notification_model.find({
-        status: NOTIFICATION_STATUS.pending,
-        updated_at: { $lt: threshold }
-    }).limit(env.RECOVERY_BATCH_SIZE);
+    let processedCount = 0;
 
-    if (orphanedNotifications.length === 0) {
-        return;
-    }
+    for (let i = 0; i < env.RECOVERY_BATCH_SIZE; i++) {
+        // Atomically claim an orphaned notification
+        const notification = await notification_model.findOneAndUpdate(
+            {
+                status: NOTIFICATION_STATUS.pending,
+                updated_at: { $lt: threshold },
+                $or: [
+                    { recovery_claimed_by: null },
+                    { recovery_claimed_at: { $lt: staleClaimThreshold } }
+                ]
+            },
+            {
+                $set: {
+                    recovery_claimed_by: env.WORKER_ID,
+                    recovery_claimed_at: now
+                }
+            },
+            { new: true }
+        );
 
-    logger.info(`Found ${orphanedNotifications.length} orphaned pending notifications`);
+        if (!notification) break;
 
-    for (const notification of orphanedNotifications) {
-        const session = await mongoose.startSession();
+        processedCount++;
 
         try {
-            await session.withTransaction(async () => {
-                // Re-fetch with lock to prevent race conditions
-                const locked = await notification_model.findOneAndUpdate(
-                    {
-                        _id: notification._id,
-                        status: NOTIFICATION_STATUS.pending,
-                        updated_at: { $lt: threshold }
-                    },
-                    { $set: { updated_at: new Date() } }, // Touch to claim
-                    { session, new: true }
-                );
+            // Create alert for manual inspection
+            await alert_model.updateOne(
+                { notification_id: notification._id, alert_type: ALERT_TYPE.orphaned_pending },
+                {
+                    $set: { resolved: false },
+                    $setOnInsert: {
+                        reason: 'Notification stuck in pending state - may not have been published to outbox',
+                        redis_status: null,
+                        db_status: notification.status,
+                        retry_count: notification.retry_count
+                    }
+                },
+                { upsert: true }
+            );
 
-                if (!locked) {
-                    return;
-                }
+            logger.warn(`Created alert for orphaned pending notification ${notification._id}`);
 
-                // Create alert for manual inspection
-                await alert_model.updateOne(
-                    { notification_id: notification._id, alert_type: ALERT_TYPE.orphaned_pending },
-                    {
-                        $set: { resolved: false },
-                        $setOnInsert: {
-                            reason: 'Notification stuck in pending state - may not have been published to outbox',
-                            redis_status: null,
-                            db_status: notification.status,
-                            retry_count: notification.retry_count
-                        }
-                    },
-                    { upsert: true, session }
-                );
-
-                logger.warn(`Created alert for orphaned pending notification ${notification._id}`);
-            });
+            // Clear claim after processing
+            await notification_model.updateOne(
+                { _id: notification._id },
+                { recovery_claimed_by: null, recovery_claimed_at: null }
+            );
         } catch (err) {
             logger.error(`Error creating alert for ${notification._id}:`, err);
-        } finally {
-            await session.endSession();
+            // Clear claim on error
+            await notification_model.updateOne(
+                { _id: notification._id },
+                { recovery_claimed_by: null, recovery_claimed_at: null }
+            );
         }
+    }
+
+    if (processedCount > 0) {
+        logger.info(`Processed ${processedCount} orphaned pending notifications (worker: ${env.WORKER_ID})`);
     }
 };
 
@@ -264,6 +310,74 @@ const cleanupProcessedStatusOutbox = async (): Promise<void> => {
 };
 
 /**
+ * Auto-resolve alerts for delivered notifications (horizontally scalable)
+ * Uses atomic claiming with worker ID to prevent race conditions
+ */
+const autoResolveDeliveredAlerts = async (): Promise<void> => {
+    const now = new Date();
+    const staleClaimThreshold = new Date(now.getTime() - env.RECOVERY_CLAIM_TIMEOUT_MS);
+
+    let resolvedCount = 0;
+
+    for (let i = 0; i < env.RECOVERY_BATCH_SIZE; i++) {
+        // Atomically claim an unresolved alert
+        const alert = await alert_model.findOneAndUpdate(
+            {
+                resolved: false,
+                $or: [
+                    { recovery_claimed_by: null },
+                    { recovery_claimed_at: { $lt: staleClaimThreshold } }
+                ]
+            },
+            {
+                $set: {
+                    recovery_claimed_by: env.WORKER_ID,
+                    recovery_claimed_at: now
+                }
+            },
+            { new: true }
+        );
+
+        if (!alert) break;
+
+        try {
+            // Check notification status
+            const notification = await notification_model.findById(alert.notification_id);
+
+            if (notification?.status === NOTIFICATION_STATUS.delivered || notification?.status === NOTIFICATION_STATUS.failed) {
+                // Auto-resolve the alert
+                await alert_model.findByIdAndUpdate(alert._id, {
+                    resolved: true,
+                    resolved_at: new Date(),
+                    recovery_claimed_by: null,
+                    recovery_claimed_at: null
+                });
+                resolvedCount++;
+            } else {
+                // Clear claim if not resolving
+                await alert_model.findByIdAndUpdate(alert._id, {
+                    recovery_claimed_by: null,
+                    recovery_claimed_at: null
+                });
+            }
+        } catch (err) {
+            logger.error(`Error checking alert ${alert._id}:`, err);
+            // Clear claim on error
+            await alert_model.findByIdAndUpdate(alert._id, {
+                recovery_claimed_by: null,
+                recovery_claimed_at: null
+            });
+        }
+    }
+
+    if (resolvedCount > 0) {
+        logger.info(`✅ Auto-resolved ${resolvedCount} alerts for delivered or failed notifications (worker: ${env.WORKER_ID})`);
+    } else {
+        logger.debug(`Auto-resolve: checked alerts, none had delivered notifications`);
+    }
+};
+
+/**
  * Main recovery job
  */
 const runRecovery = async (): Promise<void> => {
@@ -294,6 +408,9 @@ const runRecovery = async (): Promise<void> => {
 
         await recoverStuckProcessing();
         await detectOrphanedPending();
+
+        // Auto-resolve alerts for delivered notifications
+        await autoResolveDeliveredAlerts();
 
         // Cleanup old resolved alerts and processed status outbox entries
         await cleanupResolvedAlerts();

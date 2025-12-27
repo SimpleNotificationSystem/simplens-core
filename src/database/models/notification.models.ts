@@ -74,6 +74,16 @@ const notification_schema = new mongoose.Schema<notification>(
       type: Number,
       default: 0,
     },
+    // Recovery claiming fields for horizontal scalability
+    recovery_claimed_by: {
+      type: String,
+      default: null,
+      index: true,
+    },
+    recovery_claimed_at: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: {
