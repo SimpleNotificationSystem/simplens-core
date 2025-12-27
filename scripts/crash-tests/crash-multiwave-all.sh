@@ -29,10 +29,11 @@ SCRIPTS_DIR=$(cd "$(dirname "$0")/.." && pwd)
 PROJECT_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 
 # Container names - Application Services (updated for unified notification-processor)
+# Note: Recovery service is intentionally excluded to keep it running during chaos tests
 APP_CONTAINERS=(
-    "backend-notification-service-worker-1"
-    "backend-notification-service-notification-processor-1"
-    "backend-notification-service-delayed-processor-1"
+    "simplens-core-worker-1"
+    "simplens-core-notification-processor-1"
+    "simplens-core-delayed-processor-1"
 )
 
 APP_SERVICES=(
