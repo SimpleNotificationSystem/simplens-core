@@ -86,6 +86,8 @@ export interface BaseNotification {
     client_id: string;
     /** Channel name */
     channel: string;
+    /** Provider ID (optional - uses channel default if not specified) */
+    provider?: string;
     /** Recipient information */
     recipient: Record<string, unknown>;
     /** Message content */

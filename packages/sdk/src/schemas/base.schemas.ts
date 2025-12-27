@@ -21,6 +21,7 @@ export const baseNotificationSchema = z.object({
     request_id: z.string().uuid(),
     client_id: z.string().uuid(),
     channel: z.string(),
+    provider: z.string().optional(),
     variables: z.record(z.string(), z.string()).optional(),
     webhook_url: z.string().url(),
     retry_count: z.number().int().min(0),

@@ -25,27 +25,27 @@ const DEFAULT_RATE_LIMIT: RateLimitConfig = {
 };
 
 /**
- * Get rate limit configuration for a channel
+ * Get rate limit configuration for a provider
  * Priority: Plugin config > Default
  */
-const getConfig = (channel: string): RateLimitConfig => {
+const getConfig = (providerId: string): RateLimitConfig => {
     // Try plugin registry first
-    const pluginConfig = getPluginRateLimitConfig(channel);
+    const pluginConfig = getPluginRateLimitConfig(providerId);
     if (pluginConfig) {
         return pluginConfig;
     }
 
-    // Default config for all channels
+    // Default config for all providers
     return DEFAULT_RATE_LIMIT;
 };
 
 /**
- * Build Redis keys for a channel
+ * Build Redis keys for a provider
  */
-const buildKeys = (channel: string): { tokensKey: string; lastRefillKey: string } => {
+const buildKeys = (providerId: string): { tokensKey: string; lastRefillKey: string } => {
     return {
-        tokensKey: `${TOKENS_KEY_PREFIX}:${channel}`,
-        lastRefillKey: `${LAST_REFILL_KEY_PREFIX}:${channel}`
+        tokensKey: `${TOKENS_KEY_PREFIX}:${providerId}`,
+        lastRefillKey: `${LAST_REFILL_KEY_PREFIX}:${providerId}`
     };
 };
 
@@ -62,10 +62,13 @@ export interface RateLimitResult {
  * Try to consume a token from the bucket
  * Uses Redis Lua script for atomic operation
  */
-export const consumeToken = async (channel: string): Promise<RateLimitResult> => {
+export const consumeToken = async (providerId: string): Promise<RateLimitResult> => {
     const redis = getRedisClient();
-    const config = getConfig(channel);
-    const { tokensKey, lastRefillKey } = buildKeys(channel);
+    const config = getConfig(providerId);
+    const { tokensKey, lastRefillKey } = buildKeys(providerId);
+
+    // Debug logging
+    console.log(`[RateLimiter] Provider: ${providerId}, Config: maxTokens=${config.maxTokens}, refillRate=${config.refillRate}`);
 
     const now = Date.now();
 
@@ -123,10 +126,10 @@ export const consumeToken = async (channel: string): Promise<RateLimitResult> =>
 /**
  * Get current token count without consuming
  */
-export const getTokenCount = async (channel: string): Promise<number> => {
+export const getTokenCount = async (providerId: string): Promise<number> => {
     const redis = getRedisClient();
-    const config = getConfig(channel);
-    const { tokensKey, lastRefillKey } = buildKeys(channel);
+    const config = getConfig(providerId);
+    const { tokensKey, lastRefillKey } = buildKeys(providerId);
 
     const now = Date.now();
 
@@ -142,11 +145,11 @@ export const getTokenCount = async (channel: string): Promise<number> => {
 };
 
 /**
- * Reset rate limiter for a channel (for testing)
+ * Reset rate limiter for a provider (for testing)
  */
-export const resetRateLimiter = async (channel: string): Promise<void> => {
+export const resetRateLimiter = async (providerId: string): Promise<void> => {
     const redis = getRedisClient();
-    const { tokensKey, lastRefillKey } = buildKeys(channel);
+    const { tokensKey, lastRefillKey } = buildKeys(providerId);
 
     await redis.del(tokensKey, lastRefillKey);
 };

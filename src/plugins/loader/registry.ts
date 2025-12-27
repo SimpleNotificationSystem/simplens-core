@@ -204,6 +204,19 @@ class PluginRegistryClass {
     }
 
     /**
+     * Get default provider ID for a channel
+     */
+    getDefaultProviderId(channel: string): string | undefined {
+        const config = this.channelConfig.get(channel);
+        if (config?.default) {
+            return config.default;
+        }
+        // Fall back to first registered provider ID for channel
+        const ids = this.channelProviders.get(channel);
+        return ids?.[0];
+    }
+
+    /**
      * Get fallback provider for a channel
      */
     getFallbackProvider(channel: string): SimpleNSProvider | undefined {

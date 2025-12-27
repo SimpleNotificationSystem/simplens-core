@@ -126,9 +126,9 @@ export function validateNotification(
 }
 
 /**
- * Get rate limit config for a channel from its provider
+ * Get rate limit config for a provider by ID
  */
-export function getRateLimitConfig(channel: string): { maxTokens: number; refillRate: number } | undefined {
-    const provider = PluginRegistry.getDefaultProvider(channel);
+export function getRateLimitConfig(providerId: string): { maxTokens: number; refillRate: number } | undefined {
+    const provider = PluginRegistry.get(providerId);
     return provider?.getRateLimitConfig();
 }

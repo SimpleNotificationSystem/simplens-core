@@ -6,7 +6,7 @@
  * Example: node scripts/load-test.js 1000 100
  */
 
-import { randomUUID } from 'crypto';
+import { randomInt, randomUUID } from 'crypto';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -16,11 +16,15 @@ const NS_API_KEY = process.env.NS_API_KEY || '4YCItWcuH2qJe3bXM9LbsbqefflWFlXlzv
 
 const TOTAL_REQUESTS = parseInt(process.argv[2] || '1000');
 const CONCURRENCY = parseInt(process.argv[3] || '50');
+const IS_MULTIPROVIDER  = ((process.argv[4]?(process.argv[4] === "-m"): false)? true: false)
+
+const available_mock_providers = ["mock", "mock-new"]
 
 const createPayload = () => ({
     request_id: randomUUID(),
     client_id: "5f2c1d77-8a4b-4a5a-9b1c-2c3d4e5f6a7b",
     channel: ["mock"],
+    provider: IS_MULTIPROVIDER? [available_mock_providers[randomInt(2)]]: ["mock-new"],
     recipient: {
         user_id: "user_12345",
     },

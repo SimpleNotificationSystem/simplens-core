@@ -114,8 +114,13 @@ const processMessage = async (
         const rawData = JSON.parse(message.value.toString());
 
         // 2. Validate with plugin schema
-        let provider = rawData.provider
-            ? PluginRegistry.get(rawData.provider)
+        const providerId = rawData.provider || PluginRegistry.getDefaultProviderId(channel);
+
+        // Debug logging
+        console.log(`[UnifiedConsumer] Channel: ${channel}, Raw provider: ${rawData.provider}, Resolved providerId: ${providerId}`);
+
+        let provider = providerId
+            ? PluginRegistry.get(providerId)
             : PluginRegistry.getDefaultProvider(channel);
 
         if (!provider) {
@@ -151,8 +156,8 @@ const processMessage = async (
             logger.info(`[${channel}] Retrying previously failed: ${notificationId}`);
         }
 
-        // 4. Rate limit check
-        const rateLimitResult = await consumeToken(channel);
+        // 4. Rate limit check - uses provider ID for per-provider rate limiting
+        const rateLimitResult = await consumeToken(providerId!);
 
         if (!rateLimitResult.allowed) {
             logger.warn(`[${channel}] Rate limited: ${notificationId}, retry after ${rateLimitResult.retryAfterMs}ms`);
