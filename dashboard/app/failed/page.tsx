@@ -18,6 +18,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageToolbar, PageToolbarSection, PageToolbarSpacer } from "@/components/ui/page-toolbar";
 import {
+    Pagination,
+    PaginationContent,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
     Dialog,
     DialogContent,
     DialogDescription,
@@ -30,18 +38,21 @@ import { format } from "date-fns";
 import type { PaginatedResponse, Notification } from "@/lib/types";
 import Link from "next/link";
 import { toast } from "sonner";
-
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export default function FailedPage() {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [isRetrying, setIsRetrying] = useState(false);
     const [retryDialogOpen, setRetryDialogOpen] = useState(false);
+    const [page, setPage] = useState(1);
+    const limit = 100;
 
     const { data, isLoading, error, mutate } = useSWR<PaginatedResponse<Notification>>(
-        "/api/notifications?status=failed&limit=50",
+        `/api/notifications?status=failed&limit=${limit}&page=${page}`,
         fetcher
     );
+
+
 
     const handleSelectAll = (checked: boolean) => {
         if (checked && data) {
@@ -70,6 +81,8 @@ export default function FailedPage() {
             try {
                 const response = await fetch(`/api/notifications/${id}/retry`, {
                     method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({}),
                 });
                 if (response.ok) {
                     successCount++;
@@ -93,6 +106,8 @@ export default function FailedPage() {
         setRetryDialogOpen(false);
         mutate();
     };
+
+
 
     const failedCount = data?.total || 0;
 
@@ -241,6 +256,54 @@ export default function FailedPage() {
                     </div>
                 )}
 
+                {/* Pagination */}
+                {data && data.totalPages > 1 && (
+                    <Pagination>
+                        <PaginationContent>
+                            <PaginationItem>
+                                <PaginationPrevious
+                                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                    className={page === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                                />
+                            </PaginationItem>
+                            {(() => {
+                                const totalPages = data.totalPages;
+                                const maxButtons = 5;
+                                const startPage = Math.max(1, Math.min(page - Math.floor(maxButtons / 2), totalPages - maxButtons + 1));
+                                const endPage = Math.min(totalPages, startPage + maxButtons - 1);
+
+                                return [...Array(endPage - startPage + 1)].map((_, i) => {
+                                    const pageNum = startPage + i;
+                                    return (
+                                        <PaginationItem key={pageNum}>
+                                            <PaginationLink
+                                                onClick={() => setPage(pageNum)}
+                                                isActive={page === pageNum}
+                                                className="cursor-pointer"
+                                            >
+                                                {pageNum}
+                                            </PaginationLink>
+                                        </PaginationItem>
+                                    );
+                                });
+                            })()}
+                            <PaginationItem>
+                                <PaginationNext
+                                    onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
+                                    className={page === data.totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                                />
+                            </PaginationItem>
+                        </PaginationContent>
+                    </Pagination>
+                )}
+
+                {/* Results info */}
+                {data && (
+                    <p className="text-sm text-muted-foreground text-center">
+                        Showing {data.data.length} of {data.total} failed notifications
+                    </p>
+                )}
+
                 {/* Retry Confirmation Dialog */}
                 <Dialog open={retryDialogOpen} onOpenChange={setRetryDialogOpen}>
                     <DialogContent>
@@ -251,6 +314,9 @@ export default function FailedPage() {
                                 They will be reset to pending status and reprocessed.
                             </DialogDescription>
                         </DialogHeader>
+
+
+
                         <DialogFooter>
                             <Button variant="outline" onClick={() => setRetryDialogOpen(false)}>
                                 Cancel

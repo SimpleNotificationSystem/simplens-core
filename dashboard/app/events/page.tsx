@@ -34,7 +34,7 @@ import {
 import { Search, Eye, RefreshCw, ArrowUpDown } from "lucide-react";
 import { PageToolbar, PageToolbarSection, PageToolbarSpacer } from "@/components/ui/page-toolbar";
 import { format } from "date-fns";
-import type { PaginatedResponse, Notification, NOTIFICATION_STATUS } from "@/lib/types";
+import type { PaginatedResponse, Notification, NOTIFICATION_STATUS, PluginMetadata } from "@/lib/types";
 import Link from "next/link";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -47,12 +47,23 @@ export default function EventsPage() {
     const [searchInput, setSearchInput] = useState("");
     const [sortBy, setSortBy] = useState<string>("created_at_desc");
 
+    // Fetch available channels from plugins
+    const { data: pluginsData } = useSWR<PluginMetadata>('/api/plugins', fetcher);
+    const availableChannels = pluginsData ? Object.keys(pluginsData.channels) : [];
+
+    // Provider filter state
+    const [provider, setProvider] = useState<string>("all");
+    const availableProviders = channel !== "all" && pluginsData?.channels[channel]
+        ? pluginsData.channels[channel].providers
+        : [];
+
     const buildUrl = () => {
         const params = new URLSearchParams();
         params.set("page", page.toString());
         params.set("limit", "15");
         if (status !== "all") params.set("status", status);
         if (channel !== "all") params.set("channel", channel);
+        if (provider !== "all") params.set("provider", provider);
         if (search) params.set("search", search);
         params.set("sortBy", sortBy);
         return `/api/notifications?${params.toString()}`;
@@ -81,6 +92,12 @@ export default function EventsPage() {
 
     const handleChannelChange = (value: string) => {
         setChannel(value);
+        setProvider("all"); // Reset provider when channel changes
+        setPage(1);
+    };
+
+    const handleProviderChange = (value: string) => {
+        setProvider(value);
         setPage(1);
     };
 
@@ -130,10 +147,29 @@ export default function EventsPage() {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">All Channels</SelectItem>
-                                <SelectItem value="email">Email</SelectItem>
-                                <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                                {availableChannels.map((ch) => (
+                                    <SelectItem key={ch} value={ch} className="capitalize">
+                                        {ch.charAt(0).toUpperCase() + ch.slice(1)}
+                                    </SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
+
+                        {channel !== "all" && availableProviders.length > 0 && (
+                            <Select value={provider} onValueChange={handleProviderChange}>
+                                <SelectTrigger className="w-[140px] sm:w-[160px]">
+                                    <SelectValue placeholder="Provider" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Providers</SelectItem>
+                                    {availableProviders.map((p) => (
+                                        <SelectItem key={p.id} value={p.id}>
+                                            {p.displayName} ({p.id})
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
 
                         <Select value={sortBy} onValueChange={handleSortChange}>
                             <SelectTrigger className="w-[140px] sm:w-[160px]">
@@ -236,20 +272,28 @@ export default function EventsPage() {
                                     className={page === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
                                 />
                             </PaginationItem>
-                            {[...Array(Math.min(5, data.totalPages))].map((_, i) => {
-                                const pageNum = i + 1;
-                                return (
-                                    <PaginationItem key={pageNum}>
-                                        <PaginationLink
-                                            onClick={() => setPage(pageNum)}
-                                            isActive={page === pageNum}
-                                            className="cursor-pointer"
-                                        >
-                                            {pageNum}
-                                        </PaginationLink>
-                                    </PaginationItem>
-                                );
-                            })}
+                            {(() => {
+                                // Calculate sliding window around current page
+                                const totalPages = data.totalPages;
+                                const maxButtons = 5;
+                                const startPage = Math.max(1, Math.min(page - Math.floor(maxButtons / 2), totalPages - maxButtons + 1));
+                                const endPage = Math.min(totalPages, startPage + maxButtons - 1);
+
+                                return [...Array(endPage - startPage + 1)].map((_, i) => {
+                                    const pageNum = startPage + i;
+                                    return (
+                                        <PaginationItem key={pageNum}>
+                                            <PaginationLink
+                                                onClick={() => setPage(pageNum)}
+                                                isActive={page === pageNum}
+                                                className="cursor-pointer"
+                                            >
+                                                {pageNum}
+                                            </PaginationLink>
+                                        </PaginationItem>
+                                    );
+                                });
+                            })()}
                             <PaginationItem>
                                 <PaginationNext
                                     onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}

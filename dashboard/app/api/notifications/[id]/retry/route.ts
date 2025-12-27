@@ -54,24 +54,27 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
         try {
             await session.withTransaction(async () => {
+                // Update status for retry
+                const updateFields: Record<string, unknown> = {
+                    status: NOTIFICATION_STATUS.pending,
+                    error_message: null,
+                    retry_count: 0,
+                    updated_at: new Date()
+                };
+
+                console.log(`[Retry] Notification ${id}: Retrying with original provider=${notification.provider}`);
+
                 // Reset the notification status to pending
-                await NotificationModel.findByIdAndUpdate(
+                const updatedNotification = await NotificationModel.findByIdAndUpdate(
                     id,
-                    {
-                        status: NOTIFICATION_STATUS.pending,
-                        error_message: null,
-                        retry_count: 0,
-                        updated_at: new Date()
-                    },
-                    { session }
+                    updateFields,
+                    { session, new: true } // Return the updated document
                 );
 
                 // Determine the topic based on channel dynamically
                 const topic = getTopicForChannel(notification.channel);
 
                 // Extract channel-specific content for plugin validation
-                // Dashboard stores: content: { mock: { message: "..." } }
-                // Plugin expects: content: { message: "..." }
                 const rawContent = notification.content as Record<string, unknown>;
                 const extractedContent = extractChannelContent(rawContent, notification.channel);
 
@@ -81,6 +84,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                     request_id: notification.request_id,
                     client_id: notification.client_id,
                     channel: notification.channel,
+                    provider: notification.provider, // Use existing provider
                     recipient: notification.recipient,
                     content: extractedContent,
                     variables: notification.variables,

@@ -288,7 +288,7 @@ export default function ApiDesignerPage() {
                                                                 <SelectContent>
                                                                     {data.channels[channel].providers.map(p => (
                                                                         <SelectItem key={p.id} value={p.id}>
-                                                                            {p.displayName || p.name}
+                                                                            {p.displayName} ({p.id})
                                                                         </SelectItem>
                                                                     ))}
                                                                 </SelectContent>
@@ -413,11 +413,14 @@ export default function ApiDesignerPage() {
                                         <div>
                                             <p className="text-sm font-medium mb-2">Selected Channels:</p>
                                             <div className="flex flex-wrap gap-2">
-                                                {enabledChannels.map(({ channel, provider }) => (
-                                                    <Badge key={channel} variant="secondary">
-                                                        {channel}{includeProvider && provider ? ` → ${provider}` : ""}
-                                                    </Badge>
-                                                ))}
+                                                {enabledChannels.map(({ channel, provider }) => {
+                                                    const providerMeta = data?.channels[channel]?.providers.find(p => p.id === provider);
+                                                    return (
+                                                        <Badge key={channel} variant="secondary">
+                                                            {channel}{includeProvider && provider ? ` → ${providerMeta?.displayName || provider} (${provider})` : ""}
+                                                        </Badge>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                         <div className="text-xs text-muted-foreground">

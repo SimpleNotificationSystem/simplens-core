@@ -45,8 +45,10 @@ export async function POST(
     try {
         await connectDB();
 
-        const body = await request.json();
-        const { appendWarning } = body;
+        const { appendWarning } = await request.json() as {
+            appendWarning?: boolean;
+        };
+        console.log(`[AlertResolve] Alert ${id}: Resolving with appendWarning=${appendWarning}`);
 
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return NextResponse.json(
@@ -70,18 +72,15 @@ export async function POST(
             );
         }
 
-        const notification = await NotificationModel.findById(alert.notification_id);
-        if (!notification) {
-            return NextResponse.json(
-                { error: "Notification not found" },
-                { status: 404 }
-            );
-        }
-
         const session = await mongoose.startSession();
 
         try {
             await session.withTransaction(async () => {
+                const notification = await NotificationModel.findById(alert.notification_id);
+                if (!notification) {
+                    throw new Error("Notification not found");
+                }
+
                 // Update content with warning if requested
                 if (appendWarning) {
                     const warningMessage = "\n\n⚠️ Ignore this message if you already received it!";
@@ -100,6 +99,9 @@ export async function POST(
                 notification.status = "pending";
                 notification.error_message = undefined;
                 notification.updated_at = new Date();
+
+                console.log(`[AlertResolve] Notification ${notification._id}: Retrying with original provider=${notification.provider}`);
+
                 await notification.save({ session });
 
                 // Create outbox entry with dynamic topic
@@ -113,6 +115,7 @@ export async function POST(
                     request_id: notification.request_id,
                     client_id: notification.client_id,
                     channel: notification.channel,
+                    provider: notification.provider, // Use existing provider
                     recipient: notification.recipient,
                     content: extractedContent,
                     variables: notification.variables,

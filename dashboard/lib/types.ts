@@ -28,6 +28,7 @@ export interface Notification {
     client_id: string;
     client_name?: string;
     channel: Channel;
+    provider?: string;  // Provider ID used for this notification
     recipient: Recipient;
     content: NotificationContent;
     variables?: Record<string, string>;

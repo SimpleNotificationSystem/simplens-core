@@ -26,8 +26,11 @@ export async function POST(request: NextRequest) {
     try {
         await connectDB();
 
-        const body = await request.json();
-        const { appendWarning, limit = 50 } = body;
+        const { appendWarning, limit = 50 } = await request.json() as {
+            appendWarning?: boolean;
+            limit?: number;
+        };
+        console.log("[BulkResolve] Request body:", { appendWarning, limit });
 
         const alerts = await AlertModel.find({ resolved: false })
             .sort({ created_at: 1 })
@@ -73,6 +76,9 @@ export async function POST(request: NextRequest) {
                     notification.status = "pending";
                     notification.error_message = undefined;
                     notification.updated_at = new Date();
+
+                    console.log(`[BulkResolve] Notification ${notification._id}: Retrying with original provider=${notification.provider}`);
+
                     await notification.save({ session });
 
                     // Create outbox entry with dynamic topic
@@ -87,6 +93,7 @@ export async function POST(request: NextRequest) {
                         request_id: notification.request_id,
                         client_id: notification.client_id,
                         channel: notification.channel,
+                        provider: notification.provider, // Use existing provider
                         recipient: notification.recipient,
                         content: extractedContent,
                         variables: notification.variables,

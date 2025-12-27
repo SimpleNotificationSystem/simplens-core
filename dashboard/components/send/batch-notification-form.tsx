@@ -308,7 +308,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                                                 <SelectContent>
                                                     {providers.map(p => (
                                                         <SelectItem key={p.id} value={p.id} className="text-xs">
-                                                            <span className="truncate">{p.displayName} {p.id === channelConfig?.default && "(Default)"}</span>
+                                                            <span className="truncate">{p.displayName} ({p.id}) {p.id === channelConfig?.default && "• Default"}</span>
                                                         </SelectItem>
                                                     ))}
                                                 </SelectContent>
@@ -390,7 +390,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                     <Card key={channel}>
                         <CardHeader className="pb-3">
                             <CardTitle className="text-sm font-medium capitalize">{channel} Template</CardTitle>
-                            <CardDescription>Provider: {provider.displayName} — Use {"{{variable}}"} for personalization</CardDescription>
+                            <CardDescription>Provider: {provider.displayName} ({selectedProviders[channel]}) — Use {"{{variable}}"} for personalization</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             {provider.contentFields.map(field => (

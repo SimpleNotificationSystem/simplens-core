@@ -284,7 +284,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                                                     <SelectContent>
                                                         {providers.map(p => (
                                                             <SelectItem key={p.id} value={p.id} className="text-xs">
-                                                                <span className="truncate">{p.displayName} {p.id === channelConfig?.default && "(Default)"}</span>
+                                                                <span className="truncate">{p.displayName} ({p.id}) {p.id === channelConfig?.default && "• Default"}</span>
                                                             </SelectItem>
                                                         ))}
                                                     </SelectContent>
@@ -369,7 +369,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                             <CardHeader className="pb-3">
                                 <CardTitle className="text-sm font-medium capitalize">{channel} Content</CardTitle>
                                 <CardDescription>
-                                    Provider: {provider.displayName}
+                                    Provider: {provider.displayName} ({selectedProviders[channel]})
                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">

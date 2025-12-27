@@ -27,6 +27,10 @@ const notificationSchema = new Schema<NotificationDocument>(
             required: true,
             index: true,
         },
+        provider: {
+            type: String,
+            index: true,
+        },
         // Dynamic recipient - structure depends on channel
         recipient: {
             type: Schema.Types.Mixed,

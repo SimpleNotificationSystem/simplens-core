@@ -12,6 +12,7 @@ import type { PaginatedResponse, Notification, NOTIFICATION_STATUS, Channel } fr
 interface NotificationFilter {
     status?: string;
     channel?: string;
+    provider?: string;
     created_at?: { $gte?: Date; $lte?: Date };
     $or?: Array<Record<string, { $regex: string; $options: string }>>;
 }
@@ -25,6 +26,7 @@ export async function GET(request: NextRequest) {
         const limit = parseInt(searchParams.get('limit') || '20');
         const status = searchParams.get('status') as NOTIFICATION_STATUS | null;
         const channel = searchParams.get('channel') as Channel | null;
+        const provider = searchParams.get('provider');
         const search = searchParams.get('search');
         const from = searchParams.get('from');
         const to = searchParams.get('to');
@@ -38,6 +40,10 @@ export async function GET(request: NextRequest) {
 
         if (channel) {
             filter.channel = channel;
+        }
+
+        if (provider) {
+            filter.provider = provider;
         }
 
         if (search) {
@@ -82,6 +88,7 @@ export async function GET(request: NextRequest) {
             client_id: doc.client_id,
             client_name: doc.client_name,
             channel: doc.channel,
+            provider: doc.provider,
             recipient: doc.recipient,
             content: doc.content,
             variables: doc.variables ?? undefined,

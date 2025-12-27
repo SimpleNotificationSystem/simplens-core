@@ -33,6 +33,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             client_id: notification.client_id,
             client_name: notification.client_name,
             channel: notification.channel,
+            provider: notification.provider,
             recipient: notification.recipient,
             content: notification.content,
             variables: notification.variables ?? undefined,

@@ -32,6 +32,15 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+
 import { Alert as AlertType, ALERT_TYPE } from "@/lib/types";
 
 interface AlertWithNotification extends AlertType {
@@ -59,6 +68,14 @@ export default function AlertsPage() {
     const [bulkLoading, setBulkLoading] = useState(false);
     const [countsByType, setCountsByType] = useState<Record<string, number>>({});
     const [filterType, setFilterType] = useState<string>("all");
+
+    // Retry dialog state
+    const [bulkRetryDialogOpen, setBulkRetryDialogOpen] = useState(false);
+    const [appendWarningOption, setAppendWarningOption] = useState(false);
+    const [singleRetryAlertId, setSingleRetryAlertId] = useState<string | null>(null);
+    const [singleRetryAppendWarning, setSingleRetryAppendWarning] = useState(false);
+
+
 
     const fetchAlerts = useCallback(async (pageNum = 1, append = false, type = "all") => {
         try {
@@ -108,7 +125,7 @@ export default function AlertsPage() {
         // fetchAlerts will be triggered by useEffect
     };
 
-    const handleBulkRetry = async (appendWarning: boolean) => {
+    const handleBulkRetry = async () => {
         if (totalCount === 0) return;
 
         setBulkLoading(true);
@@ -116,7 +133,10 @@ export default function AlertsPage() {
             const response = await fetch("/api/alerts/bulk-resolve", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ appendWarning, limit: 100 }),
+                body: JSON.stringify({
+                    appendWarning: appendWarningOption,
+                    limit: 100
+                }),
             });
 
             if (response.ok) {
@@ -130,8 +150,12 @@ export default function AlertsPage() {
             console.error("Failed to bulk retry:", error);
         } finally {
             setBulkLoading(false);
+            setBulkRetryDialogOpen(false);
+            setAppendWarningOption(false);
         }
     };
+
+
 
     const handleRetry = async (alertId: string, appendWarning: boolean) => {
         setActionLoading(alertId);
@@ -139,17 +163,22 @@ export default function AlertsPage() {
             const response = await fetch(`/api/alerts/${alertId}/resolve`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ appendWarning }),
+                body: JSON.stringify({
+                    appendWarning
+                }),
             });
 
             if (response.ok) {
                 setAlerts((prev) => prev.filter((a) => a._id !== alertId));
                 setTotalCount((prev) => Math.max(0, prev - 1));
+                toast.success("Alert resolved and notification retried");
             }
         } catch (error) {
             console.error("Failed to resolve alert:", error);
+            toast.error("Failed to resolve alert");
         } finally {
             setActionLoading(null);
+            setSingleRetryAlertId(null);
         }
     };
 
@@ -260,11 +289,11 @@ export default function AlertsPage() {
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleBulkRetry(false)}>
+                                <DropdownMenuItem onClick={() => { setAppendWarningOption(false); setBulkRetryDialogOpen(true); }}>
                                     <RotateCcw className="h-4 w-4 mr-2" />
                                     Retry All (up to 100)
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleBulkRetry(true)}>
+                                <DropdownMenuItem onClick={() => { setAppendWarningOption(true); setBulkRetryDialogOpen(true); }}>
                                     <AlertTriangle className="h-4 w-4 mr-2" />
                                     Retry All with Warning
                                 </DropdownMenuItem>
@@ -411,13 +440,13 @@ export default function AlertsPage() {
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="center">
                                                     <DropdownMenuItem
-                                                        onClick={() => handleRetry(alert._id, false)}
+                                                        onClick={() => { setSingleRetryAlertId(alert._id); setSingleRetryAppendWarning(false); }}
                                                     >
                                                         <RotateCcw className="h-3 w-3 mr-2" />
                                                         Retry
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
-                                                        onClick={() => handleRetry(alert._id, true)}
+                                                        onClick={() => { setSingleRetryAlertId(alert._id); setSingleRetryAppendWarning(true); }}
                                                     >
                                                         <AlertTriangle className="h-3 w-3 mr-2" />
                                                         Retry with Warning
@@ -457,6 +486,78 @@ export default function AlertsPage() {
                         </Button>
                     </div>
                 )}
+
+                {/* Bulk Retry Dialog */}
+                <Dialog open={bulkRetryDialogOpen} onOpenChange={setBulkRetryDialogOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Retry All Alerts</DialogTitle>
+                            <DialogDescription>
+                                {appendWarningOption
+                                    ? "Retry up to 100 alerts with a warning message appended."
+                                    : "Retry up to 100 alerts. They will be reset to pending status and reprocessed."
+                                }
+                            </DialogDescription>
+                        </DialogHeader>
+
+
+
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setBulkRetryDialogOpen(false)}>
+                                Cancel
+                            </Button>
+                            <Button onClick={handleBulkRetry} disabled={bulkLoading}>
+                                {bulkLoading ? (
+                                    <>
+                                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                                        Retrying...
+                                    </>
+                                ) : (
+                                    <>
+                                        <RotateCcw className="mr-2 h-4 w-4" />
+                                        {appendWarningOption ? "Retry with Warning" : "Retry All"}
+                                    </>
+                                )}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Single Alert Retry Dialog */}
+                <Dialog open={singleRetryAlertId !== null} onOpenChange={(open) => { if (!open) { setSingleRetryAlertId(null); } }}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Retry Alert</DialogTitle>
+                            <DialogDescription>
+                                {singleRetryAppendWarning
+                                    ? "Retry this alert with a warning message appended."
+                                    : "Retry this alert. The notification will be reset to pending and reprocessed."
+                                }
+                            </DialogDescription>
+                        </DialogHeader>
+
+
+
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => { setSingleRetryAlertId(null); }}>
+                                Cancel
+                            </Button>
+                            <Button onClick={() => singleRetryAlertId && handleRetry(singleRetryAlertId, singleRetryAppendWarning)} disabled={actionLoading !== null}>
+                                {actionLoading ? (
+                                    <>
+                                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                                        Retrying...
+                                    </>
+                                ) : (
+                                    <>
+                                        <RotateCcw className="mr-2 h-4 w-4" />
+                                        {singleRetryAppendWarning ? "Retry with Warning" : "Retry"}
+                                    </>
+                                )}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </div>
         </DashboardLayout>
     );
