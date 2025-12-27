@@ -35,6 +35,7 @@ export function HtmlPreview({ html, variables = {} }: HtmlPreviewProps) {
                     <CardTitle className="text-sm font-medium">Email Preview</CardTitle>
                     <div className="flex gap-1">
                         <Button
+                            type="button"
                             variant={mode === "preview" ? "default" : "ghost"}
                             size="sm"
                             onClick={() => setMode("preview")}
@@ -43,6 +44,7 @@ export function HtmlPreview({ html, variables = {} }: HtmlPreviewProps) {
                             Preview
                         </Button>
                         <Button
+                            type="button"
                             variant={mode === "code" ? "default" : "ghost"}
                             size="sm"
                             onClick={() => setMode("code")}
