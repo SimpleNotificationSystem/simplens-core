@@ -109,6 +109,9 @@ export const notificationSchema = z.object({
     scheduled_at: z.coerce.date().optional(),
     error_message: z.string().optional(),
     retry_count: z.number().int().min(0),
+    // Recovery claiming fields for horizontal scalability
+    recovery_claimed_by: z.string().nullable().optional(),
+    recovery_claimed_at: z.coerce.date().nullable().optional(),
     created_at: z.coerce.date().optional(),
     updated_at: z.coerce.date().optional(),
 });
@@ -139,6 +142,9 @@ export const alertSchema = z.object({
     retry_count: z.number().int().min(0),
     resolved: z.boolean().default(false),
     resolved_at: z.coerce.date().nullable().optional(),
+    // Recovery claiming fields for horizontal scalability
+    recovery_claimed_by: z.string().nullable().optional(),
+    recovery_claimed_at: z.coerce.date().nullable().optional(),
     created_at: z.coerce.date().optional(),
     updated_at: z.coerce.date().optional(),
 });
