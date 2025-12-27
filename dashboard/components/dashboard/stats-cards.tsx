@@ -1,12 +1,14 @@
 "use client";
 
+import { useRef } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import {
     Bell, CheckCircle, Clock, AlertTriangle, Mail, MessageCircle,
-    ShieldAlert, LucideIcon, Activity, Smartphone, Zap
+    ShieldAlert, LucideIcon, Activity, Smartphone, Zap, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DashboardStats } from "@/lib/types";
@@ -123,6 +125,8 @@ function StatsCardSkeleton({ className }: { className?: string }) {
 }
 
 export function StatsGrid() {
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+
     const { data: stats, isLoading: statsLoading, error: statsError } = useSWR<DashboardStats>(
         "/api/dashboard/stats",
         fetcher,
@@ -136,6 +140,16 @@ export function StatsGrid() {
     );
 
     const isLoading = statsLoading || alertsLoading;
+
+    const scrollChannels = (direction: "left" | "right") => {
+        if (scrollContainerRef.current) {
+            const scrollAmount = 280; // card width + gap
+            scrollContainerRef.current.scrollBy({
+                left: direction === "left" ? -scrollAmount : scrollAmount,
+                behavior: "smooth"
+            });
+        }
+    };
 
     if (isLoading) {
         return (
@@ -280,12 +294,39 @@ export function StatsGrid() {
 
             {/* Dynamic Channels - Horizontal Scroll */}
             <section>
-                <h2 className="text-lg font-semibold tracking-tight mb-4 flex items-center gap-2">
-                    <Zap className="h-5 w-5 text-primary" />
-                    Channels
-                </h2>
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold tracking-tight flex items-center gap-2">
+                        <Zap className="h-5 w-5 text-primary" />
+                        Channels
+                    </h2>
+                    {channelCards.length > 1 && (
+                        <div className="flex gap-1">
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => scrollChannels("left")}
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => scrollChannels("right")}
+                            >
+                                <ChevronRight className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    )}
+                </div>
                 {channelCards.length > 0 ? (
-                    <div className="flex gap-4 overflow-x-auto pb-6 scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+                    <div
+                        ref={scrollContainerRef}
+                        className="flex gap-4 overflow-x-auto pb-6 scrollbar-none"
+                    >
                         {channelCards.map((card) => (
                             <div key={card.title} className="min-w-[260px] shrink-0">
                                 <StatsCard card={card} />
