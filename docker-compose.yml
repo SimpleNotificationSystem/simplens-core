@@ -283,9 +283,6 @@ services:
   # Recovery Service - Detects stuck notifications and creates alerts
   recovery:
     image: simplens-core:latest
-    deploy:
-      replicas: 1
-    container_name: recovery
     env_file:
       - .env
     environment:
