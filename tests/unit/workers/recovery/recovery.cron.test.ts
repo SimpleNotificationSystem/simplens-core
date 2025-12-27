@@ -9,6 +9,9 @@ const mockAlertModel = {
     deleteMany: vi.fn(),
     find: vi.fn(),
     updateOne: vi.fn(),
+    findOneAndUpdate: vi.fn(),
+    findByIdAndUpdate: vi.fn(),
+    findById: vi.fn(),
 };
 
 const mockStatusOutboxModel = {
@@ -75,6 +78,8 @@ vi.mock('../../../../src/config/env.config.js', () => ({
         RECOVERY_POLL_INTERVAL_MS: 60000,
         CLEANUP_RESOLVED_ALERTS_RETENTION_MS: 86400000,    // 24 hours
         CLEANUP_PROCESSED_STATUS_OUTBOX_RETENTION_MS: 86400000, // 24 hours
+        RECOVERY_CLAIM_TIMEOUT_MS: 300000, // 5 minutes
+        WORKER_ID: 'test-worker-1',
     },
 }));
 
@@ -268,7 +273,7 @@ describe('Recovery Cron - Cleanup Functions', () => {
             );
         });
 
-        it('should skip already recovered notifications (lock race)', async () => {
+        it('should skip processing when no notifications to claim (race condition)', async () => {
             // Mock finding stuck notifications
             mockNotificationModel.find.mockReturnValue({
                 limit: vi.fn().mockResolvedValue([{
@@ -279,7 +284,7 @@ describe('Recovery Cron - Cleanup Functions', () => {
                 }]),
             });
 
-            // Mock findOneAndUpdate to return null (already recovered by another instance)
+            // Mock findOneAndUpdate to return null (already claimed by another instance)
             mockNotificationModel.findOneAndUpdate.mockResolvedValue(null);
 
             mockAlertModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
@@ -295,9 +300,12 @@ describe('Recovery Cron - Cleanup Functions', () => {
             await vi.advanceTimersByTimeAsync(100);
             await stopRecoveryCron();
 
-            // Should have logged that it was already recovered
-            expect(mockLogger.debug).toHaveBeenCalledWith(
-                expect.stringContaining('already recovered by another instance')
+            // When findOneAndUpdate returns null, the loop breaks and no notification is processed
+            // No specific log for "already recovered" - the loop just ends
+            expect(mockNotificationModel.findOneAndUpdate).toHaveBeenCalled();
+            // Should NOT have logged any processing (no notifications were claimed)
+            expect(mockLogger.info).not.toHaveBeenCalledWith(
+                expect.stringContaining('Ghost delivery detected')
             );
         });
     });

@@ -57,7 +57,7 @@ describe('Plugin Loader Unit Tests', () => {
 
             // This will try to load from the env-configured path
             // and gracefully handle missing file
-            await expect(loadProvidersFromEnv()).resolves.not.toThrow();
+            await expect(loadProvidersFromEnv({ initialize: false })).resolves.not.toThrow();
         });
 
         it('should use default config path when env not set', async () => {
@@ -68,7 +68,7 @@ describe('Plugin Loader Unit Tests', () => {
             const { loadProvidersFromEnv } = await import('../../../src/plugins/loader/loader.js');
 
             // This will use default path and gracefully handle missing file
-            await expect(loadProvidersFromEnv()).resolves.not.toThrow();
+            await expect(loadProvidersFromEnv({ initialize: false })).resolves.not.toThrow();
         });
     });
 });

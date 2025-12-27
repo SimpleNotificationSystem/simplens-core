@@ -207,6 +207,11 @@ const recoverStuckProcessing = async (): Promise<void> => {
 /**
  * Detect orphaned pending notifications (horizontally scalable)
  * Uses atomic claiming with worker ID to prevent race conditions
+ * 
+ * Handles scheduled notifications:
+ * - Excludes notifications with scheduled_at in the future (they're waiting, not orphaned)
+ * - For past scheduled notifications: uses scheduled_at + threshold to detect orphans
+ * - For non-scheduled notifications: uses updated_at + threshold as before
  */
 const detectOrphanedPending = async (): Promise<void> => {
     const now = new Date();
@@ -217,13 +222,40 @@ const detectOrphanedPending = async (): Promise<void> => {
 
     for (let i = 0; i < env.RECOVERY_BATCH_SIZE; i++) {
         // Atomically claim an orphaned notification
+        // Query logic:
+        // 1. Non-scheduled notifications: updated_at older than threshold
+        // 2. Scheduled notifications: scheduled_at has passed AND scheduled_at + threshold has passed
+        // 3. Exclude future scheduled notifications (they're waiting, not orphaned)
         const notification = await notification_model.findOneAndUpdate(
             {
                 status: NOTIFICATION_STATUS.pending,
-                updated_at: { $lt: threshold },
-                $or: [
-                    { recovery_claimed_by: null },
-                    { recovery_claimed_at: { $lt: staleClaimThreshold } }
+                $and: [
+                    // Timing conditions based on whether notification is scheduled or not
+                    {
+                        $or: [
+                            // Non-scheduled notifications: use updated_at threshold
+                            {
+                                scheduled_at: { $exists: false },
+                                updated_at: { $lt: threshold }
+                            },
+                            {
+                                scheduled_at: null,
+                                updated_at: { $lt: threshold }
+                            },
+                            // Scheduled notifications: scheduled_at must be in the past AND
+                            // enough time must have passed since scheduled_at for it to be considered orphaned
+                            {
+                                scheduled_at: { $lte: threshold }
+                            }
+                        ]
+                    },
+                    // Claiming logic (prevent race conditions between recovery workers)
+                    {
+                        $or: [
+                            { recovery_claimed_by: null },
+                            { recovery_claimed_at: { $lt: staleClaimThreshold } }
+                        ]
+                    }
                 ]
             },
             {
