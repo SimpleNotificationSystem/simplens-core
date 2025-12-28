@@ -19,13 +19,12 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
+
 import { ArrowLeft, RefreshCw, Trash2, Clock, User, Mail, Phone, Link as LinkIcon } from "lucide-react";
 import { format } from "date-fns";
-import { Notification, NOTIFICATION_STATUS, PluginMetadata } from "@/lib/types";
+import { Notification, NOTIFICATION_STATUS } from "@/lib/types";
 import Link from "next/link";
-import { useState, useEffect, useMemo } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -46,23 +45,7 @@ export default function EventDetailPage({ params }: PageProps) {
         fetcher
     );
 
-    // Provider selection
     const [retryDialogOpen, setRetryDialogOpen] = useState(false);
-    const [selectedProvider, setSelectedProvider] = useState<string>("_keep_original");
-    const [pluginsData, setPluginsData] = useState<PluginMetadata | null>(null);
-
-    useEffect(() => {
-        fetch('/api/plugins').then(res => res.json()).then(setPluginsData).catch(() => { });
-    }, []);
-
-    // Get providers for this notification's channel
-    const availableProviders = useMemo(() => {
-        if (!pluginsData || !notification) return [];
-        const channel = notification.channel;
-        const channelConfig = pluginsData.channels[channel];
-        if (!channelConfig) return [];
-        return channelConfig.providers.map(p => ({ id: p.id, displayName: p.displayName }));
-    }, [pluginsData, notification]);
 
     const handleRetry = async () => {
         if (!notification) return;
@@ -72,14 +55,13 @@ export default function EventDetailPage({ params }: PageProps) {
             const response = await fetch(`/api/notifications/${notification._id}/retry`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ provider: selectedProvider === "_keep_original" ? undefined : selectedProvider }),
+                body: JSON.stringify({}),
             });
 
             if (response.ok) {
                 toast.success("Notification queued for retry");
                 mutate();
                 setRetryDialogOpen(false);
-                setSelectedProvider("_keep_original");
             } else {
                 const data = await response.json();
                 toast.error(data.error || "Failed to retry notification");
@@ -183,28 +165,7 @@ export default function EventDetailPage({ params }: PageProps) {
                                             </DialogDescription>
                                         </DialogHeader>
 
-                                        {/* Provider Selection */}
-                                        {availableProviders.length > 0 && (
-                                            <div className="space-y-2 py-4">
-                                                <Label>Provider (optional)</Label>
-                                                <Select value={selectedProvider} onValueChange={setSelectedProvider}>
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Keep original provider" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="_keep_original">Keep original provider</SelectItem>
-                                                        {availableProviders.map(p => (
-                                                            <SelectItem key={p.id} value={p.id}>
-                                                                {p.displayName} ({p.id})
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                <p className="text-xs text-muted-foreground">
-                                                    Select a different provider or leave empty to use the original
-                                                </p>
-                                            </div>
-                                        )}
+
 
                                         <DialogFooter>
                                             <Button variant="outline" onClick={() => setRetryDialogOpen(false)}>
