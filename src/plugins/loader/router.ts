@@ -6,6 +6,8 @@
 
 import { PluginRegistry } from './registry.js';
 import type { DeliveryResult, BaseNotification } from '../interfaces/provider.types.js';
+import { unifiedProcessorLogger as logger } from '@src/processors/unified/unified.logger.js';
+import { handleSchemaValidationFailure } from '@src/processors/shared/schema-failure-handler.js';
 
 /**
  * Send notification with automatic fallback
@@ -58,6 +60,32 @@ export async function sendWithFallback<T extends BaseNotification>(
     }
 
     console.log(`[ProviderRouter] Default provider failed, trying fallback: ${fallbackProvider.manifest.name}`);
+
+    const schema = fallbackProvider.getNotificationSchema();
+
+    const validationResult = schema.safeParse(notification);
+
+    if (!validationResult.success) {
+        logger.error(`[${channel}] Invalid notification schema for fallback provider of channel:${channel} and provider name ${fallbackProvider.manifest.displayName}:`,
+            validationResult.error.issues);
+
+        const notificationId = notification.notification_id;
+        await handleSchemaValidationFailure(
+            notificationId,
+            channel,
+            notification,
+            validationResult.error,
+            'fallback provider'
+        );
+        return {
+            success: false,
+            error: {
+                code: 'FALLBACK_SCHEMA_VALIDATION_ERROR',
+                message: 'Fallback provider schema validation failed',
+                retryable: false
+            }
+        };
+    }
 
     const fallbackResult = await fallbackProvider.send(notification);
 

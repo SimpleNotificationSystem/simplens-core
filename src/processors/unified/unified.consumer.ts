@@ -25,7 +25,7 @@ import { tryAcquireProcessingLock, setDelivered, setFailed } from '@src/processo
 import { consumeToken } from '@src/processors/shared/rate-limiter.js';
 import { publishStatus } from '@src/processors/shared/status.producer.js';
 import { publishDelayed, buildDelayedPayloadGeneric } from '@src/processors/shared/delayed.producer.js';
-
+import { handleSchemaValidationFailure } from '../shared/schema-failure-handler.js';
 // Track active consumers by channel
 const consumers: Map<string, Consumer> = new Map();
 const consumingState: Map<string, boolean> = new Map();
@@ -137,6 +137,21 @@ const processMessage = async (
         if (!validationResult.success) {
             logger.error(`[${channel}] Invalid notification schema at offset ${messageOffset}:`,
                 validationResult.error.issues);
+
+            // Extract notification_id if it exists to properly mark as failed
+            const notificationId = rawData?.notification_id?.toString();
+
+            if (notificationId) {
+                await handleSchemaValidationFailure(
+                    notificationId,
+                    channel,
+                    rawData,
+                    validationResult.error
+                );
+            } else {
+                logger.warn(`[${channel}] Cannot mark as failed - no notification_id in malformed payload`);
+            }
+
             return true; // Skip invalid messages
         }
 
@@ -203,7 +218,12 @@ const processMessage = async (
 
             logger.success(`[${channel}] Delivered: ${notificationId}`);
             return true;
-        } else {
+        } 
+        else if (result.success === false && result.error?.retryable === false){
+            // commit kafka offet, already the events gets flagged as failed
+            return true;
+        }
+        else {
             // 6b. Failure - check if retryable
             const newRetryCount = notification.retry_count + 1;
 
