@@ -2,7 +2,7 @@
     <img src="./assets/SimpleNSLogo.png" alt="SimpleNS" width="320" />
 </p>
 
-<h3 align="center">Plugin-Based Notification Orchestration</h3>
+<h3 align="center">Open-source plugin-based notification orchestration engine for developers who value control</h3>
 
 <p align="center">
   <strong>Scalable • Reliable • Extensible</strong>
@@ -56,7 +56,7 @@
 
 | Component | Description |
 |-----------|-------------|
-| **API Server** | REST API for notification ingestion (`/notification`, `/notification/batch`) |
+| **API Server** | REST API for notification ingestion (`/api/notification`, `/api/notification/batch`) |
 | **Background Worker** | Polls outbox, publishes to Kafka, consumes status updates |
 | **Unified Processor** | Plugin-based notification delivery with rate limiting |
 | **Delayed Processor** | Handles scheduled notifications via Redis ZSET queue |
@@ -75,6 +75,13 @@ npm run plugin:list
 ```
 
 Build custom plugins with the SDK:
+
+@simplens/create-simplens-plugin CLI tool helps scafold a simplens plugin project easily.
+
+```bash
+npx @simplens/create-simplens-plugin
+```
+This generates all the boilerplate code required for a simplens plugin so that a plugin developer can just write the core logic of delivering notifications using a particular provider
 
 ```typescript
 import { SimpleNSProvider, ProviderManifest } from '@simplens/sdk';
@@ -128,7 +135,7 @@ docker-compose up -d
 ```
 
 ### 3. Send a Notification (using @simplens/nodemailer-gmail)
-
+The request schema can be easily obtained from the `Payload Studio` in the admin dashboard.
 ```bash
 curl -X POST http://localhost:3000/api/notification \
   -H "Content-Type: application/json" \
@@ -171,7 +178,7 @@ The Admin Dashboard provides a modern interface for monitoring and managing noti
 - 🚨 **Alerts** — System alerts for orphaned notifications and recovery events requiring attention
 - 📈 **Analytics** — Charts and visualizations for notification status and channel distribution
 - 🔌 **Plugins** — View installed plugins, their channels, and provider configurations
-- 🔧 **Payload Studio** — Interactive schema explorer for building and testing notification payloads
+- 🔧 **Payload Studio** — Interactive schema explorer for building and notification payloads
 
 ---
 
