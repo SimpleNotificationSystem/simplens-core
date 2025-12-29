@@ -147,8 +147,8 @@ describe('Recovery Cron - Cleanup Functions', () => {
         it('should handle exhausted retries - mark as failed', async () => {
             const { getIdempotencyStatus } = await import('../../../../src/processors/shared/idempotency.js');
 
-            // Mock getIdempotencyStatus to return failed
-            (getIdempotencyStatus as ReturnType<typeof vi.fn>).mockResolvedValue({ status: 'failed' });
+            // Mock getIdempotencyStatus to return failed with exhausted retry count
+            (getIdempotencyStatus as ReturnType<typeof vi.fn>).mockResolvedValue({ status: 'failed', retry_count: 5 });
 
             // Mock finding a stuck notification with max retries
             const mockNotificationId = '507f1f77bcf86cd799439012';
@@ -191,8 +191,8 @@ describe('Recovery Cron - Cleanup Functions', () => {
         it('should create alert for failed notification with retries remaining', async () => {
             const { getIdempotencyStatus } = await import('../../../../src/processors/shared/idempotency.js');
 
-            // Mock getIdempotencyStatus to return failed
-            (getIdempotencyStatus as ReturnType<typeof vi.fn>).mockResolvedValue({ status: 'failed' });
+            // Mock getIdempotencyStatus to return failed with retries remaining
+            (getIdempotencyStatus as ReturnType<typeof vi.fn>).mockResolvedValue({ status: 'failed', retry_count: 2 });
 
             // Mock finding a stuck notification with retries remaining
             const mockNotificationId = '507f1f77bcf86cd799439013';

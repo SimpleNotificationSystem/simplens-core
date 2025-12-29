@@ -91,6 +91,7 @@ const recoverStuckProcessing = async (): Promise<void> => {
                         { _id: notification._id },
                         {
                             status: NOTIFICATION_STATUS.delivered,
+                            retry_count: redisStatus.retry_count,
                             recovery_claimed_by: null,
                             recovery_claimed_at: null
                         },
@@ -104,14 +105,15 @@ const recoverStuckProcessing = async (): Promise<void> => {
                     }], { session });
 
                 } else if (redisStatus?.status === 'failed') {
-                    if (notification.retry_count >= env.MAX_RETRY_COUNT) {
+                    if (redisStatus.retry_count >= env.MAX_RETRY_COUNT) {
                         // EXHAUSTED RETRIES
-                        logger.info(`Notification ${notification._id} exhausted retries (${notification.retry_count})`);
+                        logger.info(`Notification ${notification._id} exhausted retries (${redisStatus.retry_count})`);
 
                         await notification_model.updateOne(
                             { _id: notification._id },
                             {
                                 status: NOTIFICATION_STATUS.failed,
+                                retry_count: redisStatus.retry_count,
                                 error_message: 'Recovered by recovery service - max retries exceeded',
                                 recovery_claimed_by: null,
                                 recovery_claimed_at: null
@@ -128,17 +130,17 @@ const recoverStuckProcessing = async (): Promise<void> => {
                     } else {
                         // RETRY COUNT NOT EXHAUSTED BUT REDIS SAYS FAILED
                         // Create alert for manual retry via dashboard
-                        logger.warn(`Creating alert for failed notification ${notification._id} (retry: ${notification.retry_count}/${env.MAX_RETRY_COUNT})`);
+                        logger.warn(`Creating alert for failed notification ${notification._id} (retry: ${redisStatus.retry_count}/${env.MAX_RETRY_COUNT})`);
 
                         await alert_model.updateOne(
                             { notification_id: notification._id, alert_type: ALERT_TYPE.stuck_processing },
                             {
                                 $set: { resolved: false },
                                 $setOnInsert: {
-                                    reason: `Notification failed but has retries remaining (${notification.retry_count}/${env.MAX_RETRY_COUNT}). Admin can retry via dashboard.`,
+                                    reason: `Notification failed but has retries remaining (${redisStatus.retry_count}/${env.MAX_RETRY_COUNT}). Admin can retry via dashboard.`,
                                     redis_status: redisStatus?.status || null,
                                     db_status: notification.status,
-                                    retry_count: notification.retry_count
+                                    retry_count: redisStatus.retry_count
                                 }
                             },
                             { upsert: true, session }
@@ -169,7 +171,7 @@ const recoverStuckProcessing = async (): Promise<void> => {
                                 reason: 'Notification stuck in processing with no resolution in Redis',
                                 redis_status: redisStatus?.status || null,
                                 db_status: notification.status,
-                                retry_count: notification.retry_count
+                                retry_count: redisStatus?.retry_count || 0
                             }
                         },
                         { upsert: true, session }

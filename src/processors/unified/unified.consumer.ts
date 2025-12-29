@@ -161,7 +161,7 @@ const processMessage = async (
         logger.info(`[${channel}] Processing notification: ${notificationId} (retry: ${notification.retry_count})`);
 
         // 3. Idempotency check - acquire processing lock
-        const lockResult = await tryAcquireProcessingLock(notificationId);
+        const lockResult = await tryAcquireProcessingLock(notificationId, validationResult.data.retry_count);
         if (!lockResult.canProcess) {
             logger.info(`[${channel}] Skipping duplicate: ${notificationId}`);
             return true; // Already handled
@@ -180,13 +180,13 @@ const processMessage = async (
             const newRetryCount = notification.retry_count + 1;
             if (newRetryCount > env.MAX_RETRY_COUNT) {
                 logger.error(`[${channel}] Max retries exceeded: ${notificationId}`);
-                await setFailed(notificationId);
+                await setFailed(notificationId, validationResult.data.retry_count);
                 await publishFailureStatus(notification, channel, 'Max retry count exceeded (rate limiting)');
                 return true;
             }
 
             // Push to delayed queue using generic builder
-            await setFailed(notificationId);
+            await setFailed(notificationId, validationResult.data.retry_count);
             const delayedPayload = buildDelayedPayloadGeneric(
                 notification as unknown as Record<string, unknown>,
                 channel,
@@ -204,7 +204,7 @@ const processMessage = async (
         if (result.success) {
             // 6a. Success
             try {
-                await setDelivered(notificationId);
+                await setDelivered(notificationId, validationResult.data.retry_count);
             } catch (redisErr) {
                 // Redis failed but notification sent - "ghost delivery" scenario
                 logger.error(`[${channel}] Failed to update idempotency, but notification was sent: ${notificationId}`, redisErr);
@@ -229,13 +229,13 @@ const processMessage = async (
 
             if (!result.error?.retryable || newRetryCount > env.MAX_RETRY_COUNT) {
                 logger.error(`[${channel}] Final failure: ${notificationId} - ${result.error?.message}`);
-                await setFailed(notificationId);
+                await setFailed(notificationId, validationResult.data.retry_count);
                 await publishFailureStatus(notification, channel, result.error?.message || 'Unknown error');
                 return true;
             }
 
             // Push to delayed queue for retry
-            await setFailed(notificationId);
+            await setFailed(notificationId, validationResult.data.retry_count);
             const delayedPayload = buildDelayedPayloadGeneric(
                 notification as unknown as Record<string, unknown>,
                 channel,

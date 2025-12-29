@@ -13,6 +13,7 @@ const IDEMPOTENCY_PREFIX = 'idempotency';
 // Idempotency record stored in Redis
 interface IdempotencyRecord {
     status: 'processing' | 'delivered' | 'failed';
+    retry_count: number;
     updated_at: string;
 }
 
@@ -63,7 +64,7 @@ return data and 2 or 1  -- 2 = retry, 1 = first time
  * - { canProcess: true, isRetry: true } - Retry after failure, lock acquired
  * - { canProcess: false } - Already delivered or being processed
  */
-export const tryAcquireProcessingLock = async (notificationId: string): Promise<{
+export const tryAcquireProcessingLock = async (notificationId: string, retry_count: number): Promise<{
     canProcess: boolean;
     isRetry?: boolean;
 }> => {
@@ -72,6 +73,7 @@ export const tryAcquireProcessingLock = async (notificationId: string): Promise<
 
     const processingRecord: IdempotencyRecord = {
         status: 'processing',
+        retry_count: retry_count,
         updated_at: new Date().toISOString()
     };
 
@@ -116,12 +118,13 @@ export const getIdempotencyStatus = async (notificationId: string): Promise<Idem
 /**
  * Set status to 'delivered' - marks notification as successfully processed
  */
-export const setDelivered = async (notificationId: string): Promise<void> => {
+export const setDelivered = async (notificationId: string, retry_count: number): Promise<void> => {
     const redis = getRedisClient();
     const key = buildKey(notificationId);
 
     const record: IdempotencyRecord = {
         status: 'delivered',
+        retry_count: retry_count,
         updated_at: new Date().toISOString()
     };
 
@@ -132,12 +135,13 @@ export const setDelivered = async (notificationId: string): Promise<void> => {
 /**
  * Set status to 'failed' - allows retry processing
  */
-export const setFailed = async (notificationId: string): Promise<void> => {
+export const setFailed = async (notificationId: string, retry_count: number): Promise<void> => {
     const redis = getRedisClient();
     const key = buildKey(notificationId);
 
     const record: IdempotencyRecord = {
         status: 'failed',
+        retry_count: retry_count,
         updated_at: new Date().toISOString()
     };
 
