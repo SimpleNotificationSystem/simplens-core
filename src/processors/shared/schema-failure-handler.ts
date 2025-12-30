@@ -39,7 +39,7 @@ export async function handleSchemaValidationFailure(
 ): Promise<void> {
     try {
         // Mark as failed in Redis to prevent recovery service from flagging as orphaned
-        await setFailed(notificationId);
+        await setFailed(notificationId, rawData.retry_count as number || 0);
 
         // Publish failure status if we have enough data
         if (rawData.request_id && rawData.client_id) {
