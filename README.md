@@ -13,7 +13,8 @@
   <a href="#architecture">Architecture</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#admin-dashboard">Dashboard</a> •
-  <a href="https://simplens.vercel.app">Docs</a>
+  <a href="https://simplens.vercel.app">Website</a> •
+  <a href="https://simplens.vercel.app/docs/core">Documentation</a>
 </p>
 
 ---
