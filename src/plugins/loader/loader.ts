@@ -188,6 +188,45 @@ function resolveCredentials(credentials: Record<string, string> | undefined): Re
 }
 
 /**
+ * Resolve optional config from environment variables
+ * If a key exists in manifest.optionalConfig and the env var is set, include it
+ * If env var is not set, skip it (no error since it's optional)
+ */
+function resolveOptionalConfig(
+    manifest: { optionalConfig?: string[] },
+    existingOptions: Record<string, unknown> | undefined
+): Record<string, unknown> {
+    const resolved: Record<string, unknown> = { ...(existingOptions || {}) };
+
+    if (!manifest.optionalConfig) return resolved;
+
+    for (const key of manifest.optionalConfig) {
+        // Skip if already explicitly set in options (non-empty value)
+        const existingValue = resolved[key];
+        if (existingValue !== undefined && existingValue !== '' &&
+            !(typeof existingValue === 'string' && existingValue.startsWith('${'))) {
+            continue;
+        }
+
+        // Check env var (uppercase version of key)
+        const envVar = key.toUpperCase();
+        const envValue = process.env[envVar];
+
+        if (envValue) {
+            resolved[key] = envValue;
+            console.log(`[PluginLoader] ✓ Loaded optional config: ${key}`);
+        } else {
+            // Remove placeholder if env var not set (optional, just skip)
+            if (typeof existingValue === 'string' && existingValue.startsWith('${')) {
+                delete resolved[key];
+            }
+        }
+    }
+
+    return resolved;
+}
+
+/**
  * Helper to instantiate provider from module
  */
 function instantiateFromModule(module: Record<string, unknown>, packageName: string): SimpleNSProvider {
@@ -283,11 +322,17 @@ async function loadProvider(entry: ProviderEntry, options: { initialize?: boolea
         // Resolve credentials
         const credentials = resolveCredentials(entry.credentials);
 
+        // Auto-resolve optional config from env if available
+        const resolvedOptions = resolveOptionalConfig(
+            provider.manifest,
+            entry.options
+        );
+
         // Initialize
         const config: ProviderConfig = {
             id: entry.id,
             credentials,
-            options: entry.options,
+            options: resolvedOptions,
         };
 
         if (shouldInitialize) {

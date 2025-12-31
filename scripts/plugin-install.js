@@ -175,6 +175,15 @@ function updateConfig(configPath, packageName, manifest) {
         return;
     }
 
+    // Generate optional config placeholders
+    const optionalConfigOptions = {};
+    if (manifest.optionalConfig && manifest.optionalConfig.length > 0) {
+        for (const opt of manifest.optionalConfig) {
+            const envVar = opt.toUpperCase();
+            optionalConfigOptions[opt] = `\${${envVar}}`;
+        }
+    }
+
     // Create provider entry from manifest
     const providerEntry = {
         package: packageName,
@@ -185,7 +194,8 @@ function updateConfig(configPath, packageName, manifest) {
             rateLimit: {
                 maxTokens: 100,
                 refillRate: 10
-            }
+            },
+            ...optionalConfigOptions
         }
     };
 
@@ -225,6 +235,7 @@ async function installPlugin(packageName) {
             console.log(`   Name: ${manifest.displayName || manifest.name}`);
             console.log(`   Channel: ${manifest.channel}`);
             console.log(`   Credentials: ${manifest.requiredCredentials?.join(', ') || 'none'}`);
+            console.log(`   Optional: ${manifest.optionalConfig?.join(', ') || 'none'}`);
 
             updateConfig(configPath, packageName, manifest);
         }
