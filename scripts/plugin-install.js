@@ -189,13 +189,15 @@ function updateConfig(configPath, packageName, manifest) {
         package: packageName,
         id: providerId,
         credentials: generateCredentialPlaceholders(manifest.requiredCredentials || []),
+        optionalConfig: {
+            ...optionalConfigOptions
+        },
         options: {
             priority: 1,
             rateLimit: {
                 maxTokens: 100,
                 refillRate: 10
             },
-            ...optionalConfigOptions
         }
     };
 

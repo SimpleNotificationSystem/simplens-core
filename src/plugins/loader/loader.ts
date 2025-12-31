@@ -89,6 +89,8 @@ interface ProviderEntry {
     id: string;
     /** Provider credentials */
     credentials: Record<string, string>;
+    /** Optional config values (resolved from env vars) */
+    optionalConfig?: Record<string, string>;
     /** Optional settings */
     options?: {
         priority?: number;
@@ -189,37 +191,30 @@ function resolveCredentials(credentials: Record<string, string> | undefined): Re
 
 /**
  * Resolve optional config from environment variables
- * If a key exists in manifest.optionalConfig and the env var is set, include it
- * If env var is not set, skip it (no error since it's optional)
+ * Takes the optionalConfig from the config entry and resolves ${VAR} placeholders
+ * If env var is not set, the key is removed (no error since it's optional)
  */
 function resolveOptionalConfig(
-    manifest: { optionalConfig?: string[] },
-    existingOptions: Record<string, unknown> | undefined
-): Record<string, unknown> {
-    const resolved: Record<string, unknown> = { ...(existingOptions || {}) };
+    optionalConfig: Record<string, string> | undefined
+): Record<string, string> {
+    const resolved: Record<string, string> = {};
 
-    if (!manifest.optionalConfig) return resolved;
+    if (!optionalConfig) return resolved;
 
-    for (const key of manifest.optionalConfig) {
-        // Skip if already explicitly set in options (non-empty value)
-        const existingValue = resolved[key];
-        if (existingValue !== undefined && existingValue !== '' &&
-            !(typeof existingValue === 'string' && existingValue.startsWith('${'))) {
-            continue;
-        }
+    for (const [key, value] of Object.entries(optionalConfig)) {
+        // Check if value is a placeholder like ${VAR_NAME}
+        if (typeof value === 'string' && value.startsWith('${') && value.endsWith('}')) {
+            const envVar = value.slice(2, -1);
+            const envValue = process.env[envVar];
 
-        // Check env var (uppercase version of key)
-        const envVar = key.toUpperCase();
-        const envValue = process.env[envVar];
-
-        if (envValue) {
-            resolved[key] = envValue;
-            console.log(`[PluginLoader] ✓ Loaded optional config: ${key}`);
-        } else {
-            // Remove placeholder if env var not set (optional, just skip)
-            if (typeof existingValue === 'string' && existingValue.startsWith('${')) {
-                delete resolved[key];
+            if (envValue) {
+                resolved[key] = envValue;
+                console.log(`[PluginLoader] ✓ Loaded optional config: ${key}`);
             }
+            // If not set, just skip (don't add to resolved)
+        } else {
+            // Literal value, keep as-is
+            resolved[key] = value;
         }
     }
 
@@ -322,17 +317,17 @@ async function loadProvider(entry: ProviderEntry, options: { initialize?: boolea
         // Resolve credentials
         const credentials = resolveCredentials(entry.credentials);
 
-        // Auto-resolve optional config from env if available
-        const resolvedOptions = resolveOptionalConfig(
-            provider.manifest,
-            entry.options
-        );
+        // Resolve optional config from env vars
+        const resolvedOptionalConfig = resolveOptionalConfig(entry.optionalConfig);
 
         // Initialize
         const config: ProviderConfig = {
             id: entry.id,
             credentials,
-            options: resolvedOptions,
+            options: {
+                ...entry.options,
+                ...resolvedOptionalConfig,  // Merge resolved optional config into options
+            },
         };
 
         if (shouldInitialize) {
