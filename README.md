@@ -67,22 +67,34 @@
 
 SimpleNS Core handles **orchestration**; plugins handle **delivery**.
 
-```bash
-# Install a plugin
-npm run plugin:install @simplens/nodemailer-gmail
+Plugins are automatically installed at runtime based on your `simplens.config.yaml` configuration. Use the **Config Generator CLI** to create or update your config:
 
-# List installed plugins
-npm run plugin:list
+```bash
+# Generate config for a plugin
+npx @simplens/config-gen generate @simplens/mock
+
+# Generate config for multiple plugins
+npx @simplens/config-gen gen @simplens/nodemailer-gmail @simplens/twilio-sms
+
+# Add a plugin to existing config
+npx @simplens/config-gen gen @simplens/nodemailer-gmail -c simplens.config.yaml
+
+# List available official plugins
+npx @simplens/config-gen list --offical
+
+#List available community plugins
+npx @simplens/config-gen list --community
 ```
 
-Build custom plugins with the SDK:
+#### Building Custom Plugins
 
-@simplens/create-simplens-plugin CLI tool helps scafold a simplens plugin project easily.
+The `@simplens/create-simplens-plugin` CLI scaffolds a plugin project:
 
 ```bash
 npx @simplens/create-simplens-plugin
 ```
-This generates all the boilerplate code required for a simplens plugin so that a plugin developer can just write the core logic of delivering notifications using a particular provider
+
+This generates the boilerplate so you only write the delivery logic:
 
 ```typescript
 import { SimpleNSProvider, ProviderManifest } from '@simplens/sdk';
@@ -91,6 +103,7 @@ class MyProvider implements SimpleNSProvider {
   readonly manifest: ProviderManifest = {
     name: 'my-provider',
     channel: 'email',
+    requiredCredentials: ['API_KEY'],
     // ...
   };
   
@@ -109,38 +122,55 @@ class MyProvider implements SimpleNSProvider {
 
 - Docker & Docker Compose
 
-### 1. Clone & Configure
+### 1. Create Project Directory
 
 ```bash
-git clone https://github.com/SimpleNotificationSystem/simplens-core.git
-cd simplens-core
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your settings
-
-#Install dependencies
-npm install
-
-#Install a plugin to get started
-npm run plugin:install @simplens/nodemailer-gmail
-
-# Generates simplens.config.yaml. Add credentials to .env to start.
+mkdir my-simplens && cd my-simplens
 ```
 
-### 2. Start Services
+### 2. Configure the .env file
+
+- Copy the `.env.example` file into `.env` in your `my-simplens` dir and configure the required fields 
+
+
+### 3. Generate Plugin Configuration
+
+Use the config generator CLI to create `simplens.config.yaml`:
 
 ```bash
-docker-compose build
+# Generate config for the mock plugin (for testing)
+npx @simplens/config-gen generate @simplens/mock
+
+# Or generate config for email
+npx @simplens/config-gen generate @simplens/nodemailer-gmail
+
+```
+
+The generated config includes comments explaining each field. Set the corresponding environment variables in `.env`.
+
+### 4. Copy Docker-Compose files
+ - Copy `docker-compose.yaml` (for appliciation services) and `docker-compose.infra.yaml` file (for infrastrucutre services if you dont want to use cloud providers for infrastrucutre)
+
+
+> **Note:** You'll also need MongoDB, Redis, and Kafka. See the [full documentation](https://simplens.vercel.app/docs/core/self-hosting) for infrastructure setup.
+
+### 5. Start Services
+
+```bash
+docker-compose -f docker-compose.infra.yaml up -d #If you don't want to use cloud providers for infrastructure
 docker-compose up -d
 ```
 
-### 3. Send a Notification (using @simplens/nodemailer-gmail)
+Plugins listed in `simplens.config.yaml` are automatically installed at container startup.
+
+### 6. Send a Notification
+
 The request schema can be easily obtained from the `Payload Studio` in the admin dashboard.
+
 ```bash
 curl -X POST http://localhost:3000/api/notification \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer NS_API_KEY" \
+  -H "Authorization: Bearer YOUR_NS_API_KEY" \
   -d '{
     "request_id": "<UUIDV4>",
     "client_id": "<UUIDV4>",
@@ -158,11 +188,11 @@ curl -X POST http://localhost:3000/api/notification \
   }'
 ```
 
-### 4. Check the Dashboard
+### 7. Check the Dashboard
 
-Open [http://localhost:3002](http://localhost:3002) and login with (default credentials. You can change them in .env):
-- **Username:** `admin`
-- **Password:** `admin`
+Open [http://localhost:3002](http://localhost:3002) and login with your configured credentials:
+- **Username:** `admin` (default, configurable via `ADMIN_USERNAME`)
+- **Password:** `admin` (default, configurable via `ADMIN_PASSWORD`)
 
 ---
 
