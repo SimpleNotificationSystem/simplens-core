@@ -1,0 +1,40 @@
+{
+    "name": "@simplens/config-gen",
+    "version": "1.0.0",
+    "description": "CLI tool to generate simplens.config.yaml from plugin manifests",
+    "type": "module",
+    "bin": {
+        "simplens-config": "./dist/index.js"
+    },
+    "main": "dist/index.js",
+    "scripts": {
+        "build": "tsc",
+        "prepublishOnly": "npm run build"
+    },
+    "dependencies": {
+        "chalk": "^5.3.0",
+        "commander": "^12.0.0",
+        "ora": "^8.0.0",
+        "yaml": "^2.3.0"
+    },
+    "devDependencies": {
+        "@types/node": "^20.0.0",
+        "typescript": "^5.0.0"
+    },
+    "files": [
+        "dist",
+        "README.md"
+    ],
+    "keywords": [
+        "simplens",
+        "config",
+        "generator",
+        "cli"
+    ],
+    "author": "SimpleNS Team",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/SimpleNotificationSystem/simplens-core"
+    }
+}
