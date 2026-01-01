@@ -144,3 +144,5 @@ vite.config.ts.timestamp-*
 
 # Local configuration (user-specific, supports .yaml/.yml/.json)
 simplens.config.*
+
+/self-host/

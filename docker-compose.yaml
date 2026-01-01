@@ -1,13 +1,17 @@
 services:
   api:
     image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    container_name: api
+    ports:
+      - 3000:3000
     env_file:
       - .env
     volumes:
       - plugin-data:/app/.plugins
       - ./simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/api/server.js" ]
-    network_mode: host
+    networks:
+      - simplens
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))" ]
@@ -21,7 +25,8 @@ services:
     env_file:
       - .env
     command: [ "node", "dist/workers/worker.js" ]
-    network_mode: host
+    networks:
+      - simplens
     restart: unless-stopped
 
   notification_processor:
@@ -32,7 +37,11 @@ services:
       - plugin-data:/app/.plugins
       - ./simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/processors/unified/unified.processor.js" ]
-    network_mode: host
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - simplens
     restart: unless-stopped
 
   delayed_processor:
@@ -40,7 +49,8 @@ services:
     env_file:
       - .env
     command: [ "node", "dist/processors/delayed/delayed.processor.js" ]
-    network_mode: host
+    networks:
+      - simplens
     restart: unless-stopped
 
   recovery:
@@ -48,21 +58,30 @@ services:
     env_file:
       - .env
     command: [ "node", "dist/workers/recovery/recovery.service.js" ]
-    network_mode: host
+    networks:
+      - simplens
     restart: unless-stopped
 
   dashboard:
     image: ghcr.io/simplenotificationsystem/simplens-dashboard:latest
+    ports:
+      - 3002:3002
+    container_name: dashboard
     env_file:
       - .env
     environment:
       PORT: ${DASHBOARD_PORT:-3002}
-      API_BASE_URL: http://localhost:${PORT:-3000}
-      WEBHOOK_HOST: localhost
+      API_BASE_URL: http://api:${PORT:-3000}
+      WEBHOOK_HOST: dashboard
       WEBHOOK_PORT: ${DASHBOARD_PORT:-3002}
-    network_mode: host
+    networks:
+      - simplens
     restart: unless-stopped
 
 volumes:
   plugin-data:
+
+networks:
+  simplens:
+    driver: bridge
 
