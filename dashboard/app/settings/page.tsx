@@ -46,9 +46,10 @@ export default function SettingsPage() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <p className="text-sm text-muted-foreground">
-                            SimpleNS is a lightweight, backend notification service for sending EMAIL and WHATSAPP messages.
-                            It supports single and batch notifications, scheduled deliveries, automatic retries,
-                            template variables, and webhook callbacks for delivery status updates.
+                            SimpleNS is an open-source, self-hosted notification orchestration engine that manages
+                            delivery workflows—retries, scheduling, crash recovery, and scaling—while delegating
+                            the actual sending to plugins. Build your own providers or use community plugins to
+                            support any channel: Email, SMS, WhatsApp, Push, and beyond.
                         </p>
                     </CardContent>
                 </Card>
