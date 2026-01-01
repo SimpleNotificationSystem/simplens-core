@@ -6,7 +6,8 @@ WORKDIR /app
 
 # Install dependencies based on the preferred package manager
 COPY package.json package-lock.json* ./
-RUN npm ci --only=production=false
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 
 # ==========================================
 # Stage 2: Build the application
@@ -18,19 +19,13 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-ARG AUTH_SECRET
-ARG ADMIN_USERNAME
-ARG ADMIN_PASSWORD
-
 # Set environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
-ENV AUTH_SECRET=${AUTH_SECRET}               
-ENV ADMIN_USERNAME=${ADMIN_USERNAME}   
-ENV ADMIN_PASSWORD=${ADMIN_PASSWORD} 
 
-# Build the application
-RUN npm run build
+# Build the application with cache mount for Next.js
+RUN --mount=type=cache,target=/app/.next/cache \
+    npm run build
 
 # ==========================================
 # Stage 3: Production runner
@@ -57,11 +52,13 @@ RUN chown -R nextjs:nodejs .next
 # Switch to non-root user
 USER nextjs
 
-# Expose the port
-EXPOSE 3002
+ARG PORT
 
-ENV PORT=3002
+ENV PORT=${PORT}
 ENV HOSTNAME="0.0.0.0"
+
+# Expose the port
+EXPOSE ${PORT} 
 
 # Start the application (standalone mode - no npm/next needed)
 CMD ["node", "server.js"]

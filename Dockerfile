@@ -12,7 +12,8 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install all dependencies (including devDependencies for build)
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 
 # Copy source code and TypeScript config
 COPY tsconfig.json ./
@@ -36,12 +37,16 @@ RUN groupadd --gid 1001 nodejs && \
 COPY package*.json ./
 
 # Install only production dependencies (ignore scripts to prevent husky from running)
-RUN npm ci --only=production --ignore-scripts && npm cache clean --force
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --omit=dev --ignore-scripts
 
 # Copy built files from builder stage
 COPY --from=builder /app/dist ./dist
 
-# Set ownership
+# Create plugins directory for runtime plugin installation
+RUN mkdir -p /app/.plugins
+
+# Set ownership (including .plugins directory)
 RUN chown -R nodejs:nodejs /app
 
 # Switch to non-root user
@@ -49,6 +54,7 @@ USER nodejs
 
 ARG NODE_ENV
 ARG PORT
+
 # Default environment variables
 ENV NODE_ENV=${NODE_ENV}
 ENV PORT=${PORT}

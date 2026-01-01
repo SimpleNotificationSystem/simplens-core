@@ -1,0 +1,68 @@
+services:
+  api:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    env_file:
+      - .env
+    volumes:
+      - plugin-data:/app/.plugins
+      - ./simplens.config.yaml:/app/simplens.config.yaml:ro
+    command: [ "node", "dist/api/server.js" ]
+    network_mode: host
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  worker:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    env_file:
+      - .env
+    command: [ "node", "dist/workers/worker.js" ]
+    network_mode: host
+    restart: unless-stopped
+
+  notification_processor:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    env_file:
+      - .env
+    volumes:
+      - plugin-data:/app/.plugins
+      - ./simplens.config.yaml:/app/simplens.config.yaml:ro
+    command: [ "node", "dist/processors/unified/unified.processor.js" ]
+    network_mode: host
+    restart: unless-stopped
+
+  delayed_processor:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    env_file:
+      - .env
+    command: [ "node", "dist/processors/delayed/delayed.processor.js" ]
+    network_mode: host
+    restart: unless-stopped
+
+  recovery:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    env_file:
+      - .env
+    command: [ "node", "dist/workers/recovery/recovery.service.js" ]
+    network_mode: host
+    restart: unless-stopped
+
+  dashboard:
+    image: ghcr.io/simplenotificationsystem/simplens-dashboard:latest
+    env_file:
+      - .env
+    environment:
+      PORT: ${DASHBOARD_PORT:-3002}
+      API_BASE_URL: http://localhost:${PORT:-3000}
+      WEBHOOK_HOST: localhost
+      WEBHOOK_PORT: ${DASHBOARD_PORT:-3002}
+    network_mode: host
+    restart: unless-stopped
+
+volumes:
+  plugin-data:
+
