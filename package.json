@@ -24,10 +24,7 @@
     "processor:dev": "tsx watch src/processors/unified/unified.processor.ts",
     "recovery": "node dist/workers/recovery/recovery.service.js",
     "recovery:dev": "tsx watch src/workers/recovery/recovery.service.ts",
-    "prepare": "husky",
-    "plugin:install": "node scripts/plugin-install.js",
-    "plugin:uninstall": "node scripts/plugin-uninstall.js",
-    "plugin:list": "node scripts/plugin-list.js"
+    "prepare": "husky"
   },
   "repository": {
     "type": "git",
