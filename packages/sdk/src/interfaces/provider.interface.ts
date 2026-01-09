@@ -44,10 +44,12 @@ export interface ProviderConfig {
  * Rate limit configuration for the provider
  */
 export interface RateLimitConfig {
-    /** Maximum tokens in the bucket */
+    /** Maximum tokens in the bucket (burst capacity) */
     maxTokens: number;
-    /** Tokens added per second */
+    /** Tokens added per interval */
     refillRate: number;
+    /** Time interval for refillRate. Default: 'second' */
+    refillInterval?: 'second' | 'minute' | 'hour' | 'day';
 }
 
 /**

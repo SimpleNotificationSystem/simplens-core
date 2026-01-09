@@ -145,4 +145,90 @@ describe('Rate Limiter Module', () => {
             );
         });
     });
+
+    describe('refillInterval normalization', () => {
+        // Mock the plugin registry to return different interval configs
+        beforeEach(() => {
+            vi.resetModules();
+        });
+
+        it('should normalize refillInterval: minute to per-second rate', async () => {
+            // Mock plugin to return minute config
+            vi.doMock('../../../src/plugins/index.js', () => ({
+                getRateLimitConfig: vi.fn().mockReturnValue({
+                    maxTokens: 60,
+                    refillRate: 60,
+                    refillInterval: 'minute'
+                })
+            }));
+
+            const { consumeToken } = await import('../../../src/processors/shared/rate-limiter.js');
+            mockRedisClient.eval.mockResolvedValue([1, 59]);
+
+            await consumeToken('test-provider');
+
+            const callArgs = mockRedisClient.eval.mock.calls[0];
+            expect(callArgs[4]).toBe('60'); // maxTokens
+            expect(callArgs[5]).toBe('1');  // 60/minute = 1/second
+        });
+
+        it('should normalize refillInterval: hour to per-second rate', async () => {
+            vi.doMock('../../../src/plugins/index.js', () => ({
+                getRateLimitConfig: vi.fn().mockReturnValue({
+                    maxTokens: 3600,
+                    refillRate: 3600,
+                    refillInterval: 'hour'
+                })
+            }));
+
+            const { consumeToken } = await import('../../../src/processors/shared/rate-limiter.js');
+            mockRedisClient.eval.mockResolvedValue([1, 3599]);
+
+            await consumeToken('test-provider');
+
+            const callArgs = mockRedisClient.eval.mock.calls[0];
+            expect(callArgs[4]).toBe('3600'); // maxTokens
+            expect(callArgs[5]).toBe('1');    // 3600/hour = 1/second
+        });
+
+        it('should normalize refillInterval: day to per-second rate', async () => {
+            vi.doMock('../../../src/plugins/index.js', () => ({
+                getRateLimitConfig: vi.fn().mockReturnValue({
+                    maxTokens: 500,
+                    refillRate: 500,
+                    refillInterval: 'day'
+                })
+            }));
+
+            const { consumeToken } = await import('../../../src/processors/shared/rate-limiter.js');
+            mockRedisClient.eval.mockResolvedValue([1, 499]);
+
+            await consumeToken('test-provider');
+
+            const callArgs = mockRedisClient.eval.mock.calls[0];
+            expect(callArgs[4]).toBe('500'); // maxTokens
+            // 500/day = 500/86400 ≈ 0.005787 per second
+            const normalizedRate = parseFloat(callArgs[5]);
+            expect(normalizedRate).toBeCloseTo(500 / 86400, 5);
+        });
+
+        it('should default to second when refillInterval not specified', async () => {
+            vi.doMock('../../../src/plugins/index.js', () => ({
+                getRateLimitConfig: vi.fn().mockReturnValue({
+                    maxTokens: 100,
+                    refillRate: 10
+                    // No refillInterval specified
+                })
+            }));
+
+            const { consumeToken } = await import('../../../src/processors/shared/rate-limiter.js');
+            mockRedisClient.eval.mockResolvedValue([1, 99]);
+
+            await consumeToken('test-provider');
+
+            const callArgs = mockRedisClient.eval.mock.calls[0];
+            expect(callArgs[4]).toBe('100'); // maxTokens
+            expect(callArgs[5]).toBe('10');  // 10/second (no normalization needed)
+        });
+    });
 });

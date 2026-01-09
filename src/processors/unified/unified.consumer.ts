@@ -185,16 +185,17 @@ const processMessage = async (
                 return true;
             }
 
-            // Push to delayed queue using generic builder
+            // Push to delayed queue using rate limiter's retryAfterMs
             await setFailed(notificationId, validationResult.data.retry_count);
             const delayedPayload = buildDelayedPayloadGeneric(
                 notification as unknown as Record<string, unknown>,
                 channel,
-                newRetryCount
+                newRetryCount,
+                rateLimitResult.retryAfterMs // Use exact delay from rate limiter
             );
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             await publishDelayed(delayedPayload as any);
-            logger.info(`[${channel}] Pushed to delayed queue: ${notificationId} (retry ${newRetryCount})`);
+            logger.info(`[${channel}] Rate limited, scheduled retry in ${rateLimitResult.retryAfterMs}ms: ${notificationId} (retry ${newRetryCount})`);
             return true;
         }
 
@@ -218,8 +219,8 @@ const processMessage = async (
 
             logger.success(`[${channel}] Delivered: ${notificationId}`);
             return true;
-        } 
-        else if (result.success === false && result.error?.retryable === false){
+        }
+        else if (result.success === false && result.error?.retryable === false) {
             // commit kafka offet, already the events gets flagged as failed
             return true;
         }

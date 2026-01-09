@@ -36,6 +36,7 @@ export interface ProviderConfig {
 export interface RateLimitConfig {
     maxTokens: number;
     refillRate: number;
+    refillInterval?: 'second' | 'minute' | 'hour' | 'day';
 }
 
 /**

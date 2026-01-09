@@ -156,7 +156,7 @@ export function validateNotification(
 /**
  * Get rate limit config for a provider by ID
  */
-export function getRateLimitConfig(providerId: string): { maxTokens: number; refillRate: number } | undefined {
+export function getRateLimitConfig(providerId: string): { maxTokens: number; refillRate: number; refillInterval?: 'second' | 'minute' | 'hour' | 'day' } | undefined {
     const provider = PluginRegistry.get(providerId);
     return provider?.getRateLimitConfig();
 }

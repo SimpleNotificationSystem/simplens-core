@@ -14,7 +14,7 @@ export interface ProviderEntry {
     optionalConfig?: Record<string, string>;
     options?: {
         priority?: number;
-        rateLimit?: { maxTokens?: number; refillRate?: number };
+        rateLimit?: { maxTokens?: number; refillRate?: number; refillInterval?: 'second' | 'minute' | 'hour' | 'day' };
     };
 }
 
@@ -77,7 +77,8 @@ export function serializeConfigWithComments(config: SimpleNSConfig): string {
         lines.push(`      priority: ${provider.options?.priority || 1}  # Higher = preferred`);
         lines.push('      rateLimit:');
         lines.push(`        maxTokens: ${provider.options?.rateLimit?.maxTokens || 100}  # Token bucket capacity`);
-        lines.push(`        refillRate: ${provider.options?.rateLimit?.refillRate || 10}  # Tokens per second`);
+        lines.push(`        refillRate: ${provider.options?.rateLimit?.refillRate || 10}  # Tokens per interval`);
+        lines.push(`        refillInterval: ${provider.options?.rateLimit?.refillInterval || 'second'}  # Options: second, minute, hour, day`);
         lines.push('');
     }
 

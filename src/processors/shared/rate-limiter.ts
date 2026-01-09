@@ -13,15 +13,38 @@ import { getRateLimitConfig as getPluginRateLimitConfig } from '@src/plugins/ind
 const TOKENS_KEY_PREFIX = 'ratelimit:tokens';
 const LAST_REFILL_KEY_PREFIX = 'ratelimit:last_refill';
 
+/** Time interval for refill rate */
+type RefillInterval = 'second' | 'minute' | 'hour' | 'day';
+
 interface RateLimitConfig {
     maxTokens: number;
-    refillRate: number; // tokens per second
+    refillRate: number;
+    refillInterval?: RefillInterval;
+}
+
+// Conversion divisors to convert rate to per-second
+const INTERVAL_TO_SECONDS: Record<RefillInterval, number> = {
+    second: 1,
+    minute: 60,
+    hour: 3600,
+    day: 86400,
+};
+
+/**
+ * Normalize refill rate to tokens per second
+ * Converts interval-based rates (e.g., 500/day) to per-second rates
+ */
+function normalizeRefillRate(config: RateLimitConfig): number {
+    const interval = config.refillInterval || 'second';
+    const divisor = INTERVAL_TO_SECONDS[interval] || 1;
+    return config.refillRate / divisor;
 }
 
 // Default rate limit config
 const DEFAULT_RATE_LIMIT: RateLimitConfig = {
     maxTokens: 100,
     refillRate: 10,
+    refillInterval: 'second',
 };
 
 /**
@@ -65,10 +88,11 @@ export interface RateLimitResult {
 export const consumeToken = async (providerId: string): Promise<RateLimitResult> => {
     const redis = getRedisClient();
     const config = getConfig(providerId);
+    const normalizedRate = normalizeRefillRate(config);
     const { tokensKey, lastRefillKey } = buildKeys(providerId);
 
     // Debug logging
-    console.log(`[RateLimiter] Provider: ${providerId}, Config: maxTokens=${config.maxTokens}, refillRate=${config.refillRate}`);
+    console.log(`[RateLimiter] Provider: ${providerId}, Config: maxTokens=${config.maxTokens}, refillRate=${config.refillRate}/${config.refillInterval || 'second'} (normalized: ${normalizedRate.toFixed(6)}/sec)`);
 
     const now = Date.now();
 
@@ -110,7 +134,7 @@ export const consumeToken = async (providerId: string): Promise<RateLimitResult>
         tokensKey,
         lastRefillKey,
         config.maxTokens.toString(),
-        config.refillRate.toString(),
+        normalizedRate.toString(),
         now.toString()
     ) as [number, number, number?];
 
@@ -129,6 +153,7 @@ export const consumeToken = async (providerId: string): Promise<RateLimitResult>
 export const getTokenCount = async (providerId: string): Promise<number> => {
     const redis = getRedisClient();
     const config = getConfig(providerId);
+    const normalizedRate = normalizeRefillRate(config);
     const { tokensKey, lastRefillKey } = buildKeys(providerId);
 
     const now = Date.now();
@@ -139,7 +164,7 @@ export const getTokenCount = async (providerId: string): Promise<number> => {
     const lastRefill = lastRefillStr ? parseInt(lastRefillStr) : now;
 
     const elapsedSeconds = (now - lastRefill) / 1000;
-    const tokensToAdd = elapsedSeconds * config.refillRate;
+    const tokensToAdd = elapsedSeconds * normalizedRate;
 
     return Math.min(currentTokens + tokensToAdd, config.maxTokens);
 };

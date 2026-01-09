@@ -35,13 +35,21 @@ const calculateBackoffDelay = (retryCount: number): number => {
 
 /**
  * Build delayed notification payload from any channel's notification
+ * 
+ * @param notification - The notification payload
+ * @param channel - Channel name (e.g., 'email')
+ * @param newRetryCount - The new retry count
+ * @param delayMs - Optional delay override in milliseconds (used for rate-limited retries)
+ *                  If not provided, uses exponential backoff
  */
 export const buildDelayedPayload = (
     notification: Record<string, unknown>,
     channel: string,
-    newRetryCount: number
+    newRetryCount: number,
+    delayMs?: number
 ): delayed_notification_topic => {
-    const delay = calculateBackoffDelay(newRetryCount);
+    // Use provided delay (rate limit) or calculate exponential backoff (provider errors)
+    const delay = delayMs ?? calculateBackoffDelay(newRetryCount);
 
     return {
         notification_id: notification.notification_id,
