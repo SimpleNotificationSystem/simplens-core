@@ -180,7 +180,7 @@ export class DuplicateNotificationError extends Error {
  * 
  * Note: Requires MongoDB replica set for transactions to work.
  */
-export const process_notifications = async (notifications: notification[]): Promise<{notification_ids: mongoose.Types.ObjectId[], created_count: number, duplicate_count: number, duplicate_keys: { request_id: string; channel: string }[] | undefined}> => {
+export const process_notifications = async (notifications: notification[]): Promise<{ notification_ids: mongoose.Types.ObjectId[], created_count: number, duplicate_count: number, duplicate_keys: { request_id: string; channel: string }[] | undefined }> => {
     const session = await mongoose.startSession();
 
     try {
@@ -218,6 +218,17 @@ export const process_notifications = async (notifications: notification[]): Prom
             outbox_entries.push(outbox_entry);
         }
 
+        // Check if ALL notifications are duplicates BEFORE committing
+        // This must happen before commit to avoid throwing after commitTransaction
+        if (duplicate_keys.length > 0 && duplicate_keys.length === notifications.length) {
+            // No new notifications to save, abort the transaction
+            await session.abortTransaction();
+            throw new DuplicateNotificationError(
+                'All notifications are duplicates',
+                duplicate_keys
+            );
+        }
+
         // Insert outbox entries in bulk within transaction
         if (outbox_entries.length > 0) {
             await outbox_model.insertMany(outbox_entries, { session });
@@ -226,14 +237,8 @@ export const process_notifications = async (notifications: notification[]): Prom
         // Commit transaction - both succeed or both fail
         await session.commitTransaction();
 
-        // Handle duplicates after successful commit
+        // Log partial duplicates (some succeeded, some were duplicates)
         if (duplicate_keys.length > 0) {
-            if (duplicate_keys.length === notifications.length) {
-                throw new DuplicateNotificationError(
-                    'All notifications are duplicates',
-                    duplicate_keys
-                );
-            }
             logger.warn(`Skipped ${duplicate_keys.length} duplicate notifications`);
         }
 
@@ -245,8 +250,10 @@ export const process_notifications = async (notifications: notification[]): Prom
         };
 
     } catch (error) {
-        // Abort transaction on any error - rolls back all changes
-        await session.abortTransaction();
+        // Only abort if transaction is still in progress (not already committed or aborted)
+        if (session.inTransaction()) {
+            await session.abortTransaction();
+        }
         throw error;
     } finally {
         // Always end the session
