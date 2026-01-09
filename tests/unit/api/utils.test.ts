@@ -432,6 +432,7 @@ describe('API Utility Functions', () => {
                 commitTransaction: vi.fn().mockResolvedValue(undefined),
                 abortTransaction: vi.fn().mockResolvedValue(undefined),
                 endSession: vi.fn(),
+                inTransaction: vi.fn().mockReturnValue(true),
             };
             vi.spyOn(mongoose, 'startSession').mockResolvedValue(mockSession as unknown as mongoose.ClientSession);
 
@@ -465,6 +466,7 @@ describe('API Utility Functions', () => {
                 commitTransaction: vi.fn().mockResolvedValue(undefined),
                 abortTransaction: vi.fn().mockResolvedValue(undefined),
                 endSession: vi.fn(),
+                inTransaction: vi.fn().mockReturnValue(true),
             };
             vi.spyOn(mongoose, 'startSession').mockResolvedValue(mockSession as unknown as mongoose.ClientSession);
 
@@ -500,6 +502,7 @@ describe('API Utility Functions', () => {
                 commitTransaction: vi.fn().mockResolvedValue(undefined),
                 abortTransaction: vi.fn().mockResolvedValue(undefined),
                 endSession: vi.fn(),
+                inTransaction: vi.fn().mockReturnValue(true),
             };
             vi.spyOn(mongoose, 'startSession').mockResolvedValue(mockSession as unknown as mongoose.ClientSession);
 
