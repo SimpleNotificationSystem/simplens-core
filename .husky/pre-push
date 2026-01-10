@@ -1,3 +1,4 @@
+#!/bin/sh
 echo "🧪 Running all tests before push..."
 
 npm run test
