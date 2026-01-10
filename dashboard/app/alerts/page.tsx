@@ -396,8 +396,21 @@ export default function AlertsPage() {
                                             </div>
                                             <div>
                                                 <span className="text-muted-foreground">Redis:</span>{" "}
-                                                <Badge variant="outline" className="text-xs">
-                                                    {alert.redis_status || "N/A"}
+                                                <Badge
+                                                    variant="outline"
+                                                    className={`text-xs ${alert.redis_status === 'delivered' ? 'text-green-600 border-green-600' :
+                                                        alert.redis_status === 'failed' ? 'text-red-600 border-red-600' :
+                                                            alert.redis_status === 'rate_limited' ? 'text-orange-600 border-orange-600' :
+                                                                alert.redis_status === 'not_found' ? 'text-yellow-600 border-yellow-600' :
+                                                                    alert.redis_status === 'processing' ? 'text-blue-600 border-blue-600' : ''
+                                                        }`}
+                                                >
+                                                    {alert.redis_status === 'not_found' ? 'Not Found' :
+                                                        alert.redis_status === 'delivered' ? 'Delivered' :
+                                                            alert.redis_status === 'failed' ? 'Failed' :
+                                                                alert.redis_status === 'rate_limited' ? 'Rate Limited' :
+                                                                    alert.redis_status === 'processing' ? 'Processing' :
+                                                                        alert.redis_status || "N/A"}
                                                 </Badge>
                                             </div>
                                             <div>

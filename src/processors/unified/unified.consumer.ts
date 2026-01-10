@@ -21,7 +21,7 @@ import { sendWithFallback, PluginRegistry } from '@src/plugins/index.js';
 import type { BaseNotification, DeliveryResult } from '@src/plugins/interfaces/provider.types.js';
 
 // Shared utilities
-import { tryAcquireProcessingLock, setDelivered, setFailed } from '@src/processors/shared/idempotency.js';
+import { tryAcquireProcessingLock, setDelivered, setFailed, setRateLimited } from '@src/processors/shared/idempotency.js';
 import { consumeToken } from '@src/processors/shared/rate-limiter.js';
 import { publishStatus } from '@src/processors/shared/status.producer.js';
 import { publishDelayed, buildDelayedPayloadGeneric } from '@src/processors/shared/delayed.producer.js';
@@ -186,7 +186,7 @@ const processMessage = async (
             }
 
             // Push to delayed queue using rate limiter's retryAfterMs
-            await setFailed(notificationId, validationResult.data.retry_count);
+            await setRateLimited(notificationId, validationResult.data.retry_count);
             const delayedPayload = buildDelayedPayloadGeneric(
                 notification as unknown as Record<string, unknown>,
                 channel,

@@ -12,6 +12,7 @@ import { getRateLimitConfig as getPluginRateLimitConfig } from '@src/plugins/ind
 // Redis key prefixes
 const TOKENS_KEY_PREFIX = 'ratelimit:tokens';
 const LAST_REFILL_KEY_PREFIX = 'ratelimit:last_refill';
+const QUEUE_POSITION_KEY_PREFIX = 'ratelimit:queue_position';
 
 /** Time interval for refill rate */
 type RefillInterval = 'second' | 'minute' | 'hour' | 'day';
@@ -65,10 +66,11 @@ const getConfig = (providerId: string): RateLimitConfig => {
 /**
  * Build Redis keys for a provider
  */
-const buildKeys = (providerId: string): { tokensKey: string; lastRefillKey: string } => {
+const buildKeys = (providerId: string): { tokensKey: string; lastRefillKey: string; queueKey: string } => {
     return {
         tokensKey: `${TOKENS_KEY_PREFIX}:${providerId}`,
-        lastRefillKey: `${LAST_REFILL_KEY_PREFIX}:${providerId}`
+        lastRefillKey: `${LAST_REFILL_KEY_PREFIX}:${providerId}`,
+        queueKey: `${QUEUE_POSITION_KEY_PREFIX}:${providerId}`
     };
 };
 
@@ -79,27 +81,29 @@ export interface RateLimitResult {
     allowed: boolean;
     remainingTokens: number;
     retryAfterMs?: number;
+    queuePosition?: number;  // Position in queue when rate-limited
 }
 
 /**
  * Try to consume a token from the bucket
- * Uses Redis Lua script for atomic operation
+ * Uses Redis Lua script for atomic operation with queue-based staggering
  */
 export const consumeToken = async (providerId: string): Promise<RateLimitResult> => {
     const redis = getRedisClient();
     const config = getConfig(providerId);
     const normalizedRate = normalizeRefillRate(config);
-    const { tokensKey, lastRefillKey } = buildKeys(providerId);
+    const { tokensKey, lastRefillKey, queueKey } = buildKeys(providerId);
 
     // Debug logging
     console.log(`[RateLimiter] Provider: ${providerId}, Config: maxTokens=${config.maxTokens}, refillRate=${config.refillRate}/${config.refillInterval || 'second'} (normalized: ${normalizedRate.toFixed(6)}/sec)`);
 
     const now = Date.now();
 
-    // Lua script for atomic token bucket operation
+    // Lua script for atomic token bucket operation with queue position tracking
     const luaScript = `
         local tokens_key = KEYS[1]
         local last_refill_key = KEYS[2]
+        local queue_key = KEYS[3]
         local max_tokens = tonumber(ARGV[1])
         local refill_rate = tonumber(ARGV[2])
         local now = tonumber(ARGV[3])
@@ -118,32 +122,41 @@ export const consumeToken = async (providerId: string): Promise<RateLimitResult>
             new_tokens = new_tokens - 1
             redis.call('SET', tokens_key, new_tokens)
             redis.call('SET', last_refill_key, now)
-            return { 1, new_tokens }  -- allowed, remaining
+            -- Reset queue position when tokens are available (batch consumed)
+            redis.call('SET', queue_key, 0)
+            redis.call('EXPIRE', queue_key, 86400)
+            return { 1, new_tokens, 0, 0 }  -- allowed, remaining, wait_time, queue_position
         else
-            -- Calculate time until next token available
-            local time_for_one_token = 1000 / refill_rate  -- ms
-            local deficit = 1 - new_tokens
-            local wait_time = deficit * time_for_one_token
-            return { 0, new_tokens, wait_time }  -- denied, remaining, wait_time
+            -- Rate limited: calculate staggered delay based on queue position
+            local time_per_token = 1000 / refill_rate  -- ms per token
+            local queue_position = redis.call('INCR', queue_key) - 1
+            redis.call('EXPIRE', queue_key, 86400)  -- 24h TTL
+            
+            -- Staggered delay: (position + 1) × time_per_token
+            local staggered_delay = (queue_position + 1) * time_per_token
+            
+            return { 0, new_tokens, staggered_delay, queue_position }  -- denied, remaining, wait_time, queue_position
         end
     `;
 
     const result = await redis.eval(
         luaScript,
-        2,
+        3,  // 3 keys now
         tokensKey,
         lastRefillKey,
+        queueKey,
         config.maxTokens.toString(),
         normalizedRate.toString(),
         now.toString()
-    ) as [number, number, number?];
+    ) as [number, number, number, number];
 
-    const [allowed, remainingTokens, retryAfterMs] = result;
+    const [allowed, remainingTokens, retryAfterMs, queuePosition] = result;
 
     return {
         allowed: allowed === 1,
         remainingTokens: Math.floor(remainingTokens),
-        retryAfterMs: retryAfterMs ? Math.ceil(retryAfterMs) : undefined
+        retryAfterMs: retryAfterMs > 0 ? Math.ceil(retryAfterMs) : undefined,
+        queuePosition: allowed === 0 ? queuePosition : undefined
     };
 };
 
@@ -174,7 +187,7 @@ export const getTokenCount = async (providerId: string): Promise<number> => {
  */
 export const resetRateLimiter = async (providerId: string): Promise<void> => {
     const redis = getRedisClient();
-    const { tokensKey, lastRefillKey } = buildKeys(providerId);
+    const { tokensKey, lastRefillKey, queueKey } = buildKeys(providerId);
 
-    await redis.del(tokensKey, lastRefillKey);
+    await redis.del(tokensKey, lastRefillKey, queueKey);
 };

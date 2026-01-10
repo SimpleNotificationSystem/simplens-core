@@ -12,7 +12,7 @@ const IDEMPOTENCY_PREFIX = 'idempotency';
 
 // Idempotency record stored in Redis
 interface IdempotencyRecord {
-    status: 'processing' | 'delivered' | 'failed';
+    status: 'processing' | 'delivered' | 'failed' | 'rate_limited';
     retry_count: number;
     updated_at: string;
 }
@@ -47,7 +47,7 @@ if data then
     elseif record.status == 'processing' then
         return 0  -- Already being processed, skip
     end
-    -- status == 'failed', allow retry
+    -- status == 'failed' or 'rate_limited', allow retry
 end
 
 -- Acquire lock by setting status to 'processing'
@@ -146,5 +146,23 @@ export const setFailed = async (notificationId: string, retry_count: number): Pr
     };
 
     // Long TTL for failed status (allows retries)
+    await redis.setex(key, env.IDEMPOTENCY_TTL_SECONDS, JSON.stringify(record));
+};
+
+/**
+ * Set status to 'rate_limited' - waiting for retry due to rate limiting
+ * Distinct from 'failed' which indicates an actual delivery attempt failed
+ */
+export const setRateLimited = async (notificationId: string, retry_count: number): Promise<void> => {
+    const redis = getRedisClient();
+    const key = buildKey(notificationId);
+
+    const record: IdempotencyRecord = {
+        status: 'rate_limited',
+        retry_count: retry_count,
+        updated_at: new Date().toISOString()
+    };
+
+    // Long TTL for rate_limited status (allows retries)
     await redis.setex(key, env.IDEMPOTENCY_TTL_SECONDS, JSON.stringify(record));
 };

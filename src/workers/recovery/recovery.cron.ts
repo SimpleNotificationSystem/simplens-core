@@ -104,7 +104,7 @@ const recoverStuckProcessing = async (): Promise<void> => {
                         processed: false
                     }], { session });
 
-                } else if (redisStatus?.status === 'failed') {
+                } else if (redisStatus?.status === 'failed' || redisStatus?.status === 'rate_limited') {
                     if (redisStatus.retry_count >= env.MAX_RETRY_COUNT) {
                         // EXHAUSTED RETRIES
                         logger.info(`Notification ${notification._id} exhausted retries (${redisStatus.retry_count})`);
@@ -137,8 +137,8 @@ const recoverStuckProcessing = async (): Promise<void> => {
                             {
                                 $set: { resolved: false },
                                 $setOnInsert: {
-                                    reason: `Notification failed but has retries remaining (${redisStatus.retry_count}/${env.MAX_RETRY_COUNT}). Admin can retry via dashboard.`,
-                                    redis_status: redisStatus?.status || null,
+                                    reason: `Notification ${redisStatus.status === 'failed' ? `failed but has retries remaining (${redisStatus.retry_count}/${env.MAX_RETRY_COUNT}). Admin can retry via dashboard.`: "rate-limited. Will be retried later automatically."}`,
+                                    redis_status: redisStatus?.status || 'not_found',
                                     db_status: notification.status,
                                     retry_count: redisStatus.retry_count
                                 }
@@ -169,7 +169,7 @@ const recoverStuckProcessing = async (): Promise<void> => {
                             $set: { resolved: false },
                             $setOnInsert: {
                                 reason: 'Notification stuck in processing with no resolution in Redis',
-                                redis_status: redisStatus?.status || null,
+                                redis_status: redisStatus?.status || 'not_found',
                                 db_status: notification.status,
                                 retry_count: redisStatus?.retry_count || 0
                             }
@@ -281,7 +281,7 @@ const detectOrphanedPending = async (): Promise<void> => {
                     $set: { resolved: false },
                     $setOnInsert: {
                         reason: 'Notification stuck in pending state - may not have been published to outbox',
-                        redis_status: null,
+                        redis_status: 'not_found',
                         db_status: notification.status,
                         retry_count: notification.retry_count
                     }
