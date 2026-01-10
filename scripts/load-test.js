@@ -16,15 +16,19 @@ const NS_API_KEY = process.env.NS_API_KEY || '4YCItWcuH2qJe3bXM9LbsbqefflWFlXlzv
 
 const TOTAL_REQUESTS = parseInt(process.argv[2] || '1000');
 const CONCURRENCY = parseInt(process.argv[3] || '50');
-const IS_MULTIPROVIDER  = ((process.argv[4]?(process.argv[4] === "-m"): false)? true: false)
 
-const available_mock_providers = ["mock", "mock-new"]
+// Parse arguments for -h flag
+const args = process.argv.slice(2);
+const helpIndex = args.indexOf('-h');
+const hostType = helpIndex !== -1 && args[helpIndex + 1] ? args[helpIndex + 1] : 'local';
+const webhookHost = hostType === 'docker' ? 'host.docker.internal' : 'localhost';
+
 
 const createPayload = () => ({
     request_id: randomUUID(),
     client_id: "5f2c1d77-8a4b-4a5a-9b1c-2c3d4e5f6a7b",
     channel: ["mock"],
-    provider: IS_MULTIPROVIDER? [available_mock_providers[randomInt(2)]]: ["mock-new"],
+    provider: ["mock-new"],
     recipient: {
         user_id: "user_12345",
     },
@@ -33,7 +37,7 @@ const createPayload = () => ({
             message: "Thanks for signing up! Reply HELP for assistance."
         }
     },
-    webhook_url: "http://host.docker.internal:4000/webhook",
+    webhook_url: `http://${webhookHost}:4000/webhook`,
     retry_count: 3
 });
 
@@ -72,6 +76,7 @@ const main = async () => {
     console.log(`   URL: ${BASE_URL}/notification`);
     console.log(`   Total Requests: ${TOTAL_REQUESTS}`);
     console.log(`   Concurrency: ${CONCURRENCY}`);
+    console.log(`   Webhook Host: ${webhookHost} (-h ${hostType})`);
     console.log('');
 
     const results = [];

@@ -3,6 +3,8 @@
     "dockerComposeFile": "docker-compose.yml",
     "service": "dev",
     "workspaceFolder": "/workspaces/simplens-core",
+    // Stop all containers when VS Code window is closed
+    "shutdownAction": "stopCompose",
     // VS Code customizations
     "customizations": {
         "vscode": {
@@ -25,23 +27,7 @@
                 "streetsidesoftware.code-spell-checker",
                 "usernamehw.errorlens"
             ],
-            "settings": {
-                "editor.formatOnSave": true,
-                "editor.defaultFormatter": "esbenp.prettier-vscode",
-                "editor.codeActionsOnSave": {
-                    "source.fixAll.eslint": "explicit"
-                },
-                "typescript.preferences.importModuleSpecifier": "non-relative",
-                "typescript.tsdk": "node_modules/typescript/lib",
-                "[typescript]": {
-                    "editor.defaultFormatter": "esbenp.prettier-vscode"
-                },
-                "files.watcherExclude": {
-                    "**/node_modules/**": true,
-                    "**/dist/**": true,
-                    "**/.git/**": true
-                }
-            }
+            "settings": {}
         }
     },
     // Port forwarding - access services from your Windows browser
