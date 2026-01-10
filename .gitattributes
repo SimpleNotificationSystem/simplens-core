@@ -1,0 +1,30 @@
+# Auto-detect text files and normalize line endings to LF
+* text=auto eol=lf
+
+# Force specific file types to always use LF (even on Windows)
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.sh text eol=lf
+
+# Windows batch files should keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files (don't touch these)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary

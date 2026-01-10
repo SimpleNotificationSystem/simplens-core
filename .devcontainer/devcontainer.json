@@ -1,0 +1,106 @@
+{
+    "name": "SimpleNS-Core Dev",
+    "dockerComposeFile": "docker-compose.yml",
+    "service": "dev",
+    "workspaceFolder": "/workspaces/simplens-core",
+    // VS Code customizations
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                // TypeScript & JavaScript
+                "dbaeumer.vscode-eslint",
+                "esbenp.prettier-vscode",
+                "ms-vscode.vscode-typescript-next",
+                // Docker & Infrastructure
+                "ms-azuretools.vscode-docker",
+                "redhat.vscode-yaml",
+                // Git
+                "eamodio.gitlens",
+                "mhutchie.git-graph",
+                // Testing
+                "vitest.explorer",
+                // API Development
+                "humao.rest-client",
+                // Productivity
+                "streetsidesoftware.code-spell-checker",
+                "usernamehw.errorlens"
+            ],
+            "settings": {
+                "editor.formatOnSave": true,
+                "editor.defaultFormatter": "esbenp.prettier-vscode",
+                "editor.codeActionsOnSave": {
+                    "source.fixAll.eslint": "explicit"
+                },
+                "typescript.preferences.importModuleSpecifier": "non-relative",
+                "typescript.tsdk": "node_modules/typescript/lib",
+                "[typescript]": {
+                    "editor.defaultFormatter": "esbenp.prettier-vscode"
+                },
+                "files.watcherExclude": {
+                    "**/node_modules/**": true,
+                    "**/dist/**": true,
+                    "**/.git/**": true
+                }
+            }
+        }
+    },
+    // Port forwarding - access services from your Windows browser
+    "forwardPorts": [
+        3000, // API Server
+        3001, // Grafana
+        3002, // Dashboard
+        6379, // Redis
+        8080, // Kafka UI
+        9092, // Kafka
+        27017, // MongoDB
+        3100 // Loki
+    ],
+    // Labels for forwarded ports (shown in VS Code)
+    "portsAttributes": {
+        "3000": {
+            "label": "API Server",
+            "onAutoForward": "notify"
+        },
+        "3001": {
+            "label": "Grafana",
+            "onAutoForward": "silent"
+        },
+        "3002": {
+            "label": "Dashboard",
+            "onAutoForward": "silent"
+        },
+        "6379": {
+            "label": "Redis",
+            "onAutoForward": "silent"
+        },
+        "8080": {
+            "label": "Kafka UI",
+            "onAutoForward": "silent"
+        },
+        "9092": {
+            "label": "Kafka",
+            "onAutoForward": "silent"
+        },
+        "27017": {
+            "label": "MongoDB",
+            "onAutoForward": "silent"
+        },
+        "3100": {
+            "label": "Loki",
+            "onAutoForward": "silent"
+        }
+    },
+    // Run after container is created
+    "postCreateCommand": "npm install",
+    // Run every time container starts
+    "postStartCommand": "echo '✅ Dev container ready! Run: npm run dev'",
+    // Environment variables for development
+    "remoteEnv": {
+        "NODE_ENV": "development"
+    },
+    // Features to add (dev container features)
+    "features": {
+        "ghcr.io/devcontainers/features/git:1": {},
+        "ghcr.io/devcontainers/features/github-cli:1": {}
+    }
+}
