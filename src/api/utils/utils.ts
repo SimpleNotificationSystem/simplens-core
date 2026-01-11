@@ -11,6 +11,7 @@ import mongoose from "mongoose";
 import notification_model from "@src/database/models/notification.models.js";
 import outbox_model from "@src/database/models/outbox.models.js";
 import { apiLogger as logger } from "@src/workers/utils/logger.js";
+import { PluginRegistry } from "@src/plugins/index.js";
 
 /**
  * Convert notification request to notification schema objects
@@ -174,6 +175,57 @@ export class DuplicateNotificationError extends Error {
 }
 
 /**
+ * Error class for invalid provider/channel configuration
+ */
+export class InvalidProviderChannelError extends Error {
+    public invalidChannels: string[];
+    public invalidProviders: string[];
+
+    constructor(message: string, invalidChannels: string[] = [], invalidProviders: string[] = []) {
+        super(message);
+        this.name = 'InvalidProviderChannelError';
+        this.invalidChannels = invalidChannels;
+        this.invalidProviders = invalidProviders;
+    }
+}
+
+/**
+ * Validate that all channels and providers exist in PluginRegistry.
+ * Throws InvalidProviderChannelError if any are invalid.
+ */
+export const validateProviderAndChannel = (notifications: notification[]): void => {
+    const invalidChannels: string[] = [];
+    const invalidProviders: string[] = [];
+
+    for (const notification of notifications) {
+        // Check channel has at least one provider configured
+        if (!PluginRegistry.hasChannel(notification.channel)) {
+            if (!invalidChannels.includes(notification.channel)) {
+                invalidChannels.push(notification.channel);
+            }
+        }
+        
+        // Check provider exists (if explicitly specified)
+        if (notification.provider && !PluginRegistry.has(notification.provider)) {
+            if (!invalidProviders.includes(notification.provider)) {
+                invalidProviders.push(notification.provider);
+            }
+        }
+    }
+
+    if (invalidChannels.length > 0 || invalidProviders.length > 0) {
+        const messages: string[] = [];
+        if (invalidChannels.length > 0) {
+            messages.push(`Invalid channel(s): ${invalidChannels.join(', ')}`);
+        }
+        if (invalidProviders.length > 0) {
+            messages.push(`Invalid provider(s): ${invalidProviders.join(', ')}`);
+        }
+        throw new InvalidProviderChannelError(messages.join('. '), invalidChannels, invalidProviders);
+    }
+};
+
+/**
  * Process notifications and create outbox entries
  * Uses MongoDB transactions to ensure atomicity - both notification and outbox
  * entries are saved together, or both are rolled back on failure.
@@ -181,6 +233,9 @@ export class DuplicateNotificationError extends Error {
  * Note: Requires MongoDB replica set for transactions to work.
  */
 export const process_notifications = async (notifications: notification[]): Promise<{ notification_ids: mongoose.Types.ObjectId[], created_count: number, duplicate_count: number, duplicate_keys: { request_id: string; channel: string }[] | undefined }> => {
+    // Validate all providers and channels exist before processing
+    validateProviderAndChannel(notifications);
+
     const session = await mongoose.startSession();
 
     try {

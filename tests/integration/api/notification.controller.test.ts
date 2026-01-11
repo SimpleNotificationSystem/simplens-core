@@ -63,11 +63,36 @@ vi.mock('../../../src/workers/utils/logger.js', () => ({
     },
 }));
 
-vi.mock('../../../src/api/utils/utils.js', async (importOriginal) => {
-    const original = await importOriginal() as Record<string, unknown>;
+vi.mock('../../../src/api/utils/utils.js', () => {
+    // Create error classes inline to avoid importing the real module
+    class DuplicateNotificationError extends Error {
+        public duplicateCount: number;
+        public duplicateKeys: { request_id: string; channel: string }[];
+        constructor(message: string, duplicateKeys: { request_id: string; channel: string }[] = []) {
+            super(message);
+            this.name = 'DuplicateNotificationError';
+            this.duplicateCount = duplicateKeys.length;
+            this.duplicateKeys = duplicateKeys;
+        }
+    }
+    
+    class InvalidProviderChannelError extends Error {
+        public invalidChannels: string[];
+        public invalidProviders: string[];
+        constructor(message: string, invalidChannels: string[] = [], invalidProviders: string[] = []) {
+            super(message);
+            this.name = 'InvalidProviderChannelError';
+            this.invalidChannels = invalidChannels;
+            this.invalidProviders = invalidProviders;
+        }
+    }
+    
     return {
-        ...original,
         process_notifications: vi.fn().mockResolvedValue(undefined),
+        convert_notification_request_to_notification_schema: vi.fn().mockReturnValue([]),
+        convert_batch_notification_schema_to_notification_schema: vi.fn().mockReturnValue([]),
+        DuplicateNotificationError,
+        InvalidProviderChannelError,
     };
 });
 

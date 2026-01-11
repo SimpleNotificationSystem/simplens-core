@@ -22,6 +22,14 @@ vi.mock('../../../src/workers/utils/logger.js', () => ({
     },
 }));
 
+// Mock PluginRegistry to always return true for channel/provider checks
+vi.mock('../../../src/plugins/index.js', () => ({
+    PluginRegistry: {
+        hasChannel: vi.fn().mockReturnValue(true),
+        has: vi.fn().mockReturnValue(true),
+    },
+}));
+
 describe('process_notifications Integration Tests', () => {
     let notification_model: typeof import('../../../src/database/models/notification.models.js').default;
     let outbox_model: typeof import('../../../src/database/models/outbox.models.js').default;

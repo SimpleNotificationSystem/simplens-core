@@ -34,6 +34,14 @@ vi.mock('../../../src/workers/utils/logger.js', () => ({
     },
 }));
 
+// Mock PluginRegistry to always return true for channel/provider checks
+vi.mock('../../../src/plugins/index.js', () => ({
+    PluginRegistry: {
+        hasChannel: vi.fn().mockReturnValue(true),
+        has: vi.fn().mockReturnValue(true),
+    },
+}));
+
 describe('API Utility Functions', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -265,6 +273,163 @@ describe('API Utility Functions', () => {
 
             expect(error.duplicateCount).toBe(0);
             expect(error.duplicateKeys).toEqual([]);
+        });
+    });
+
+    describe('InvalidProviderChannelError', () => {
+        it('should create error with correct properties', async () => {
+            const { InvalidProviderChannelError } = await import('../../../src/api/utils/utils.js');
+
+            const error = new InvalidProviderChannelError(
+                'Invalid provider(s): test-provider',
+                [],
+                ['test-provider']
+            );
+
+            expect(error.name).toBe('InvalidProviderChannelError');
+            expect(error.invalidChannels).toEqual([]);
+            expect(error.invalidProviders).toEqual(['test-provider']);
+            expect(error.message).toBe('Invalid provider(s): test-provider');
+        });
+
+        it('should handle both invalid channels and providers', async () => {
+            const { InvalidProviderChannelError } = await import('../../../src/api/utils/utils.js');
+
+            const error = new InvalidProviderChannelError(
+                'Invalid channel(s): sms. Invalid provider(s): gmail',
+                ['sms'],
+                ['gmail']
+            );
+
+            expect(error.invalidChannels).toEqual(['sms']);
+            expect(error.invalidProviders).toEqual(['gmail']);
+        });
+
+        it('should handle empty arrays', async () => {
+            const { InvalidProviderChannelError } = await import('../../../src/api/utils/utils.js');
+
+            const error = new InvalidProviderChannelError('No issues');
+
+            expect(error.invalidChannels).toEqual([]);
+            expect(error.invalidProviders).toEqual([]);
+        });
+    });
+
+    describe('validateProviderAndChannel', () => {
+        it('should not throw when all channels and providers exist', async () => {
+            const { validateProviderAndChannel } = await import('../../../src/api/utils/utils.js');
+            const { PluginRegistry } = await import('../../../src/plugins/index.js');
+
+            // Mock returns true (set in the global mock)
+            const notifications: notification[] = [{
+                request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                channel: 'email',
+                provider: 'gmail',
+                recipient: { email: 'test@example.com' },
+                content: { subject: 'Test', message: 'Test' },
+                webhook_url: 'https://webhook.example.com/callback',
+                status: NOTIFICATION_STATUS.pending,
+                retry_count: 0,
+            }];
+
+            expect(() => validateProviderAndChannel(notifications)).not.toThrow();
+            expect(PluginRegistry.hasChannel).toHaveBeenCalledWith('email');
+            expect(PluginRegistry.has).toHaveBeenCalledWith('gmail');
+        });
+
+        it('should throw InvalidProviderChannelError for invalid channel', async () => {
+            vi.resetModules();
+
+            // Re-mock with invalid channel
+            vi.doMock('../../../src/plugins/index.js', () => ({
+                PluginRegistry: {
+                    hasChannel: vi.fn().mockReturnValue(false),
+                    has: vi.fn().mockReturnValue(true),
+                },
+            }));
+
+            const { validateProviderAndChannel, InvalidProviderChannelError } = await import('../../../src/api/utils/utils.js');
+
+            const notifications: notification[] = [{
+                request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                channel: 'invalid-channel',
+                recipient: { email: 'test@example.com' },
+                content: { subject: 'Test', message: 'Test' },
+                webhook_url: 'https://webhook.example.com/callback',
+                status: NOTIFICATION_STATUS.pending,
+                retry_count: 0,
+            }];
+
+            expect(() => validateProviderAndChannel(notifications)).toThrow(InvalidProviderChannelError);
+
+            // Reset mocks back to default
+            vi.resetModules();
+            vi.doMock('../../../src/plugins/index.js', () => ({
+                PluginRegistry: {
+                    hasChannel: vi.fn().mockReturnValue(true),
+                    has: vi.fn().mockReturnValue(true),
+                },
+            }));
+        });
+
+        it('should throw InvalidProviderChannelError for invalid provider', async () => {
+            vi.resetModules();
+
+            // Re-mock with invalid provider
+            vi.doMock('../../../src/plugins/index.js', () => ({
+                PluginRegistry: {
+                    hasChannel: vi.fn().mockReturnValue(true),
+                    has: vi.fn().mockReturnValue(false),
+                },
+            }));
+
+            const { validateProviderAndChannel, InvalidProviderChannelError } = await import('../../../src/api/utils/utils.js');
+
+            const notifications: notification[] = [{
+                request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                channel: 'email',
+                provider: 'invalid-provider',
+                recipient: { email: 'test@example.com' },
+                content: { subject: 'Test', message: 'Test' },
+                webhook_url: 'https://webhook.example.com/callback',
+                status: NOTIFICATION_STATUS.pending,
+                retry_count: 0,
+            }];
+
+            expect(() => validateProviderAndChannel(notifications)).toThrow(InvalidProviderChannelError);
+
+            // Reset mocks back to default
+            vi.resetModules();
+            vi.doMock('../../../src/plugins/index.js', () => ({
+                PluginRegistry: {
+                    hasChannel: vi.fn().mockReturnValue(true),
+                    has: vi.fn().mockReturnValue(true),
+                },
+            }));
+        });
+
+        it('should skip provider check when provider is not specified', async () => {
+            const { validateProviderAndChannel } = await import('../../../src/api/utils/utils.js');
+            const { PluginRegistry } = await import('../../../src/plugins/index.js');
+
+            const notifications: notification[] = [{
+                request_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                client_id: randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+                channel: 'email',
+                // No provider specified
+                recipient: { email: 'test@example.com' },
+                content: { subject: 'Test', message: 'Test' },
+                webhook_url: 'https://webhook.example.com/callback',
+                status: NOTIFICATION_STATUS.pending,
+                retry_count: 0,
+            }];
+
+            expect(() => validateProviderAndChannel(notifications)).not.toThrow();
+            expect(PluginRegistry.hasChannel).toHaveBeenCalledWith('email');
+            // has() should not be called when provider is undefined
         });
     });
 

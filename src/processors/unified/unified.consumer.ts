@@ -128,7 +128,21 @@ const processMessage = async (
                 ? `Provider '${rawData.provider}' not found`
                 : 'No provider available for channel';
             logger.error(`[${channel}] ${msg}`);
-            return true; // Skip - no provider configured
+            
+            // Mark as failed and publish failure status (defense-in-depth)
+            const notificationId = rawData?.notification_id?.toString();
+            if (notificationId) {
+                await setFailed(notificationId, rawData.retry_count || 0);
+                await publishFailureStatus({
+                    notification_id: rawData.notification_id,
+                    request_id: rawData.request_id,
+                    client_id: rawData.client_id,
+                    channel: channel,
+                    retry_count: rawData.retry_count || 0,
+                    webhook_url: rawData.webhook_url
+                } as BaseNotification, channel, msg);
+            }
+            return true; // Commit offset after marking as failed
         }
 
         const schema = provider.getNotificationSchema();

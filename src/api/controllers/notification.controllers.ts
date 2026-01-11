@@ -1,6 +1,6 @@
 import type {Request, Response} from 'express';
 import { safeValidateNotificationRequest, safeValidateBatchNotificationRequest } from '@src/types/schemas.js';
-import { convert_notification_request_to_notification_schema,  convert_batch_notification_schema_to_notification_schema, DuplicateNotificationError } from '../utils/utils.js';
+import { convert_notification_request_to_notification_schema, convert_batch_notification_schema_to_notification_schema, DuplicateNotificationError, InvalidProviderChannelError } from '../utils/utils.js';
 import { notification } from '@src/types/types.js';
 import { process_notifications } from '@src/api/utils/utils.js';
 import { apiLogger as logger } from '@src/workers/utils/logger.js';
@@ -24,6 +24,14 @@ export const notification_controller = async (req: Request, res: Response)=>{
             return;
         }
     } catch(err) {
+        if (err instanceof InvalidProviderChannelError) {
+            res.status(400).json({
+                message: err.message,
+                invalidChannels: err.invalidChannels.length > 0 ? err.invalidChannels : undefined,
+                invalidProviders: err.invalidProviders.length > 0 ? err.invalidProviders : undefined
+            });
+            return;
+        }
         if (err instanceof DuplicateNotificationError) {
             res.status(409).json({
                 message: err.message,
@@ -61,6 +69,14 @@ export const batch_notification_controller = async (req: Request, res: Response)
         }
     }
     catch(err) {
+        if (err instanceof InvalidProviderChannelError) {
+            res.status(400).json({
+                message: err.message,
+                invalidChannels: err.invalidChannels.length > 0 ? err.invalidChannels : undefined,
+                invalidProviders: err.invalidProviders.length > 0 ? err.invalidProviders : undefined
+            });
+            return;
+        }
         if (err instanceof DuplicateNotificationError) {
             res.status(409).json({
                 message: err.message,
