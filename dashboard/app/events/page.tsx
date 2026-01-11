@@ -116,7 +116,7 @@ export default function EventsPage() {
                 <PageToolbar className="flex-col sm:flex-row gap-3">
                     <PageToolbarSection className="w-full sm:w-auto sm:flex-1 sm:max-w-md">
                         <Input
-                            placeholder="Search by request ID, email, phone..."
+                            placeholder="Search by request ID, recipient..."
                             value={searchInput}
                             onChange={(e) => setSearchInput(e.target.value)}
                             onKeyDown={handleKeyDown}
@@ -239,7 +239,29 @@ export default function EventsPage() {
                                             <ChannelBadge channel={notification.channel} />
                                         </TableCell>
                                         <TableCell className="max-w-[200px] truncate">
-                                            {String(notification.recipient.email || notification.recipient.phone || notification.recipient.user_id || '')}
+                                            {(() => {
+                                                // Get provider metadata for this notification's channel
+                                                const channelMeta = pluginsData?.channels[notification.channel];
+                                                const providerMeta = channelMeta?.providers.find(p => p.id === notification.provider)
+                                                    || channelMeta?.providers.find(p => p.id === channelMeta.default)
+                                                    || channelMeta?.providers[0];
+
+                                                // Get first meaningful value from schema fields (excluding user_id for display preference)
+                                                if (providerMeta?.recipientFields) {
+                                                    const displayField = providerMeta.recipientFields.find(f => 
+                                                        f.name !== 'user_id' && notification.recipient[f.name]
+                                                    ) || providerMeta.recipientFields[0];
+                                                    
+                                                    if (displayField) {
+                                                        const value = notification.recipient[displayField.name];
+                                                        if (value !== undefined && value !== null && value !== '') {
+                                                            return String(value);
+                                                        }
+                                                    }
+                                                }
+                                                // Fallback to user_id
+                                                return String(notification.recipient.user_id || '');
+                                            })()}
                                         </TableCell>
                                         <TableCell>
                                             <StatusBadge status={notification.status} />

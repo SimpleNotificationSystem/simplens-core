@@ -22,7 +22,7 @@ import {
 
 import { ArrowLeft, RefreshCw, Trash2, Clock, User, Mail, Phone, Link as LinkIcon } from "lucide-react";
 import { format } from "date-fns";
-import { Notification, NOTIFICATION_STATUS } from "@/lib/types";
+import { Notification, NOTIFICATION_STATUS, PluginMetadata, ProviderMetadata } from "@/lib/types";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -45,7 +45,23 @@ export default function EventDetailPage({ params }: PageProps) {
         fetcher
     );
 
+    // Fetch plugin metadata for dynamic schema rendering
+    const { data: plugins } = useSWR<PluginMetadata>('/api/plugins', fetcher);
+
     const [retryDialogOpen, setRetryDialogOpen] = useState(false);
+
+    // Helper to find provider metadata based on channel and provider ID
+    const getProviderMetadata = (
+        channel: string,
+        providerId: string | undefined
+    ): ProviderMetadata | undefined => {
+        if (!plugins?.channels[channel]) return undefined;
+        const channelMeta = plugins.channels[channel];
+        // Find by providerId, or use default, or use first provider
+        return channelMeta.providers.find(p => p.id === providerId)
+            || channelMeta.providers.find(p => p.id === channelMeta.default)
+            || channelMeta.providers[0];
+    };
 
     const handleRetry = async () => {
         if (!notification) return;
@@ -289,25 +305,35 @@ export default function EventDetailPage({ params }: PageProps) {
                             <CardDescription>Recipient details</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="flex items-center gap-2">
-                                <User className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-sm text-muted-foreground">User ID:</span>
-                                <span className="font-mono text-sm">{String(notification.recipient.user_id || '')}</span>
-                            </div>
-                            {Boolean(notification.recipient.email) && (
-                                <div className="flex items-center gap-2">
-                                    <Mail className="h-4 w-4 text-muted-foreground" />
-                                    <span className="text-sm text-muted-foreground">Email:</span>
-                                    <span className="text-sm">{String(notification.recipient.email)}</span>
-                                </div>
-                            )}
-                            {Boolean(notification.recipient.phone) && (
-                                <div className="flex items-center gap-2">
-                                    <Phone className="h-4 w-4 text-muted-foreground" />
-                                    <span className="text-sm text-muted-foreground">Phone:</span>
-                                    <span className="text-sm">{String(notification.recipient.phone)}</span>
-                                </div>
-                            )}
+                            {(() => {
+                                const providerMeta = getProviderMetadata(notification.channel, notification.provider);
+
+                                return (
+                                    <>
+                                        {providerMeta?.recipientFields.map(field => {
+                                            const value = notification.recipient[field.name];
+                                            if (value === undefined || value === null || value === '') return null;
+
+                                            // Choose icon based on field type
+                                            const IconComponent = field.type === 'email' ? Mail
+                                                : field.type === 'phone' ? Phone
+                                                : User;
+
+                                            return (
+                                                <div key={field.name} className="flex items-center gap-2">
+                                                    <IconComponent className="h-4 w-4 text-muted-foreground" />
+                                                    <span className="text-sm text-muted-foreground capitalize">
+                                                        {field.name.replace(/_/g, ' ')}:
+                                                    </span>
+                                                    <span className={`text-sm ${field.type === 'email' || field.name === 'user_id' ? 'font-mono' : ''}`}>
+                                                        {String(value)}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </>
+                                );
+                            })()}
                             <Separator />
                             <div className="flex items-start gap-2">
                                 <LinkIcon className="h-4 w-4 text-muted-foreground mt-0.5" />
@@ -325,41 +351,48 @@ export default function EventDetailPage({ params }: PageProps) {
                             <CardTitle>Content</CardTitle>
                             <CardDescription>Message content for this notification</CardDescription>
                         </CardHeader>
-                        <CardContent>
-                            {notification.channel === "email" && (notification.content as Record<string, { subject?: string; message?: string }>).email && (
-                                <div className="space-y-4">
-                                    {(notification.content as Record<string, { subject?: string; message?: string }>).email?.subject && (
-                                        <div>
-                                            <span className="text-sm font-medium">Subject:</span>
-                                            <p className="mt-1 text-sm">{String((notification.content as Record<string, { subject?: string }>).email?.subject)}</p>
+                        <CardContent className="space-y-4">
+                            {(() => {
+                                const providerMeta = getProviderMetadata(notification.channel, notification.provider);
+                                // Content may be nested under channel key or flat
+                                const channelContent = (notification.content as Record<string, unknown>)[notification.channel] as Record<string, unknown> | undefined
+                                    || notification.content as Record<string, unknown>;
+
+                                // No schema available - fallback to JSON
+                                if (!providerMeta?.contentFields?.length) {
+                                    return (
+                                        <pre className="p-4 bg-muted rounded-lg text-xs overflow-auto">
+                                            {JSON.stringify(notification.content, null, 2)}
+                                        </pre>
+                                    );
+                                }
+
+                                // Render fields from schema
+                                return providerMeta.contentFields.map(field => {
+                                    const value = channelContent[field.name];
+                                    if (value === undefined || value === null || value === '') return null;
+
+                                    const stringValue = String(value);
+
+                                    return (
+                                        <div key={field.name}>
+                                            <span className="text-sm font-medium capitalize">
+                                                {field.name.replace(/_/g, ' ')}:
+                                            </span>
+                                            {field.type === 'text' ? (
+                                                // Long text/HTML content - styled box
+                                                <div
+                                                    className="mt-2 p-4 bg-muted rounded-lg text-sm prose prose-sm max-w-none dark:prose-invert"
+                                                    dangerouslySetInnerHTML={{ __html: stringValue }}
+                                                />
+                                            ) : (
+                                                // Short string content - inline
+                                                <p className="mt-1 text-sm">{stringValue}</p>
+                                            )}
                                         </div>
-                                    )}
-                                    <div>
-                                        <span className="text-sm font-medium">Message:</span>
-                                        <div
-                                            className="mt-2 p-4 bg-muted rounded-lg text-sm"
-                                            dangerouslySetInnerHTML={{ __html: String((notification.content as Record<string, { message?: string }>).email?.message || '') }}
-                                        />
-                                    </div>
-                                </div>
-                            )}
-                            {notification.channel === "whatsapp" && (notification.content as Record<string, { message?: string }>).whatsapp && (
-                                <div>
-                                    <span className="text-sm font-medium">Message:</span>
-                                    <p className="mt-2 p-4 bg-muted rounded-lg text-sm whitespace-pre-wrap">
-                                        {String((notification.content as Record<string, { message?: string }>).whatsapp?.message || '')}
-                                    </p>
-                                </div>
-                            )}
-                            {/* Generic content fallback for other channels */}
-                            {notification.channel !== "email" && notification.channel !== "whatsapp" && (
-                                <div>
-                                    <span className="text-sm font-medium">Content:</span>
-                                    <pre className="mt-2 p-4 bg-muted rounded-lg text-xs overflow-auto">
-                                        {JSON.stringify(notification.content, null, 2)}
-                                    </pre>
-                                </div>
-                            )}
+                                    );
+                                });
+                            })()}
                         </CardContent>
                     </Card>
 
