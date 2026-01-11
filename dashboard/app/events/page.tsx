@@ -116,7 +116,7 @@ export default function EventsPage() {
                 <PageToolbar className="flex-col sm:flex-row gap-3">
                     <PageToolbarSection className="w-full sm:w-auto sm:flex-1 sm:max-w-md">
                         <Input
-                            placeholder="Search by request ID, recipient..."
+                            placeholder="Search by notification ID, request ID, client ID/name..."
                             value={searchInput}
                             onChange={(e) => setSearchInput(e.target.value)}
                             onKeyDown={handleKeyDown}

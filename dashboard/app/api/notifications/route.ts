@@ -47,13 +47,16 @@ export async function GET(request: NextRequest) {
         }
 
         if (search) {
+            // Search only indexed fields for performance
             filter.$or = [
                 { request_id: { $regex: search, $options: 'i' } },
-                { 'recipient.email': { $regex: search, $options: 'i' } },
-                { 'recipient.phone': { $regex: search, $options: 'i' } },
-                { 'recipient.user_id': { $regex: search, $options: 'i' } },
-                { client_id: { $regex: search, $options: 'i' } }
+                { client_id: { $regex: search, $options: 'i' } },
+                { client_name: { $regex: search, $options: 'i' } }
             ];
+            // Also search by notification ID if it looks like a valid ObjectId
+            if (/^[a-f0-9]{24}$/i.test(search)) {
+                filter.$or.push({ _id: search } as any);
+            }
         }
 
         if (from || to) {
