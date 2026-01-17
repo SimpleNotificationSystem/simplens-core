@@ -32,6 +32,7 @@ export default defineConfig({
         },
         include: ['tests/**/*.test.ts'],
         testTimeout: 30000,
+        hookTimeout: 60000, // Increase hook timeout for devcontainer environments
         // Ensure proper isolation of tests
         isolate: true,
         pool: 'forks',
