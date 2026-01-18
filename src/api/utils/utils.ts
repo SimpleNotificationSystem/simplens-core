@@ -12,12 +12,28 @@ import notification_model from "@src/database/models/notification.models.js";
 import outbox_model from "@src/database/models/outbox.models.js";
 import { apiLogger as logger } from "@src/workers/utils/logger.js";
 import { PluginRegistry } from "@src/plugins/index.js";
+import notification_template_model from "@src/database/models/notification-template.models.js";
 
 /**
  * Convert notification request to notification schema objects
  */
-export const convert_notification_request_to_notification_schema = (data: notification_request): notification[] => {
+export const convert_notification_request_to_notification_schema = async (data: notification_request): Promise<notification[]> => {
     const notifications: notification[] = [];
+    
+    let content: Record<string, unknown>;
+
+    if(data.template_id){
+        const template = await notification_template_model.findOne({
+            template_id: data.template_id
+        });
+        if(!template){
+            throw new Error(`Notification template of id ${data.template_id} not found`);
+        }
+        content = template.content;
+    }
+    else if(!data.content){
+        throw new Error("Content field missing in notification request.");
+    }
 
     data.channel.forEach((channel, index) => {
         let provider: string | undefined;
@@ -35,7 +51,7 @@ export const convert_notification_request_to_notification_schema = (data: notifi
             channel: channel,
             provider: provider,
             recipient: data.recipient,
-            content: data.content,
+            content: content || data.content,
             variables: data.variables,
             webhook_url: data.webhook_url,
             status: NOTIFICATION_STATUS.pending,
@@ -53,8 +69,23 @@ export const convert_notification_request_to_notification_schema = (data: notifi
 /**
  * Convert batch notification to notification schema objects
  */
-export const convert_batch_notification_schema_to_notification_schema = (data: batch_notification_request): notification[] => {
+export const convert_batch_notification_schema_to_notification_schema = async (data: batch_notification_request): Promise<notification[]> => {
     const notifications: notification[] = [];
+
+    let content: Record<string, unknown>;
+
+    if(data.template_id){
+        const template = await notification_template_model.findOne({
+            template_id: data.template_id
+        });
+        if(!template){
+            throw new Error(`Notification template of id ${data.template_id} not found`);
+        }
+        content = template.content;
+    }
+    else if(!data.content){
+        throw new Error("Content field missing in notification request.");
+    }
 
     for (const recipient of data.recipients) {
         data.channel.forEach((channel, index) => {
@@ -75,7 +106,7 @@ export const convert_batch_notification_schema_to_notification_schema = (data: b
                 recipient: {
                     ...recipient // Include any channel-specific fields
                 },
-                content: data.content,
+                content: content || data.content,
                 variables: recipient.variables,
                 webhook_url: data.webhook_url,
                 status: NOTIFICATION_STATUS.pending,

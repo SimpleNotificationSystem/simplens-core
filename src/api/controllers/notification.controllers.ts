@@ -11,7 +11,7 @@ export const notification_controller = async (req: Request, res: Response)=>{
         const result = safeValidateNotificationRequest(data);
         if(result.success){
             const request_data = result.data;
-            const notifications: notification[] = convert_notification_request_to_notification_schema(request_data);
+            const notifications: notification[] = await convert_notification_request_to_notification_schema(request_data);
             const response = await process_notifications(notifications);
             res.status(202).json({ message: 'Notifications are being processed', ...response});
         }
@@ -54,7 +54,7 @@ export const batch_notification_controller = async (req: Request, res: Response)
         const result = safeValidateBatchNotificationRequest(data);
         if(result.success){
             const request_data = result.data;
-            const notifications: notification[] = convert_batch_notification_schema_to_notification_schema(request_data);
+            const notifications: notification[] = await convert_batch_notification_schema_to_notification_schema(request_data);
             const response = await process_notifications(notifications);
             res.status(202).json({ message: 'Notifications are being processed', ...response});
         }

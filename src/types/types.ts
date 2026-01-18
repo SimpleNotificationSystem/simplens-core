@@ -86,6 +86,7 @@ import {
     telegramConfigSchema,
     ADMIN_CHANNEL_TYPE,
     ADMIN_ALERT_TYPE,
+    notificationTemplateSchema,
 } from "./schemas.js";
 
 // ============================================================================
@@ -122,3 +123,4 @@ export type discord_config = z.infer<typeof discordConfigSchema>;
 export type telegram_config = z.infer<typeof telegramConfigSchema>;
 export type AdminChannelType = (typeof ADMIN_CHANNEL_TYPE)[number];
 export type AdminAlertType = (typeof ADMIN_ALERT_TYPE)[number];
+export type notification_template = z.infer<typeof notificationTemplateSchema>;

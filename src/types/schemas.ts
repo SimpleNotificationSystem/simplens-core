@@ -163,6 +163,20 @@ export const statusOutboxSchema = z.object({
     updated_at: z.coerce.date().optional(),
 });
 
+/**
+ * Notification Template
+ */
+export const notificationTemplateSchema = z.object({
+    _id: objectIdSchema,
+    name: z.string(),
+    template_id: z.string(),
+    description: z.string().optional(),
+    content: z.record(z.string(), z.unknown()),
+    package: z.string(),
+    created_at: z.coerce.date().optional(),
+    updated_at: z.coerce.date().optional(),
+});
+
 // ============================================================================
 // ADMIN NOTIFICATION CHANNEL SCHEMAS
 // ============================================================================
@@ -255,10 +269,11 @@ export const baseNotificationRequestSchema = z.object({
     request_id: UUIDV4Schema,
     client_id: UUIDV4Schema,
     client_name: z.string().optional(),
+    template_id: z.string().optional(),
     channel: z.array(z.string()),
     provider: z.array(z.string()).optional(),
     recipient: z.record(z.string(), z.unknown()),
-    content: z.record(z.string(), z.unknown()),
+    content: z.record(z.string(), z.unknown()).optional(),
     variables: variablesSchema.optional(),
     scheduled_at: z.coerce.date().optional(),
     webhook_url: z.url()
@@ -273,6 +288,16 @@ export const baseNotificationRequestSchema = z.object({
         message: "Provider array length must match channel array length",
         path: ["provider"]
     }
+).refine(
+    (data)=>{
+        if(data.template_id || data.content){
+            return true;
+        }
+    },
+    {
+       message: "Either template_id or content must be present.",
+       path: ["template_id", "content"] 
+    }
 );
 
 /**
@@ -282,8 +307,9 @@ export const baseBatchNotificationRequestSchema = z.object({
     client_id: UUIDV4Schema,
     client_name: z.string().optional(),
     channel: z.array(z.string()),
+    template_id: z.string().optional(),
     provider: z.union([z.string(), z.array(z.string().nullable().optional())]).optional(),
-    content: z.record(z.string(), z.unknown()),
+    content: z.record(z.string(), z.unknown()).optional(),
     recipients: z.array(
         z.looseObject({
             request_id: UUIDV4Schema,
@@ -309,7 +335,28 @@ export const baseBatchNotificationRequestSchema = z.object({
         message: `Batch size exceeds limit (${env.MAX_BATCH_REQ_LIMIT})`,
         path: ["recipients"]
     }
+).refine(
+    (data)=>{
+        if(data.template_id || data.content){
+            return true;
+        }
+    },
+    {
+       message: "Either template_id or content must be present.",
+       path: ["template_id", "content"] 
+    }
 );
+
+/*
+Notification Template Request Schema
+*/
+export const notificationTemplateRequestSchema = z.object({
+    name: z.string(),
+    template_id: z.string(),
+    description: z.string().optional(),
+    content: z.record(z.string(), z.unknown()),
+    package: z.string(),
+});
 
 // ============================================================================
 // VALIDATION FUNCTIONS
@@ -322,6 +369,8 @@ export const validateNotification = (data: unknown) => notificationSchema.parse(
 export const validateOutbox = (data: unknown) => outboxSchema.parse(data);
 export const validateNotificationRequest = (data: unknown) => baseNotificationRequestSchema.parse(data);
 export const validateBatchNotificationRequest = (data: unknown) => baseBatchNotificationRequestSchema.parse(data);
+export const validateNotificationTemplate = (data: unknown)=> notificationTemplateSchema.parse(data);
+export const validateNotificationTemplateRequestSchema = (data: unknown)=>notificationTemplateRequestSchema.parse(data);
 
 export const safeValidateBaseNotification = (data: unknown) => baseNotificationSchema.safeParse(data);
 export const safeValidateDelayedNotificationTopic = (data: unknown) => delayedNotificationTopicSchema.safeParse(data);
@@ -330,3 +379,5 @@ export const safeValidateNotification = (data: unknown) => notificationSchema.sa
 export const safeValidateOutbox = (data: unknown) => outboxSchema.safeParse(data);
 export const safeValidateNotificationRequest = (data: unknown) => baseNotificationRequestSchema.safeParse(data);
 export const safeValidateBatchNotificationRequest = (data: unknown) => baseBatchNotificationRequestSchema.safeParse(data);
+export const safeValidateNotificationTemplate = (data: unknown)=> notificationTemplateSchema.safeParse(data);
+export const safeValidateNotificationTemplateRequestSchema = (data: unknown)=>notificationTemplateRequestSchema.safeParse(data);

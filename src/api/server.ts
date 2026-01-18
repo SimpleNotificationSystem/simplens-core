@@ -6,6 +6,7 @@ import { exit } from 'process';
 import notification_router from './routes/notification.routes.js';
 import plugins_router from './routes/plugins.routes.js';
 import admin_channels_router from './routes/admin-channels.routes.js';
+import notification_templates_router from '@src/api/routes/notification_templates.routes.js';
 import { auth_middleware } from './middlewares/auth_middleware.js';
 import http from 'http';
 import helmet from 'helmet';
@@ -49,6 +50,7 @@ app.get("/health", (req: Request, res: Response) => {
 app.use('/api/notification', auth_middleware, notification_router);
 app.use('/api/plugins', plugins_router);
 app.use('/api/admin-channels', admin_channels_router);
+app.use('/api/templates', auth_middleware, notification_templates_router);
 
 const start_server = async () => {
     try {
