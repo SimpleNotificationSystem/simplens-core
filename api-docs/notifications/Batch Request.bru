@@ -1,0 +1,46 @@
+meta {
+  name: Batch Request
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{BASE_URL}}/api/notification/batch
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "client_id": "59777441-3545-4507-8e0d-2d3a2ffd71c1",
+    "template_id": "{{TEMPLATE_ID}}",
+    "channel": ["{{CHANNEL}}"],
+    "provider": ["{{PROVIDER}}"],
+    "recipients":[
+       {
+         "request_id": "5a698ff2-3910-4b28-b48a-17303651bdb6",
+          "user_id": "user1234",
+          "email": "{{TO_EMAIL}}",
+          "variables": {
+            "name": "Adhish",
+            "company": "SimpleNS"
+          }
+       },
+      {
+        "request_id": "9c62ba98-ef14-4d4c-9ba5-a7ffd3c9d5f9",
+        "user_id": "user1235",
+          "email": "{{TO_EMAIL_2}}",
+          "variables": {
+            "name": "Krishna",
+            "company": "SimpleNS"
+          }
+      }
+    ],
+    "webhook_url": "http://localhost:4000/webhook"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

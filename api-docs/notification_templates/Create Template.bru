@@ -1,0 +1,28 @@
+meta {
+  name: Create Template
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{BASE_URL}}/api/templates/create
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Test email template",
+    "template_id": "email-temp-1",
+    "content": {
+      "subject": "Test email",
+      "message": "Hi {{name}}, this is a sample message from {{company}}"
+    },
+    "package": "simplens-plugin-nodemailer-gmail"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

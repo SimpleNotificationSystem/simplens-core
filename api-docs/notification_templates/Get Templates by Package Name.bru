@@ -1,0 +1,22 @@
+meta {
+  name: Get Templates by Package Name
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{BASE_URL}}/api/templates
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "package_name": "simplens-plugin-mock"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

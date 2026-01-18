@@ -1,0 +1,15 @@
+meta {
+  name: Get Plugin Metadata
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{BASE_URL}}/api/plugins
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}

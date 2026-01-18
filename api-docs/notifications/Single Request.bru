@@ -1,0 +1,39 @@
+meta {
+  name: Single Request
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{BASE_URL}}/api/notification
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "request_id": "d08f1bbc-2627-4f88-88f8-8ef9235475c6",
+    "client_id": "59777441-3545-4507-8e0d-2d3a2ffd71c1",
+    "template_id": "{{TEMPLATE_ID}}",
+    "channel": ["{{CHANNEL}}"],
+    "provider": ["{{PROVIDER}}"],
+    "recipient": {
+      "user_id": "user1234",
+      "email": "{{TO_EMAIL}}"
+    },
+    "variables": {
+      "name": "Adhish",
+      "company": "SimpleNS"
+    },
+    "webhook_url": "http://localhost:4000/webhook"
+  }
+}
+
+vars:pre-request {
+  TO_EMAIL: streamnowservice@gmail.com
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
