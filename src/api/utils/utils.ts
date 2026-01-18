@@ -1,41 +1,129 @@
 /**
  * API Utilities
- * 
+ *
  * Helper functions for notification processing.
  * These are channel-agnostic - specific logic is handled by plugins.
  */
 
-import { notification_request, outbox, notification, batch_notification_request, getTopicForChannel, CORE_TOPICS, delayed_notification_topic } from "@src/types/types.js"
-import { NOTIFICATION_STATUS, OUTBOX_STATUS } from "@src/types/types.js"
+import {
+  notification_request,
+  outbox,
+  notification,
+  batch_notification_request,
+  getTopicForChannel,
+  CORE_TOPICS,
+  delayed_notification_topic,
+} from "@src/types/types.js";
+import { NOTIFICATION_STATUS, OUTBOX_STATUS } from "@src/types/types.js";
 import mongoose from "mongoose";
 import notification_model from "@src/database/models/notification.models.js";
 import outbox_model from "@src/database/models/outbox.models.js";
 import { apiLogger as logger } from "@src/workers/utils/logger.js";
 import { PluginRegistry } from "@src/plugins/index.js";
 import notification_template_model from "@src/database/models/notification-template.models.js";
+import { SimpleNSProvider } from "@src/plugins/interfaces/provider.types.js";
+import { ZodError } from "zod";
 
 /**
  * Convert notification request to notification schema objects
  */
-export const convert_notification_request_to_notification_schema = async (data: notification_request): Promise<notification[]> => {
-    const notifications: notification[] = [];
-    
+export const convert_notification_request_to_notification_schema = async (
+  data: notification_request,
+): Promise<notification[]> => {
+  const notifications: notification[] = [];
+
+  let isTemplate: boolean = false;
+
+  //check whether template_id is present
+  if (data.template_id && data.template_id.length > 0) {
+    isTemplate = true;
+  }
+
+  for (let index = 0; index < data.channel.length; index++) {
+    const channel = data.channel[index];
     let content: Record<string, unknown>;
+    let provider: string | undefined;
+    if (Array.isArray(data.provider)) {
+        const p = data.provider[index];
+        provider = p ?? undefined;
+    } else {
+        provider = data.provider;
+    }
 
-    if(data.template_id){
-        const template = await notification_template_model.findOne({
-            template_id: data.template_id
-        });
-        if(!template){
-            throw new Error(`Notification template of id ${data.template_id} not found`);
+    if (isTemplate) {
+
+        const template_id = data.template_id![index];
+
+        if(template_id){
+            const template = await notification_template_model.findOne({
+                template_id: data.template_id![index],
+            });
+    
+            if (!template) {
+                throw new Error(
+                    `Template not found for the given template_id: ${data.template_id![index]}`,
+                );
+            }
+    
+            content = template.content;
         }
-        content = template.content;
-    }
-    else if(!data.content){
-        throw new Error("Content field missing in notification request.");
+        else{
+            content = data.content![channel];
+            if (!content) {
+                throw new Error(`${channel} record not found in content field`);
+            }
+        }
+        
+    } else {
+        content = data.content![channel];
+        if (!content) {
+            throw new Error(`${channel} record not found in content field`);
+        }
     }
 
-    data.channel.forEach((channel, index) => {
+    validateContentSchema(channel, content, provider);
+
+    const base_notification: notification = {
+      request_id: data.request_id,
+      client_id: data.client_id,
+      client_name: data.client_name,
+      channel: channel,
+      provider: provider,
+      recipient: data.recipient,
+      content: content,
+      variables: data.variables,
+      webhook_url: data.webhook_url,
+      status: NOTIFICATION_STATUS.pending,
+      scheduled_at: data.scheduled_at,
+      retry_count: 0,
+      created_at: new Date(),
+    };
+
+    notifications.push(base_notification);
+  }
+
+  return notifications;
+};
+
+/**
+ * Convert batch notification to notification schema objects
+ */
+export const convert_batch_notification_schema_to_notification_schema = async (
+  data: batch_notification_request,
+): Promise<notification[]> => {
+  const notifications: notification[] = [];
+
+  let isTemplate: boolean = false;
+
+  //check whether template_id is present
+  if (data.template_id && data.template_id.length > 0) {
+    isTemplate = true;
+  }
+
+  for (const recipient of data.recipients) {
+    let content: Record<string, unknown>;
+    for (let index = 0; index < data.channel.length; index++) {
+        const channel = data.channel[index];
         let provider: string | undefined;
         if (Array.isArray(data.provider)) {
             const p = data.provider[index];
@@ -44,305 +132,375 @@ export const convert_notification_request_to_notification_schema = async (data: 
             provider = data.provider;
         }
 
-        const base_notification: notification = {
-            request_id: data.request_id,
-            client_id: data.client_id,
-            client_name: data.client_name,
-            channel: channel,
-            provider: provider,
-            recipient: data.recipient,
-            content: content || data.content,
-            variables: data.variables,
-            webhook_url: data.webhook_url,
-            status: NOTIFICATION_STATUS.pending,
-            scheduled_at: data.scheduled_at,
-            retry_count: 0,
-            created_at: new Date()
-        };
+        if (isTemplate) {
 
-        notifications.push(base_notification);
-    });
+            const template_id = data.template_id![index];
 
-    return notifications;
-}
-
-/**
- * Convert batch notification to notification schema objects
- */
-export const convert_batch_notification_schema_to_notification_schema = async (data: batch_notification_request): Promise<notification[]> => {
-    const notifications: notification[] = [];
-
-    let content: Record<string, unknown>;
-
-    if(data.template_id){
-        const template = await notification_template_model.findOne({
-            template_id: data.template_id
-        });
-        if(!template){
-            throw new Error(`Notification template of id ${data.template_id} not found`);
-        }
-        content = template.content;
-    }
-    else if(!data.content){
-        throw new Error("Content field missing in notification request.");
-    }
-
-    for (const recipient of data.recipients) {
-        data.channel.forEach((channel, index) => {
-            let provider: string | undefined;
-            if (Array.isArray(data.provider)) {
-                const p = data.provider[index];
-                provider = p ?? undefined;
-            } else {
-                provider = data.provider;
+            if(template_id){
+                const template = await notification_template_model.findOne({
+                    template_id: data.template_id![index],
+                });
+        
+                if (!template) {
+                    throw new Error(
+                        `Template not found for the given template_id: ${data.template_id![index]}`,
+                    );
+                }
+        
+                content = template.content;
             }
+            else{
+                content = data.content![channel];
+                if (!content) {
+                    throw new Error(`${channel} record not found in content field`);
+                }
+            }
+            
+        } else {
+            content = data.content![channel];
+            if (!content) {
+                throw new Error(`${channel} record not found in content field`);
+            }
+        }
 
-            const notification_obj: notification = {
-                request_id: recipient.request_id,
-                client_id: data.client_id,
-                client_name: data.client_name,
-                channel,
-                provider: provider,
-                recipient: {
-                    ...recipient // Include any channel-specific fields
-                },
-                content: content || data.content,
-                variables: recipient.variables,
-                webhook_url: data.webhook_url,
-                status: NOTIFICATION_STATUS.pending,
-                scheduled_at: data.scheduled_at,
-                retry_count: 0,
-                created_at: new Date(),
-            };
-            notifications.push(notification_obj);
-        });
+      validateContentSchema(channel, content, provider);
+
+      const notification_obj: notification = {
+        request_id: recipient.request_id,
+        client_id: data.client_id,
+        client_name: data.client_name,
+        channel,
+        provider: provider,
+        recipient: {
+          ...recipient, // Include any channel-specific fields
+        },
+        content: content || data.content,
+        variables: recipient.variables,
+        webhook_url: data.webhook_url,
+        status: NOTIFICATION_STATUS.pending,
+        scheduled_at: data.scheduled_at,
+        retry_count: 0,
+        created_at: new Date(),
+      };
+      notifications.push(notification_obj);
     }
+  }
 
-    return notifications;
-}
+  return notifications;
+};
 
 /**
  * Create outbox entry for a notification
  */
-export const convert_notification_schema_to_outbox_schema = (data: notification, notification_id: mongoose.Types.ObjectId): outbox => {
-    // Determine topic based on scheduling
-    const isScheduled = data.scheduled_at && new Date(data.scheduled_at) > new Date();
-    const topic = isScheduled
-        ? CORE_TOPICS.delayed_notification
-        : getTopicForChannel(data.channel);
+export const convert_notification_schema_to_outbox_schema = (
+  data: notification,
+  notification_id: mongoose.Types.ObjectId,
+): outbox => {
+  // Determine topic based on scheduling
+  const isScheduled =
+    data.scheduled_at && new Date(data.scheduled_at) > new Date();
+  const topic = isScheduled
+    ? CORE_TOPICS.delayed_notification
+    : getTopicForChannel(data.channel);
 
-    // Build payload
-    const payload = isScheduled
-        ? to_delayed_notification_topic(data, notification_id)
-        : to_channel_notification(data, notification_id);
+  // Build payload
+  const payload = isScheduled
+    ? to_delayed_notification_topic(data, notification_id)
+    : to_channel_notification(data, notification_id);
 
-    return {
-        notification_id,
-        topic,
-        payload,
-        status: OUTBOX_STATUS.pending,
-        created_at: new Date(),
-        updated_at: new Date()
-    };
-}
+  return {
+    notification_id,
+    topic,
+    payload,
+    status: OUTBOX_STATUS.pending,
+    created_at: new Date(),
+    updated_at: new Date(),
+  };
+};
 
 /**
  * Convert notification to channel-specific format
  * Extracts channel-specific content if present (e.g., content.email for email channel)
  */
-export const to_channel_notification = (data: notification, notification_id: mongoose.Types.ObjectId): Record<string, unknown> => {
-    // Extract channel-specific content if available
-    // Dashboard sends: content: { email: { subject, message } }
-    // Plugin expects: content: { subject, message }
-    const rawContent = data.content as Record<string, unknown>;
-    const channelContent = rawContent[data.channel] as Record<string, unknown> | undefined;
-    const finalContent = channelContent || rawContent;
+export const to_channel_notification = (
+  data: notification,
+  notification_id: mongoose.Types.ObjectId,
+): Record<string, unknown> => {
+  // Extract channel-specific content if available
+  // Dashboard sends: content: { email: { subject, message } }
+  // Plugin expects: content: { subject, message }
+  const rawContent = data.content as Record<string, unknown>;
+  const channelContent = rawContent[data.channel] as
+    | Record<string, unknown>
+    | undefined;
+  const finalContent = channelContent || rawContent;
 
-    return {
-        notification_id,
-        request_id: data.request_id,
-        client_id: data.client_id,
-        channel: data.channel,
-        provider: data.provider,
-        recipient: data.recipient,
-        content: finalContent,
-        variables: data.variables,
-        webhook_url: data.webhook_url,
-        retry_count: data.retry_count ?? 0,
-        created_at: new Date(),
-    };
-}
+  return {
+    notification_id,
+    request_id: data.request_id,
+    client_id: data.client_id,
+    channel: data.channel,
+    provider: data.provider,
+    recipient: data.recipient,
+    content: finalContent,
+    variables: data.variables,
+    webhook_url: data.webhook_url,
+    retry_count: data.retry_count ?? 0,
+    created_at: new Date(),
+  };
+};
 
 /**
  * Convert notification to delayed notification format
  */
-export const to_delayed_notification_topic = (data: notification, notification_id: mongoose.Types.ObjectId): delayed_notification_topic => {
-    const payload = to_channel_notification(data, notification_id);
+export const to_delayed_notification_topic = (
+  data: notification,
+  notification_id: mongoose.Types.ObjectId,
+): delayed_notification_topic => {
+  const payload = to_channel_notification(data, notification_id);
 
-    return {
-        notification_id,
-        request_id: data.request_id,
-        client_id: data.client_id,
-        scheduled_at: data.scheduled_at as Date,
-        target_topic: getTopicForChannel(data.channel),
-        payload,
-        created_at: new Date(),
-    };
-}
+  return {
+    notification_id,
+    request_id: data.request_id,
+    client_id: data.client_id,
+    scheduled_at: data.scheduled_at as Date,
+    target_topic: getTopicForChannel(data.channel),
+    payload,
+    created_at: new Date(),
+  };
+};
 
 /**
  * Error class for duplicate notifications
  */
 export class DuplicateNotificationError extends Error {
-    public duplicateCount: number;
-    public duplicateKeys: { request_id: string; channel: string }[];
+  public duplicateCount: number;
+  public duplicateKeys: { request_id: string; channel: string }[];
 
-    constructor(message: string, duplicateKeys: { request_id: string; channel: string }[] = []) {
-        super(message);
-        this.name = 'DuplicateNotificationError';
-        this.duplicateCount = duplicateKeys.length;
-        this.duplicateKeys = duplicateKeys;
-    }
+  constructor(
+    message: string,
+    duplicateKeys: { request_id: string; channel: string }[] = [],
+  ) {
+    super(message);
+    this.name = "DuplicateNotificationError";
+    this.duplicateCount = duplicateKeys.length;
+    this.duplicateKeys = duplicateKeys;
+  }
 }
 
 /**
  * Error class for invalid provider/channel configuration
  */
 export class InvalidProviderChannelError extends Error {
-    public invalidChannels: string[];
-    public invalidProviders: string[];
+  public invalidChannels: string[];
+  public invalidProviders: string[];
 
-    constructor(message: string, invalidChannels: string[] = [], invalidProviders: string[] = []) {
-        super(message);
-        this.name = 'InvalidProviderChannelError';
-        this.invalidChannels = invalidChannels;
-        this.invalidProviders = invalidProviders;
-    }
+  constructor(
+    message: string,
+    invalidChannels: string[] = [],
+    invalidProviders: string[] = [],
+  ) {
+    super(message);
+    this.name = "InvalidProviderChannelError";
+    this.invalidChannels = invalidChannels;
+    this.invalidProviders = invalidProviders;
+  }
 }
 
 /**
  * Validate that all channels and providers exist in PluginRegistry.
  * Throws InvalidProviderChannelError if any are invalid.
  */
-export const validateProviderAndChannel = (notifications: notification[]): void => {
-    const invalidChannels: string[] = [];
-    const invalidProviders: string[] = [];
+export const validateProviderAndChannel = (
+  notifications: notification[],
+): void => {
+  const invalidChannels: string[] = [];
+  const invalidProviders: string[] = [];
 
-    for (const notification of notifications) {
-        // Check channel has at least one provider configured
-        if (!PluginRegistry.hasChannel(notification.channel)) {
-            if (!invalidChannels.includes(notification.channel)) {
-                invalidChannels.push(notification.channel);
-            }
-        }
-        
-        // Check provider exists (if explicitly specified)
-        if (notification.provider && !PluginRegistry.has(notification.provider)) {
-            if (!invalidProviders.includes(notification.provider)) {
-                invalidProviders.push(notification.provider);
-            }
-        }
+  for (const notification of notifications) {
+    // Check channel has at least one provider configured
+    if (!PluginRegistry.hasChannel(notification.channel)) {
+      if (!invalidChannels.includes(notification.channel)) {
+        invalidChannels.push(notification.channel);
+      }
     }
 
-    if (invalidChannels.length > 0 || invalidProviders.length > 0) {
-        const messages: string[] = [];
-        if (invalidChannels.length > 0) {
-            messages.push(`Invalid channel(s): ${invalidChannels.join(', ')}`);
-        }
-        if (invalidProviders.length > 0) {
-            messages.push(`Invalid provider(s): ${invalidProviders.join(', ')}`);
-        }
-        throw new InvalidProviderChannelError(messages.join('. '), invalidChannels, invalidProviders);
+    // Check provider exists (if explicitly specified)
+    if (notification.provider && !PluginRegistry.has(notification.provider)) {
+      if (!invalidProviders.includes(notification.provider)) {
+        invalidProviders.push(notification.provider);
+      }
     }
+  }
+
+  if (invalidChannels.length > 0 || invalidProviders.length > 0) {
+    const messages: string[] = [];
+    if (invalidChannels.length > 0) {
+      messages.push(`Invalid channel(s): ${invalidChannels.join(", ")}`);
+    }
+    if (invalidProviders.length > 0) {
+      messages.push(`Invalid provider(s): ${invalidProviders.join(", ")}`);
+    }
+    throw new InvalidProviderChannelError(
+      messages.join(". "),
+      invalidChannels,
+      invalidProviders,
+    );
+  }
 };
 
 /**
  * Process notifications and create outbox entries
  * Uses MongoDB transactions to ensure atomicity - both notification and outbox
  * entries are saved together, or both are rolled back on failure.
- * 
+ *
  * Note: Requires MongoDB replica set for transactions to work.
  */
-export const process_notifications = async (notifications: notification[]): Promise<{ notification_ids: mongoose.Types.ObjectId[], created_count: number, duplicate_count: number, duplicate_keys: { request_id: string; channel: string }[] | undefined }> => {
-    // Validate all providers and channels exist before processing
-    validateProviderAndChannel(notifications);
+export const process_notifications = async (
+  notifications: notification[],
+): Promise<{
+  notification_ids: mongoose.Types.ObjectId[];
+  created_count: number;
+  duplicate_count: number;
+  duplicate_keys: { request_id: string; channel: string }[] | undefined;
+}> => {
+  // Validate all providers and channels exist before processing
+  validateProviderAndChannel(notifications);
 
-    const session = await mongoose.startSession();
+  const session = await mongoose.startSession();
 
-    try {
-        session.startTransaction();
+  try {
+    session.startTransaction();
 
-        const notification_ids: mongoose.Types.ObjectId[] = [];
-        const outbox_entries: outbox[] = [];
-        const duplicate_keys: { request_id: string; channel: string }[] = [];
+    const notification_ids: mongoose.Types.ObjectId[] = [];
+    const outbox_entries: outbox[] = [];
+    const duplicate_keys: { request_id: string; channel: string }[] = [];
 
-        for (const notification of notifications) {
-            // Check for duplicates (include session for transactional read)
-            const existingNotification = await notification_model.findOne({
-                request_id: notification.request_id,
-                channel: notification.channel,
-                status: { $ne: NOTIFICATION_STATUS.failed } // Allow retrying failed notifications
-            }).session(session);
+    for (const notification of notifications) {
+      // Check for duplicates (include session for transactional read)
+      const existingNotification = await notification_model
+        .findOne({
+          request_id: notification.request_id,
+          channel: notification.channel,
+          status: { $ne: NOTIFICATION_STATUS.failed }, // Allow retrying failed notifications
+        })
+        .session(session);
 
-            if (existingNotification) {
-                duplicate_keys.push({
-                    request_id: notification.request_id as string,
-                    channel: notification.channel
-                });
-                continue;
-            }
+      if (existingNotification) {
+        duplicate_keys.push({
+          request_id: notification.request_id as string,
+          channel: notification.channel,
+        });
+        continue;
+      }
 
-            // Create notification document within transaction
-            const notification_doc = new notification_model(notification);
-            await notification_doc.save({ session });
+      // Create notification document within transaction
+      const notification_doc = new notification_model(notification);
+      await notification_doc.save({ session });
 
-            const notification_id = notification_doc._id as mongoose.Types.ObjectId;
-            notification_ids.push(notification_id);
+      const notification_id = notification_doc._id as mongoose.Types.ObjectId;
+      notification_ids.push(notification_id);
 
-            // Create outbox entry
-            const outbox_entry = convert_notification_schema_to_outbox_schema(notification, notification_id);
-            outbox_entries.push(outbox_entry);
-        }
-
-        // Check if ALL notifications are duplicates BEFORE committing
-        // This must happen before commit to avoid throwing after commitTransaction
-        if (duplicate_keys.length > 0 && duplicate_keys.length === notifications.length) {
-            // No new notifications to save, abort the transaction
-            await session.abortTransaction();
-            throw new DuplicateNotificationError(
-                'All notifications are duplicates',
-                duplicate_keys
-            );
-        }
-
-        // Insert outbox entries in bulk within transaction
-        if (outbox_entries.length > 0) {
-            await outbox_model.insertMany(outbox_entries, { session });
-        }
-
-        // Commit transaction - both succeed or both fail
-        await session.commitTransaction();
-
-        // Log partial duplicates (some succeeded, some were duplicates)
-        if (duplicate_keys.length > 0) {
-            logger.warn(`Skipped ${duplicate_keys.length} duplicate notifications`);
-        }
-
-        return {
-            notification_ids,
-            created_count: notification_ids.length,
-            duplicate_count: duplicate_keys.length,
-            duplicate_keys: duplicate_keys.length > 0 ? duplicate_keys : undefined
-        };
-
-    } catch (error) {
-        // Only abort if transaction is still in progress (not already committed or aborted)
-        if (session.inTransaction()) {
-            await session.abortTransaction();
-        }
-        throw error;
-    } finally {
-        // Always end the session
-        session.endSession();
+      // Create outbox entry
+      const outbox_entry = convert_notification_schema_to_outbox_schema(
+        notification,
+        notification_id,
+      );
+      outbox_entries.push(outbox_entry);
     }
+
+    // Check if ALL notifications are duplicates BEFORE committing
+    // This must happen before commit to avoid throwing after commitTransaction
+    if (
+      duplicate_keys.length > 0 &&
+      duplicate_keys.length === notifications.length
+    ) {
+      // No new notifications to save, abort the transaction
+      await session.abortTransaction();
+      throw new DuplicateNotificationError(
+        "All notifications are duplicates",
+        duplicate_keys,
+      );
+    }
+
+    // Insert outbox entries in bulk within transaction
+    if (outbox_entries.length > 0) {
+      await outbox_model.insertMany(outbox_entries, { session });
+    }
+
+    // Commit transaction - both succeed or both fail
+    await session.commitTransaction();
+
+    // Log partial duplicates (some succeeded, some were duplicates)
+    if (duplicate_keys.length > 0) {
+      logger.warn(`Skipped ${duplicate_keys.length} duplicate notifications`);
+    }
+
+    return {
+      notification_ids,
+      created_count: notification_ids.length,
+      duplicate_count: duplicate_keys.length,
+      duplicate_keys: duplicate_keys.length > 0 ? duplicate_keys : undefined,
+    };
+  } catch (error) {
+    // Only abort if transaction is still in progress (not already committed or aborted)
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+    throw error;
+  } finally {
+    // Always end the session
+    session.endSession();
+  }
+};
+
+/*
+ * Error class for Invalid content schema
+ */
+export class InvalidContentSchemaError extends Error {
+  public error: ZodError<Record<string, unknown>>;
+  constructor(message: string, error: ZodError<Record<string, unknown>>) {
+    super(message);
+    this.name = "InvalidContentSchemaError";
+    this.error = error;
+  }
 }
+
+/**
+ * Error class for provider not found
+ */
+export class ProviderNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProviderNotFoundError";
+  }
+}
+
+/**
+ * Validate request content schema with the provider's content schema
+ */
+export const validateContentSchema = (
+  channel: string,
+  content: Record<string, unknown>,
+  provider_id?: string,
+): void => {
+  let provider: SimpleNSProvider | undefined;
+  if (!provider_id) {
+    provider = PluginRegistry.getDefaultProvider(channel);
+  } else {
+    provider = PluginRegistry.get(provider_id);
+  }
+  if (!provider) {
+    throw new ProviderNotFoundError(
+      `Provider not found with the given provider_id: ${provider_id}`,
+    );
+  }
+  const providerContentSchema = provider.getContentSchema();
+  const validationResult = providerContentSchema.safeParse(content);
+  if (!validationResult.success) {
+    throw new InvalidContentSchemaError(
+      `Content Validation failed for given provider_id: ${provider_id}`,
+      validationResult.error,
+    );
+  }
+};

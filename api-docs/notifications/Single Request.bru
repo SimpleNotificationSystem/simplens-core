@@ -12,15 +12,24 @@ post {
 
 body:json {
   {
-    "request_id": "d08f1bbc-2627-4f88-88f8-8ef9235475c6",
+    "request_id": "908604ba-2902-4e1e-be16-c05d1b371e21",
     "client_id": "59777441-3545-4507-8e0d-2d3a2ffd71c1",
-    "template_id": "{{TEMPLATE_ID}}",
-    "channel": ["{{CHANNEL}}"],
+    "template_id": ["email-temp-1"],
+    "channel": ["{{CHANNEL}}", "mock"],
     "provider": ["{{PROVIDER}}"],
     "recipient": {
       "user_id": "user1234",
       "email": "{{TO_EMAIL}}"
     },
+    "content":{
+      "email": {
+        "subject": "Test sample email",
+        "message": "Hi, {{name}}. This email is from {{company}}"
+      },
+      "mock": {
+        "message": "Hi, {{name}}. This message is from {{company}}"
+      }
+    }, 
     "variables": {
       "name": "Adhish",
       "company": "SimpleNS"

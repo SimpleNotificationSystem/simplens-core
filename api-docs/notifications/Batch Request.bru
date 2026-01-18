@@ -13,8 +13,8 @@ post {
 body:json {
   {
     "client_id": "59777441-3545-4507-8e0d-2d3a2ffd71c1",
-    "template_id": "{{TEMPLATE_ID}}",
-    "channel": ["{{CHANNEL}}"],
+    "template_id": ["{{TEMPLATE_ID}}"],
+    "channel": ["{{CHANNEL}}", "mock"],
     "provider": ["{{PROVIDER}}"],
     "recipients":[
        {
@@ -36,6 +36,11 @@ body:json {
           }
       }
     ],
+    "content": {
+      "mock": {
+        "message": "Hi, {{name}}. This is a sample message from {{company}}."
+      }
+    },
     "webhook_url": "http://localhost:4000/webhook"
   }
 }
