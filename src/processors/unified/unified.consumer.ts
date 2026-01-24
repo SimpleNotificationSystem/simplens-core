@@ -293,18 +293,24 @@ export const startUnifiedConsumer = async (channel: string): Promise<void> => {
     await consumer.run({
         autoCommit: false,
         eachMessage: async (payload) => {
-            if (!consumingState.get(channel)) {
-                return; // Consumer is stopping
-            }
-
-            const shouldCommit = await processMessage(channel, payload);
-
-            if (shouldCommit) {
-                await consumer.commitOffsets([{
-                    topic: payload.topic,
-                    partition: payload.partition,
-                    offset: (BigInt(payload.message.offset) + 1n).toString()
-                }]);
+            try{
+                if (!consumingState.get(channel)) {
+                    return; // Consumer is stopping
+                }
+    
+                const shouldCommit = await processMessage(channel, payload);
+    
+                if (shouldCommit) {
+                    await consumer.commitOffsets([{
+                        topic: payload.topic,
+                        partition: payload.partition,
+                        offset: (BigInt(payload.message.offset) + 1n).toString()
+                    }]);
+                }
+            }catch(err){
+                logger.error(`[${channel}] Error in eachMessage handler at partition ${payload.partition}, offset ${payload.message.offset}:`, err);
+                // Don't commit - message will be redelivered
+                // Consider: if this is a poison message, it could loop forever on rebalance
             }
         }
     });
