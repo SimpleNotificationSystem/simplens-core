@@ -1,0 +1,45 @@
+{
+  "name": "@simplens/onboard",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "simplens-onboard": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
+  },
+  "keywords": [
+    "simplens",
+    "notification",
+    "cli",
+    "onboard",
+    "setup"
+  ],
+  "author": "SimpleNS Team",
+  "license": "ISC",
+  "description": "CLI tool to setup SimpleNS instance on any AMD64 machine",
+  "devDependencies": {
+    "@types/figlet": "^1.7.0",
+    "@types/inquirer": "^9.0.7",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.19.30",
+    "@vitest/ui": "^4.0.18",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^14.0.2",
+    "execa": "^8.0.1",
+    "figlet": "^1.10.0",
+    "inquirer": "^9.2.12",
+    "js-yaml": "^4.1.0",
+    "ora": "^7.0.1"
+  }
+}

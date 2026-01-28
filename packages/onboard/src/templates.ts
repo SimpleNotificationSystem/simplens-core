@@ -1,0 +1,215 @@
+// Docker Compose templates as constants
+
+export const INFRA_COMPOSE_TEMPLATE = `# ============================================
+# INFRA_HOST: Set this in .env to your machine's IP/hostname when running
+#             infrastructure on a separate system from application services.
+#             Default: host.docker.internal (for same-system deployment)
+# ============================================
+
+services:
+  # ============================================
+  # Infrastructure Services
+  # ============================================
+  mongo:
+    image: mongo:7.0
+    container_name: mongo
+    command: [ "--replSet", "rs0", "--bind_ip_all", "--port", "27017" ]
+    ports:
+      - 27017:27017
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: echo "try { rs.status() } catch (err) { rs.initiate({_id:'rs0',members:[{_id:0,host:'{{INFRA_HOST}}:27017'}]}) }" | mongosh --port 27017 --quiet
+      interval: 5s
+      timeout: 30s
+      start_period: 0s
+      start_interval: 1s
+      retries: 30
+    volumes:
+      - "mongo_data:/data/db"
+      - "mongo_config:/data/configdb"
+
+  kafka:
+    image: apache/kafka-native
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      # Configure listeners for both docker and host communication
+      KAFKA_LISTENERS: CONTROLLER://localhost:9091,HOST://0.0.0.0:9092,DOCKER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: HOST://{{INFRA_HOST}}:9092,DOCKER://kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,DOCKER:PLAINTEXT,HOST:PLAINTEXT
+
+      # Settings required for KRaft mode
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9091
+
+      # Listener to use for broker-to-broker communication
+      KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER
+
+      # Required for a single node cluster
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+      # Disable auto-topic creation - API server will create topics with correct partitions
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    volumes:
+      - "kafka_data:/var/lib/kafka/data"
+
+  kafka-ui:
+    image: kafbat/kafka-ui:main
+    container_name: kafka-ui
+    ports:
+      - 8080:8080
+    environment:
+      DYNAMIC_CONFIG_ENABLED: "true"
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9093
+    depends_on:
+      - kafka
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - "redis_data:/data"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ============================================
+  # Observability Services
+  # ============================================
+
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - "loki_data:/loki"
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - "grafana_data:/var/lib/grafana"
+    depends_on:
+      loki:
+        condition: service_healthy
+
+volumes:
+  mongo_data:
+  mongo_config:
+  kafka_data:
+  redis_data:
+  loki_data:
+  grafana_data:
+`;
+
+export const APP_COMPOSE_TEMPLATE = `services:
+  api:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    container_name: api
+    ports:
+      - 3000:3000
+    env_file:
+      - .env
+    volumes:
+      - plugin-data:/app/.plugins
+      - ./simplens.config.yaml:/app/simplens.config.yaml:ro
+    command: [ "node", "dist/api/server.js" ]
+    networks:
+      - simplens
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  worker:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    env_file:
+      - .env
+    command: [ "node", "dist/workers/worker.js" ]
+    networks:
+      - simplens
+    restart: unless-stopped
+
+  notification_processor:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    env_file:
+      - .env
+    volumes:
+      - plugin-data:/app/.plugins
+      - ./simplens.config.yaml:/app/simplens.config.yaml:ro
+    command: [ "node", "dist/processors/unified/unified.processor.js" ]
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - simplens
+    restart: unless-stopped
+
+  delayed_processor:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    env_file:
+      - .env
+    command: [ "node", "dist/processors/delayed/delayed.processor.js" ]
+    networks:
+      - simplens
+    restart: unless-stopped
+
+  recovery:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    env_file:
+      - .env
+    command: [ "node", "dist/workers/recovery/recovery.service.js" ]
+    networks:
+      - simplens
+    restart: unless-stopped
+
+  dashboard:
+    image: ghcr.io/simplenotificationsystem/simplens-dashboard:latest
+    ports:
+      - 3002:3002
+    container_name: dashboard
+    env_file:
+      - .env
+    environment:
+      PORT: \${DASHBOARD_PORT:-3002}
+      API_BASE_URL: http://api:\${PORT:-3000}
+      WEBHOOK_HOST: dashboard
+      WEBHOOK_PORT: \${DASHBOARD_PORT:-3002}
+    networks:
+      - simplens
+    restart: unless-stopped
+
+volumes:
+  plugin-data:
+
+networks:
+  simplens:
+    driver: bridge
+`;
