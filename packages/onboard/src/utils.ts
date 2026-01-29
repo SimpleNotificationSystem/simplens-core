@@ -97,5 +97,9 @@ export async function readFile(filePath: string): Promise<string> {
  * Append content to file
  */
 export async function appendFile(filePath: string, content: string): Promise<void> {
+    // Ensure parent directory exists, similar to writeFile
+    const dir = path.dirname(filePath);
+    await fs.mkdir(dir, { recursive: true });
+    
     await fs.appendFile(filePath, content, 'utf-8');
 }

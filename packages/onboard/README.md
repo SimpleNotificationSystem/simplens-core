@@ -1,6 +1,6 @@
 # @simplens/onboard
 
-> CLI tool to setup SimpleNS instances on any linux/amd64 machine
+> CLI tool to setup SimpleNS instances on any linux/amd64 and windows machine
 
 ## Overview
 
@@ -130,19 +130,6 @@ After successful setup, access these URLs:
 - **Kafka UI**: http://localhost:8080 (if Kafka selected)
 - **Grafana**: http://localhost:3001 (if Grafana selected)
 
-## OS-Specific Notes
-
-### Linux
-
-On Linux, `host.docker.internal` doesn't work by default. The tool will:
-- Detect Linux OS
-- Prompt for machine IP or suggest Docker bridge IP (`172.17.0.1`)
-- Configure infrastructure services with the correct host
-
-### Windows/macOS
-
-Uses `host.docker.internal` automatically for seamless Docker networking.
-
 ## Examples
 
 ### Minimal Setup
@@ -187,13 +174,6 @@ Please start Docker Desktop or Docker daemon.
 ```
 
 **Solution**: Start Docker Desktop (Windows/Mac) or `sudo systemctl start docker` (Linux)
-
-### Linux Host Configuration
-
-If you see connection errors on Linux, ensure:
-- Correct machine IP is provided during setup
-- Firewall allows Docker bridge network
-- Use `172.17.0.1` as fallback for local-only setup
 
 ### Plugin Installation Failed
 
