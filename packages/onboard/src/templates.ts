@@ -1,11 +1,6 @@
 // Docker Compose templates as constants
 
-export const INFRA_COMPOSE_TEMPLATE = `# ============================================
-# INFRA_HOST: Set this in .env to your machine's IP/hostname when running
-#             infrastructure on a separate system from application services.
-#             Default: host.docker.internal (for same-system deployment)
-# ============================================
-
+export const INFRA_COMPOSE_TEMPLATE = `
 services:
   # ============================================
   # Infrastructure Services
@@ -16,10 +11,8 @@ services:
     command: [ "--replSet", "rs0", "--bind_ip_all", "--port", "27017" ]
     ports:
       - 27017:27017
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     healthcheck:
-      test: echo "try { rs.status() } catch (err) { rs.initiate({_id:'rs0',members:[{_id:0,host:'{{INFRA_HOST}}:27017'}]}) }" | mongosh --port 27017 --quiet
+      test: echo "try { rs.status() } catch (err) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}) }" | mongosh --port 27017 --quiet
       interval: 5s
       timeout: 30s
       start_period: 0s
@@ -37,7 +30,7 @@ services:
     environment:
       # Configure listeners for both docker and host communication
       KAFKA_LISTENERS: CONTROLLER://localhost:9091,HOST://0.0.0.0:9092,DOCKER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: HOST://{{INFRA_HOST}}:9092,DOCKER://kafka:9093
+      KAFKA_ADVERTISED_LISTENERS: HOST://kafka:9092,DOCKER://kafka:9093
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,DOCKER:PLAINTEXT,HOST:PLAINTEXT
 
       # Settings required for KRaft mode

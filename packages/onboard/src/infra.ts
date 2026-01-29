@@ -46,45 +46,7 @@ export async function promptInfraServices(): Promise<string[]> {
     return answer.services;
 }
 
-/**
- * Get infrastructure host based on OS
- */
-export function getInfraHost(): string {
-    // const os = detectOS();
 
-    // if (os === 'linux') {
-    //     logWarning('Linux detected: host.docker.internal does not work by default.');
-        
-    //     const answer = await inquirer.prompt<{ hostChoice: string; customHost?: string }>([
-    //         {
-    //             type: 'list',
-    //             name: 'hostChoice',
-    //             message: 'Select host configuration:',
-    //             choices: [
-    //                 { name: 'Use Docker bridge IP (172.17.0.1)', value: '172.17.0.1' },
-    //                 { name: 'Enter custom IP/hostname', value: 'custom' },
-    //             ],
-    //         },
-    //         {
-    //             type: 'input',
-    //             name: 'customHost',
-    //             message: 'Enter your machine IP or hostname:',
-    //             when: (answers) => answers.hostChoice === 'custom',
-    //             validate: (input: string) => {
-    //                 if (!input || input.trim().length === 0) {
-    //                     return 'Please enter a valid IP or hostname';
-    //                 }
-    //                 return true;
-    //             },
-    //         },
-    //     ]);
-
-    //     return answer.hostChoice === 'custom' ? answer.customHost! : answer.hostChoice;
-    // }
-
-    // For Windows, linux and macOS, use host.docker.internal
-    return 'host.docker.internal';
-}
 
 /**
  * Service chunk definitions - each service as a complete block
@@ -96,10 +58,8 @@ const SERVICE_CHUNKS: Record<string, string> = {
     command: [ "--replSet", "rs0", "--bind_ip_all", "--port", "27017" ]
     ports:
       - 27017:27017
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     healthcheck:
-      test: echo "try { rs.status() } catch (err) { rs.initiate({_id:'rs0',members:[{_id:0,host:'{{INFRA_HOST}}:27017'}]}) }" | mongosh --port 27017 --quiet
+      test: echo "try { rs.status() } catch (err) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}) }" | mongosh --port 27017 --quiet
       interval: 5s
       timeout: 30s
       start_period: 0s
@@ -117,7 +77,7 @@ const SERVICE_CHUNKS: Record<string, string> = {
     environment:
       # Configure listeners for both docker and host communication
       KAFKA_LISTENERS: CONTROLLER://localhost:9091,HOST://0.0.0.0:9092,DOCKER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: HOST://{{INFRA_HOST}}:9092,DOCKER://kafka:9093
+      KAFKA_ADVERTISED_LISTENERS: HOST://kafka:9092,DOCKER://kafka:9093
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,DOCKER:PLAINTEXT,HOST:PLAINTEXT
 
       # Settings required for KRaft mode
@@ -212,9 +172,9 @@ const SERVICE_VOLUMES: Record<string, string[]> = {
 function buildInfraCompose(selectedServices: string[]): string {
     // Header
     const header = `# ============================================
-# INFRA_HOST: Set this in .env to your machine's IP/hostname when running
-#             infrastructure on a separate system from application services.
-#             Default: host.docker.internal (for same-system deployment)
+# SimpleNS Infrastructure Services
+# All services use Docker service names for container-to-container communication.
+# This ensures cross-platform compatibility (Windows, Linux, macOS).
 # ============================================
 
 services:
@@ -255,12 +215,7 @@ services:
     ].join('\n');
 }
 
-/**
- * Replace INFRA_HOST placeholder in template
- */
-export function replaceInfraHost(template: string, infraHost: string): string {
-    return template.replace(/\{\{INFRA_HOST\}\}/g, infraHost);
-}
+
 
 /**
  * Generate and write docker-compose.infra.yaml
@@ -268,26 +223,16 @@ export function replaceInfraHost(template: string, infraHost: string): string {
 export async function generateInfraCompose(
     targetDir: string,
     selectedServices: string[]
-): Promise<string> {
+): Promise<void> {
     logInfo('Generating docker-compose.infra.yaml...');
 
-    // Get infrastructure host
-    const infraHost = getInfraHost();
-    logSuccess(`Using infrastructure host: ${infraHost}`);
-
     // Build compose content from service chunks
-    let infraContent = buildInfraCompose(selectedServices);
-    
-    // Replace host placeholder
-    infraContent = replaceInfraHost(infraContent, infraHost);
+    const infraContent = buildInfraCompose(selectedServices);
 
     // Write infrastructure compose file
     const infraPath = path.join(targetDir, 'docker-compose.infra.yaml');
     await writeFile(infraPath, infraContent);
     logSuccess('Generated docker-compose.infra.yaml');
-
-    // Return infraHost for env configuration
-    return infraHost;
 }
 
 /**

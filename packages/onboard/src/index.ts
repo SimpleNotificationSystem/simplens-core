@@ -118,12 +118,11 @@ async function main() {
 
         // Step 2: Infrastructure setup (if --infra flag is provided)
         let selectedInfraServices: string[] = [];
-        let infraHost = 'host.docker.internal';
 
         if (setupOptions.infra) {
             logInfo('\n🏗️  Infrastructure Setup\n');
             selectedInfraServices = await promptInfraServices();
-            infraHost = await generateInfraCompose(targetDir, selectedInfraServices);
+            await generateInfraCompose(targetDir, selectedInfraServices);
         } else {
             logInfo('\n⏭️  Skipping infrastructure setup (use --infra to enable)');
         }
@@ -135,7 +134,7 @@ async function main() {
         // Step 3: Environment configuration
         logInfo('\n⚙️  Environment Configuration\n');
         const envMode = setupOptions.envMode;
-        const envVars = await promptEnvVariables(envMode, selectedInfraServices, infraHost);
+        const envVars = await promptEnvVariables(envMode, selectedInfraServices);
         await generateEnvFile(targetDir, envVars);
 
         // Step 4: Plugin installation

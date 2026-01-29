@@ -10,14 +10,6 @@ import type { EnvVariable } from './types/domain.js';
 export async function loadEnvExample(): Promise<EnvVariable[]> {
     // Embedded .env template - always available regardless of installation
     const envTemplate = `
-# ============================================
-# INFRASTRUCTURE HOST CONFIGURATION
-# ============================================
-INFRA_HOST=host.docker.internal
-
-# ============================================
-# CONNECTION URLS
-# ============================================
 NODE_ENV=production
 # ============================================
 # API SERVER
@@ -172,27 +164,26 @@ function parseEnvContent(content: string): EnvVariable[] {
  */
 export async function promptEnvVariables(
     mode: 'default' | 'interactive',
-    infraServices: string[],
-    infraHost: string
+    infraServices: string[]
 ): Promise<Map<string, string>> {
     logInfo('Configuring environment variables...');
 
     const envVars = await loadEnvExample();
     const result = new Map<string, string>();
 
-    // Auto-fill infra connection URLs based on selected services and host
+    // Auto-fill infra connection URLs based on selected services using Docker service names
     const autoInfraUrls: Record<string, string> = {
         MONGO_URI: infraServices.includes('mongo') 
-            ? (infraHost==="host.docker.internal"?`mongodb://mongo:27017/simplens?replicaSet=rs0`:`mongodb://${infraHost}:27017/simplens?replicaSet=rs0`) 
+            ? `mongodb://mongo:27017/simplens?replicaSet=rs0`
             : '',
         BROKERS: infraServices.includes('kafka') 
-            ? (infraHost==="host.docker.internal"?"kafka:9093":`${infraHost}:9092`) 
+            ? 'kafka:9093'
             : '',
         REDIS_URL: infraServices.includes('redis') 
-            ? (infraHost==="host.docker.internal"?"redis://redis:6379":`redis://${infraHost}:6379`) 
+            ? 'redis://redis:6379'
             : '',
         LOKI_URL: infraServices.includes('loki') 
-            ? (infraHost==="host.docker.internal"?"http://loki:3100":`http://${infraHost}:3100`) 
+            ? 'http://loki:3100'
             : '',
     };
 
