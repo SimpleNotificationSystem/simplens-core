@@ -5,12 +5,20 @@ on:
     branches:
       - main
       - master
+    paths:
+      - 'dashboard/**'
+      - 'src/**'
+      - '.github/workflows/build-and-push.yml'
     tags:
       - 'v*.*.*'
   pull_request:
     branches:
       - main
       - master
+    paths:
+      - 'dashboard/**'
+      - 'src/**'
+      - '.github/workflows/build-and-push.yml'
   workflow_dispatch:
 
 # Cancel in-progress runs on new commits to same branch
