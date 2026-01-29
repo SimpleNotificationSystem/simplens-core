@@ -103,8 +103,8 @@ AUTH_SECRET=
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=
 AUTH_TRUST_HOST=true
-API_BASE_URL=http://localhost:3000
-WEBHOOK_HOST=localhost
+API_BASE_URL=http://api:3000
+WEBHOOK_HOST=dashboard
 WEBHOOK_PORT=3002
 DASHBOARD_PORT=3002
 `;
@@ -183,16 +183,16 @@ export async function promptEnvVariables(
     // Auto-fill infra connection URLs based on selected services and host
     const autoInfraUrls: Record<string, string> = {
         MONGO_URI: infraServices.includes('mongo') 
-            ? `mongodb://${infraHost}:27017/simplens?replicaSet=rs0` 
+            ? (infraHost==="host.docker.internal"?`mongodb://mongo:27017/simplens?replicaSet=rs0`:`mongodb://${infraHost}:27017/simplens?replicaSet=rs0`) 
             : '',
         BROKERS: infraServices.includes('kafka') 
-            ? `${infraHost}:9092` 
+            ? (infraHost==="host.docker.internal"?"kafka:9093":`${infraHost}:9092`) 
             : '',
         REDIS_URL: infraServices.includes('redis') 
-            ? `redis://${infraHost}:6379` 
+            ? (infraHost==="host.docker.internal"?"redis://redis:6379":`redis://${infraHost}:6379`) 
             : '',
         LOKI_URL: infraServices.includes('loki') 
-            ? `http://${infraHost}:3100` 
+            ? (infraHost==="host.docker.internal"?"http://loki:3100":`http://${infraHost}:3100`) 
             : '',
     };
 

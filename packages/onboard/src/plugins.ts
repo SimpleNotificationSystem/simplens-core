@@ -106,9 +106,10 @@ export async function generatePluginConfig(
         const configPath = path.join(targetDir, 'simplens.config.yaml');
         
         // Execute config-gen for all selected plugins
+        // Use relative path to avoid WSL path issues when npx runs Windows binaries
         await execa(
             'npx',
-            ['@simplens/config-gen', 'gen', ...selectedPlugins, '-o', configPath],
+            ['@simplens/config-gen', 'gen', ...selectedPlugins, '-o', 'simplens.config.yaml'],
             { cwd: targetDir, stdio: 'inherit' }
         );
 

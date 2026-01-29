@@ -138,8 +138,6 @@ export const APP_COMPOSE_TEMPLATE = `services:
       - plugin-data:/app/.plugins
       - ./simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/api/server.js" ]
-    networks:
-      - simplens
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))" ]
@@ -153,8 +151,6 @@ export const APP_COMPOSE_TEMPLATE = `services:
     env_file:
       - .env
     command: [ "node", "dist/workers/worker.js" ]
-    networks:
-      - simplens
     restart: unless-stopped
 
   notification_processor:
@@ -168,8 +164,6 @@ export const APP_COMPOSE_TEMPLATE = `services:
     depends_on:
       api:
         condition: service_healthy
-    networks:
-      - simplens
     restart: unless-stopped
 
   delayed_processor:
@@ -177,8 +171,6 @@ export const APP_COMPOSE_TEMPLATE = `services:
     env_file:
       - .env
     command: [ "node", "dist/processors/delayed/delayed.processor.js" ]
-    networks:
-      - simplens
     restart: unless-stopped
 
   recovery:
@@ -186,8 +178,6 @@ export const APP_COMPOSE_TEMPLATE = `services:
     env_file:
       - .env
     command: [ "node", "dist/workers/recovery/recovery.service.js" ]
-    networks:
-      - simplens
     restart: unless-stopped
 
   dashboard:
@@ -202,14 +192,12 @@ export const APP_COMPOSE_TEMPLATE = `services:
       API_BASE_URL: http://api:\${PORT:-3000}
       WEBHOOK_HOST: dashboard
       WEBHOOK_PORT: \${DASHBOARD_PORT:-3002}
-    networks:
-      - simplens
     restart: unless-stopped
 
 volumes:
   plugin-data:
 
 networks:
-  simplens:
-    driver: bridge
+  default:
+    name: simplens
 `;

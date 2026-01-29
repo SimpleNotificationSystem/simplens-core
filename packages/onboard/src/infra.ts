@@ -49,40 +49,40 @@ export async function promptInfraServices(): Promise<string[]> {
 /**
  * Get infrastructure host based on OS
  */
-export async function getInfraHost(): Promise<string> {
-    const os = detectOS();
+export function getInfraHost(): string {
+    // const os = detectOS();
 
-    if (os === 'linux') {
-        logWarning('Linux detected: host.docker.internal does not work by default.');
+    // if (os === 'linux') {
+    //     logWarning('Linux detected: host.docker.internal does not work by default.');
         
-        const answer = await inquirer.prompt<{ hostChoice: string; customHost?: string }>([
-            {
-                type: 'list',
-                name: 'hostChoice',
-                message: 'Select host configuration:',
-                choices: [
-                    { name: 'Use Docker bridge IP (172.17.0.1)', value: '172.17.0.1' },
-                    { name: 'Enter custom IP/hostname', value: 'custom' },
-                ],
-            },
-            {
-                type: 'input',
-                name: 'customHost',
-                message: 'Enter your machine IP or hostname:',
-                when: (answers) => answers.hostChoice === 'custom',
-                validate: (input: string) => {
-                    if (!input || input.trim().length === 0) {
-                        return 'Please enter a valid IP or hostname';
-                    }
-                    return true;
-                },
-            },
-        ]);
+    //     const answer = await inquirer.prompt<{ hostChoice: string; customHost?: string }>([
+    //         {
+    //             type: 'list',
+    //             name: 'hostChoice',
+    //             message: 'Select host configuration:',
+    //             choices: [
+    //                 { name: 'Use Docker bridge IP (172.17.0.1)', value: '172.17.0.1' },
+    //                 { name: 'Enter custom IP/hostname', value: 'custom' },
+    //             ],
+    //         },
+    //         {
+    //             type: 'input',
+    //             name: 'customHost',
+    //             message: 'Enter your machine IP or hostname:',
+    //             when: (answers) => answers.hostChoice === 'custom',
+    //             validate: (input: string) => {
+    //                 if (!input || input.trim().length === 0) {
+    //                     return 'Please enter a valid IP or hostname';
+    //                 }
+    //                 return true;
+    //             },
+    //         },
+    //     ]);
 
-        return answer.hostChoice === 'custom' ? answer.customHost! : answer.hostChoice;
-    }
+    //     return answer.hostChoice === 'custom' ? answer.customHost! : answer.hostChoice;
+    // }
 
-    // For Windows and macOS, use host.docker.internal
+    // For Windows, linux and macOS, use host.docker.internal
     return 'host.docker.internal';
 }
 
@@ -243,11 +243,15 @@ services:
         volumeLines.push(`  ${volume}:`);
     }
     
+    // Build networks section with custom default network name
+    const networkLines: string[] = ['', 'networks:', '  default:', '    name: simplens'];
+    
     // Combine all parts
     return [
         header,
         serviceBlocks.join('\n\n'),
         volumeLines.join('\n'),
+        networkLines.join('\n'),
     ].join('\n');
 }
 
@@ -268,7 +272,7 @@ export async function generateInfraCompose(
     logInfo('Generating docker-compose.infra.yaml...');
 
     // Get infrastructure host
-    const infraHost = await getInfraHost();
+    const infraHost = getInfraHost();
     logSuccess(`Using infrastructure host: ${infraHost}`);
 
     // Build compose content from service chunks
