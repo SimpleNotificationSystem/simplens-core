@@ -12,6 +12,7 @@ const mockConsumerRun = vi.fn();
 const mockConsumerStop = vi.fn();
 const mockConsumerDisconnect = vi.fn();
 const mockConsumerConnect = vi.fn();
+const mockConsumerCommitOffsets = vi.fn();
 
 const mockConsumer = {
     connect: mockConsumerConnect,
@@ -19,6 +20,7 @@ const mockConsumer = {
     run: mockConsumerRun,
     stop: mockConsumerStop,
     disconnect: mockConsumerDisconnect,
+    commitOffsets: mockConsumerCommitOffsets,
 };
 
 const mockAddToDelayedQueue = vi.fn();
@@ -53,6 +55,7 @@ describe('Delayed Consumer', () => {
         capturedMessageHandler = null;
 
         mockAddToDelayedQueue.mockResolvedValue(undefined);
+        mockConsumerCommitOffsets.mockResolvedValue(undefined);
 
         // Capture the message handler when run is called
         mockConsumerRun.mockImplementation(async (config: any) => {
@@ -87,6 +90,16 @@ describe('Delayed Consumer', () => {
             expect(kafkaModule.kafka.consumer).toHaveBeenCalledWith(
                 expect.objectContaining({
                     groupId: 'delayed-worker-group',
+                })
+            );
+        });
+
+        it('should configure consumer with autoCommit: false', async () => {
+            await delayedConsumer.startDelayedConsumer();
+
+            expect(mockConsumerRun).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    autoCommit: false,
                 })
             );
         });
@@ -148,6 +161,53 @@ describe('Delayed Consumer', () => {
             expect(mockAddToDelayedQueue).toHaveBeenCalled();
         });
 
+        it('should commit offset after adding to delayed queue', async () => {
+            const notification = createMockDelayedNotification();
+            const notificationForJson = {
+                ...notification,
+                notification_id: notification.notification_id.toString(),
+            };
+            const kafkaMessage = createKafkaMessage(notificationForJson);
+
+            await capturedMessageHandler!(kafkaMessage);
+
+            expect(mockConsumerCommitOffsets).toHaveBeenCalledWith([{
+                topic: 'delayed_notification',
+                partition: 0,
+                offset: '1',
+            }]);
+        });
+
+        it('should not commit offset if queue add fails', async () => {
+            const notification = createMockDelayedNotification();
+            const notificationForJson = {
+                ...notification,
+                notification_id: notification.notification_id.toString(),
+            };
+            const kafkaMessage = createKafkaMessage(notificationForJson);
+
+            mockAddToDelayedQueue.mockRejectedValueOnce(new Error('Redis error'));
+
+            await capturedMessageHandler!(kafkaMessage);
+
+            expect(mockConsumerCommitOffsets).not.toHaveBeenCalled();
+        });
+
+        it('should continue processing if commit fails', async () => {
+            const notification = createMockDelayedNotification();
+            const notificationForJson = {
+                ...notification,
+                notification_id: notification.notification_id.toString(),
+            };
+            const kafkaMessage = createKafkaMessage(notificationForJson);
+
+            mockConsumerCommitOffsets.mockRejectedValueOnce(new Error('Commit failed'));
+
+            // Should not throw
+            await expect(capturedMessageHandler!(kafkaMessage)).resolves.not.toThrow();
+            expect(mockConsumerCommitOffsets).toHaveBeenCalled();
+        });
+
         it('should skip empty messages', async () => {
             const kafkaMessage = {
                 topic: 'delayed_notification',
@@ -161,6 +221,7 @@ describe('Delayed Consumer', () => {
             await capturedMessageHandler!(kafkaMessage);
 
             expect(mockAddToDelayedQueue).not.toHaveBeenCalled();
+            expect(mockConsumerCommitOffsets).not.toHaveBeenCalled();
         });
 
         it('should skip messages that fail schema validation', async () => {
@@ -176,6 +237,7 @@ describe('Delayed Consumer', () => {
             await capturedMessageHandler!(kafkaMessage);
 
             expect(mockAddToDelayedQueue).not.toHaveBeenCalled();
+            expect(mockConsumerCommitOffsets).not.toHaveBeenCalled();
         });
 
         it('should handle JSON parse errors gracefully', async () => {
@@ -191,6 +253,7 @@ describe('Delayed Consumer', () => {
             // Should not throw
             await expect(capturedMessageHandler!(kafkaMessage)).resolves.not.toThrow();
             expect(mockAddToDelayedQueue).not.toHaveBeenCalled();
+            expect(mockConsumerCommitOffsets).not.toHaveBeenCalled();
         });
 
         it('should handle Redis queue errors gracefully', async () => {
@@ -208,3 +271,4 @@ describe('Delayed Consumer', () => {
         });
     });
 });
+

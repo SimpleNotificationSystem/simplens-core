@@ -24,13 +24,14 @@ const state: ConsumerState = {
 
 /**
  * Process a delayed notification message
+ * Returns true if message was successfully added to queue
  */
-const processDelayedMessage = async ({ topic, partition, message }: EachMessagePayload): Promise<void> => {
+const processDelayedMessage = async ({ partition, message }: EachMessagePayload): Promise<boolean> => {
     const messageValue = message.value?.toString();
 
     if (!messageValue) {
         logger.warn(`Empty message received on partition ${partition}`);
-        return;
+        return false;
     }
 
     try {
@@ -39,7 +40,7 @@ const processDelayedMessage = async ({ topic, partition, message }: EachMessageP
 
         if (!validationResult.success) {
             logger.error('Invalid delayed notification message:', validationResult.error.message);
-            return;
+            return false;
         }
 
         const delayedEvent = validationResult.data;
@@ -48,9 +49,11 @@ const processDelayedMessage = async ({ topic, partition, message }: EachMessageP
         logger.info(`Scheduled for: ${delayedEvent.scheduled_at}`);
 
         await addToDelayedQueue(delayedEvent);
+        return true;
 
     } catch (err) {
         logger.error('Failed to process delayed notification:', err);
+        return false;
     }
 };
 
@@ -82,7 +85,29 @@ export const startDelayedConsumer = async (): Promise<void> => {
     state.isConsuming = true;
 
     await state.consumer.run({
-        eachMessage: processDelayedMessage
+        autoCommit: false,
+        eachMessage: async (payload) => {
+            try {
+                const success = await processDelayedMessage(payload);
+
+                // Only commit if added to queue successfully
+                if (success) {
+                    try {
+                        await state.consumer!.commitOffsets([{
+                            topic: payload.topic,
+                            partition: payload.partition,
+                            offset: (BigInt(payload.message.offset) + 1n).toString()
+                        }]);
+                    } catch (commitErr) {
+                        logger.error(`Failed to commit offset for partition ${payload.partition}:`, commitErr);
+                        // Don't throw - consumer continues
+                    }
+                }
+            } catch (err) {
+                logger.error(`Error in message handler for partition ${payload.partition}:`, err);
+                // Don't commit - message will be redelivered
+            }
+        }
     });
 
     logger.success('Delayed consumer is running');

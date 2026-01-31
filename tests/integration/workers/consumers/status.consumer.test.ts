@@ -12,6 +12,7 @@ const mockConsumerRun = vi.fn();
 const mockConsumerStop = vi.fn();
 const mockConsumerDisconnect = vi.fn();
 const mockConsumerConnect = vi.fn();
+const mockConsumerCommitOffsets = vi.fn();
 
 const mockConsumer = {
     connect: mockConsumerConnect,
@@ -19,6 +20,7 @@ const mockConsumer = {
     run: mockConsumerRun,
     stop: mockConsumerStop,
     disconnect: mockConsumerDisconnect,
+    commitOffsets: mockConsumerCommitOffsets,
 };
 
 const mockFindByIdAndUpdate = vi.fn();
@@ -64,6 +66,7 @@ describe('Status Consumer', () => {
         capturedMessageHandler = null;
 
         mockFindByIdAndUpdate.mockResolvedValue({ _id: new mongoose.Types.ObjectId() });
+        mockConsumerCommitOffsets.mockResolvedValue(undefined);
 
         // Capture the message handler when run is called
         mockConsumerRun.mockImplementation(async (config: any) => {
@@ -104,6 +107,16 @@ describe('Status Consumer', () => {
             expect(kafkaModule.kafka.consumer).toHaveBeenCalledWith(
                 expect.objectContaining({
                     groupId: 'notification-status-group',
+                })
+            );
+        });
+
+        it('should configure consumer with autoCommit: false', async () => {
+            await statusConsumer.startStatusConsumer();
+
+            expect(mockConsumerRun).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    autoCommit: false,
                 })
             );
         });
@@ -155,6 +168,7 @@ describe('Status Consumer', () => {
         };
 
         const createKafkaMessage = (data: any) => ({
+            topic: 'notification_status',
             partition: 0,
             message: {
                 offset: '0',
@@ -181,8 +195,44 @@ describe('Status Consumer', () => {
             );
         });
 
+        it('should commit offset after successful MongoDB update', async () => {
+            const statusData = createStatusMessage();
+            const kafkaMessage = createKafkaMessage(statusData);
+
+            await capturedMessageHandler!(kafkaMessage);
+
+            expect(mockConsumerCommitOffsets).toHaveBeenCalledWith([{
+                topic: 'notification_status',
+                partition: 0,
+                offset: '1',
+            }]);
+        });
+
+        it('should not commit offset if MongoDB update fails', async () => {
+            const statusData = createStatusMessage();
+            const kafkaMessage = createKafkaMessage(statusData);
+
+            mockFindByIdAndUpdate.mockResolvedValueOnce(null);
+
+            await capturedMessageHandler!(kafkaMessage);
+
+            expect(mockConsumerCommitOffsets).not.toHaveBeenCalled();
+        });
+
+        it('should continue processing if commit fails', async () => {
+            const statusData = createStatusMessage();
+            const kafkaMessage = createKafkaMessage(statusData);
+
+            mockConsumerCommitOffsets.mockRejectedValueOnce(new Error('Commit failed'));
+
+            // Should not throw
+            await expect(capturedMessageHandler!(kafkaMessage)).resolves.not.toThrow();
+            expect(mockConsumerCommitOffsets).toHaveBeenCalled();
+        });
+
         it('should skip empty messages', async () => {
             const kafkaMessage = {
+                topic: 'notification_status',
                 partition: 0,
                 message: {
                     offset: '0',
@@ -193,10 +243,12 @@ describe('Status Consumer', () => {
             await capturedMessageHandler!(kafkaMessage);
 
             expect(mockFindByIdAndUpdate).not.toHaveBeenCalled();
+            expect(mockConsumerCommitOffsets).not.toHaveBeenCalled();
         });
 
         it('should skip messages that fail schema validation', async () => {
             const kafkaMessage = {
+                topic: 'notification_status',
                 partition: 0,
                 message: {
                     offset: '0',
@@ -207,6 +259,7 @@ describe('Status Consumer', () => {
             await capturedMessageHandler!(kafkaMessage);
 
             expect(mockFindByIdAndUpdate).not.toHaveBeenCalled();
+            expect(mockConsumerCommitOffsets).not.toHaveBeenCalled();
         });
 
         it('should store error message for failed status', async () => {
@@ -236,6 +289,9 @@ describe('Status Consumer', () => {
 
             await capturedMessageHandler!(kafkaMessage);
 
+            // Give the fire-and-forget webhook time to execute
+            await new Promise(resolve => setTimeout(resolve, 10));
+
             expect(global.fetch).toHaveBeenCalledWith(
                 'https://example.com/webhook',
                 expect.objectContaining({
@@ -256,7 +312,7 @@ describe('Status Consumer', () => {
             expect(global.fetch).not.toHaveBeenCalled();
         });
 
-        it('should handle webhook failure gracefully', async () => {
+        it('should handle webhook failure gracefully (single attempt)', async () => {
             const statusData = createStatusMessage();
             const kafkaMessage = createKafkaMessage(statusData);
 
@@ -268,6 +324,12 @@ describe('Status Consumer', () => {
 
             // Should not throw
             await expect(capturedMessageHandler!(kafkaMessage)).resolves.not.toThrow();
+
+            // Give the fire-and-forget webhook time to execute
+            await new Promise(resolve => setTimeout(resolve, 10));
+
+            // Webhook should only be called once (no retries)
+            expect(global.fetch).toHaveBeenCalledTimes(1);
         });
 
         it('should handle notification not found gracefully', async () => {
@@ -282,6 +344,7 @@ describe('Status Consumer', () => {
 
         it('should handle JSON parse errors gracefully', async () => {
             const kafkaMessage = {
+                topic: 'notification_status',
                 partition: 0,
                 message: {
                     offset: '0',
@@ -294,36 +357,7 @@ describe('Status Consumer', () => {
             expect(mockFindByIdAndUpdate).not.toHaveBeenCalled();
         });
 
-        it('should retry webhook on 5xx errors', async () => {
-            const statusData = createStatusMessage();
-            const kafkaMessage = createKafkaMessage(statusData);
-
-            // First call fails with 500, second succeeds
-            (global.fetch as any)
-                .mockResolvedValueOnce({ ok: false, status: 500 })
-                .mockResolvedValueOnce({ ok: true, status: 200 });
-
-            await capturedMessageHandler!(kafkaMessage);
-
-            expect(global.fetch).toHaveBeenCalledTimes(2);
-        });
-
-        it('should not retry webhook on 4xx errors', async () => {
-            const statusData = createStatusMessage();
-            const kafkaMessage = createKafkaMessage(statusData);
-
-            (global.fetch as any).mockResolvedValueOnce({
-                ok: false,
-                status: 400,
-                statusText: 'Bad Request',
-            });
-
-            await capturedMessageHandler!(kafkaMessage);
-
-            expect(global.fetch).toHaveBeenCalledTimes(1);
-        });
-
-        it('should handle webhook timeout (AbortError)', async () => {
+        it('should handle webhook timeout (AbortError) gracefully (single attempt)', async () => {
             const statusData = createStatusMessage();
             const kafkaMessage = createKafkaMessage(statusData);
 
@@ -333,36 +367,12 @@ describe('Status Consumer', () => {
 
             // Should not throw - handle timeout gracefully
             await expect(capturedMessageHandler!(kafkaMessage)).resolves.not.toThrow();
-        });
 
-        it('should retry on network errors with exponential backoff', async () => {
-            const statusData = createStatusMessage();
-            const kafkaMessage = createKafkaMessage(statusData);
+            // Give the fire-and-forget webhook time to execute
+            await new Promise(resolve => setTimeout(resolve, 10));
 
-            const networkError = new Error('Network failure');
-            (global.fetch as any)
-                .mockRejectedValueOnce(networkError)
-                .mockRejectedValueOnce(networkError)
-                .mockResolvedValueOnce({ ok: true, status: 200 });
-
-            await capturedMessageHandler!(kafkaMessage);
-
-            // Should have retried 3 times
-            expect(global.fetch).toHaveBeenCalledTimes(3);
-        });
-
-        it('should give up after max retries on persistent network errors', async () => {
-            const statusData = createStatusMessage();
-            const kafkaMessage = createKafkaMessage(statusData);
-
-            const networkError = new Error('Network failure');
-            (global.fetch as any).mockRejectedValue(networkError);
-
-            // Should not throw
-            await expect(capturedMessageHandler!(kafkaMessage)).resolves.not.toThrow();
-
-            // Should have tried max times (3 attempts)
-            expect(global.fetch).toHaveBeenCalledTimes(3);
+            // Webhook should only be called once (no retries)
+            expect(global.fetch).toHaveBeenCalledTimes(1);
         });
     });
 
@@ -376,3 +386,4 @@ describe('Status Consumer', () => {
         });
     });
 });
+
