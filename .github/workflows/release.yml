@@ -1,0 +1,150 @@
+name: Create GitHub Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to create release for (e.g., v1.0.0)'
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  CORE_IMAGE_NAME: ${{ github.repository_owner }}/simplens-core
+  DASHBOARD_IMAGE_NAME: ${{ github.repository_owner }}/simplens-dashboard
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for commit analysis
+
+      - name: Get release tag
+        id: get_tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+          echo "Release tag: $TAG"
+
+      - name: Get previous tag
+        id: prev_tag
+        run: |
+          CURRENT_TAG="${{ steps.get_tag.outputs.tag }}"
+          # Get the previous tag (excluding current)
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^$CURRENT_TAG$" | head -n 1)
+          
+          if [ -z "$PREV_TAG" ]; then
+            # No previous tag, get all commits
+            echo "range=" >> $GITHUB_OUTPUT
+            echo "No previous tag found, will include all commits"
+          else
+            echo "range=$PREV_TAG..$CURRENT_TAG" >> $GITHUB_OUTPUT
+            echo "Commit range: $PREV_TAG..$CURRENT_TAG"
+          fi
+          echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          RANGE="${{ steps.prev_tag.outputs.range }}"
+          VERSION="${{ steps.get_tag.outputs.version }}"
+          TAG="${{ steps.get_tag.outputs.tag }}"
+          PREV_TAG="${{ steps.prev_tag.outputs.prev_tag }}"
+          
+          # Get commits
+          if [ -z "$RANGE" ]; then
+            COMMITS=$(git log --oneline --format="%H %s")
+          else
+            COMMITS=$(git log --oneline --format="%H %s" $RANGE)
+          fi
+          
+          # Initialize categories
+          FEATURES=""
+          BUGFIXES=""
+          OTHER=""
+          
+          # Process each commit
+          while IFS= read -r line; do
+            if [ -z "$line" ]; then
+              continue
+            fi
+            
+            HASH=$(echo "$line" | awk '{print $1}')
+            SHORT_HASH=$(echo "$HASH" | cut -c1-7)
+            MESSAGE=$(echo "$line" | cut -d' ' -f2-)
+            LOWER_MSG=$(echo "$MESSAGE" | tr '[:upper:]' '[:lower:]')
+            
+            # Create commit link
+            COMMIT_LINK="[\`$SHORT_HASH\`](https://github.com/${{ github.repository }}/commit/$HASH)"
+            
+            # Categorize based on keywords (case-insensitive)
+            if echo "$LOWER_MSG" | grep -qE "(feature|feat|add|new|implement)"; then
+              FEATURES="$FEATURES- $MESSAGE ($COMMIT_LINK)"$'\n'
+            elif echo "$LOWER_MSG" | grep -qE "(fix|bug|bugfix|bug-fix|fixed|resolve|patch)"; then
+              BUGFIXES="$BUGFIXES- $MESSAGE ($COMMIT_LINK)"$'\n'
+            else
+              OTHER="$OTHER- $MESSAGE ($COMMIT_LINK)"$'\n'
+            fi
+          done <<< "$COMMITS"
+          
+          # Build release body
+          BODY=""
+          
+          # Add comparison link if there's a previous tag
+          if [ -n "$PREV_TAG" ]; then
+            BODY="**Full Changelog**: https://github.com/${{ github.repository }}/compare/$PREV_TAG...$TAG"$'\n\n'
+          fi
+          
+          if [ -n "$FEATURES" ]; then
+            BODY="$BODY## 🚀 Features"$'\n\n'"$FEATURES"$'\n'
+          fi
+          
+          if [ -n "$BUGFIXES" ]; then
+            BODY="$BODY## 🐛 Bug Fixes"$'\n\n'"$BUGFIXES"$'\n'
+          fi
+          
+          if [ -n "$OTHER" ]; then
+            BODY="$BODY## 📦 Other Changes"$'\n\n'"$OTHER"$'\n'
+          fi
+          
+          # Add Docker images section
+          BODY="$BODY---"$'\n\n'
+          BODY="$BODY## 🐳 Docker Images"$'\n\n'
+          BODY="$BODY| Service | Image |"$'\n'
+          BODY="$BODY|---------|-------|"$'\n'
+          BODY="$BODY| Core | \`${{ env.REGISTRY }}/${{ env.CORE_IMAGE_NAME }}:$VERSION\` |"$'\n'
+          BODY="$BODY| Dashboard | \`${{ env.REGISTRY }}/${{ env.DASHBOARD_IMAGE_NAME }}:$VERSION\` |"$'\n\n'
+          BODY="$BODY\`\`\`bash"$'\n'
+          BODY="$BODY# Pull images for this release"$'\n'
+          BODY="${BODY}docker pull ${{ env.REGISTRY }}/${{ env.CORE_IMAGE_NAME }}:$VERSION"$'\n'
+          BODY="${BODY}docker pull ${{ env.REGISTRY }}/${{ env.DASHBOARD_IMAGE_NAME }}:$VERSION"$'\n'
+          BODY="$BODY\`\`\`"$'\n'
+          
+          # Save to file (to handle multiline output)
+          echo "$BODY" > release_notes.md
+          cat release_notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_tag.outputs.tag }}
+          name: Release ${{ steps.get_tag.outputs.tag }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(steps.get_tag.outputs.tag, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
