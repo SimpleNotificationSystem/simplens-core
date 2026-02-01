@@ -4,15 +4,14 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+import { API_BASE_URL } from "@/lib/api-config";
 
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
 
         // Proxy to backend API
-        const response = await fetch(`${API_URL}/api/admin-channels/test`, {
+        const response = await fetch(`${API_BASE_URL}/api/admin-channels/test`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),

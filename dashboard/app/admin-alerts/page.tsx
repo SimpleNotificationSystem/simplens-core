@@ -21,12 +21,8 @@ import { BellRing, Plus, Trash2 } from "lucide-react";
 import { ComponentType, useState } from "react";
 import { AddChannelDialog } from "@/components/admin-alerts/add-channel-dialog";
 import type { AdminChannel } from "@/lib/types";
-import { DiscordIcon } from "@/components/admin-alerts/add-channel-dialog";
+import { CHANNEL_ICONS } from "@/components/admin-alerts/add-channel-dialog";
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
-
-const CHANNEL_ICONS: Record<string, ComponentType<{ className?: string }>> = {
-    discord: DiscordIcon,
-};
 
 const ALERT_TYPE_LABELS: Record<string, string> = {
     failed_notifications: "Failed Notifications",

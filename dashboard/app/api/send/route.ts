@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
-
-const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:3000";
-const NS_API_KEY = process.env.NS_API_KEY || "";
-const WEBHOOK_HOST = process.env.WEBHOOK_HOST || "localhost";
-const WEBHOOK_PORT = process.env.WEBHOOK_PORT || "3002";
+import { API_BASE_URL, NS_API_KEY, WEBHOOK_HOST, WEBHOOK_PORT } from "@/lib/api-config";
 
 /**
  * Builds the webhook URL based on environment.

@@ -85,15 +85,16 @@ export function getAdminChannelMetadata(): AdminChannelMeta[] {
         // Create a temporary instance to get metadata
         // Using empty config since we only need schema info
         try {
-            const provider = factory({ webhook_url: '' });
+            // Pass empty config to factory - factory must handle this gracefully
+            const provider = factory({});
             metadata.push({
                 channelType,
                 displayName: provider.displayName,
                 credentialFields: provider.getCredentialSchema(),
             });
-        } catch {
+        } catch (err) {
             // Skip providers that fail to instantiate with empty config
-            console.warn(`Failed to get metadata for channel: ${channelType}`);
+            console.error(`Failed to get metadata for channel '${channelType}':`, err);
         }
     }
     

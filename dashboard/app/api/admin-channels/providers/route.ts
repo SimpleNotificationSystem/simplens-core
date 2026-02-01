@@ -4,14 +4,13 @@
  */
 
 import { NextResponse } from "next/server";
-
-const API_URL = process.env.API_BASE_URL || 'http://localhost:3000';
+import { API_BASE_URL } from "@/lib/api-config";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
     try {
-        const response = await fetch(`${API_URL}/api/admin-channels/providers`, {
+        const response = await fetch(`${API_BASE_URL}/api/admin-channels/providers`, {
             headers: { 'Content-Type': 'application/json' },
             cache: 'no-store',
         });

@@ -141,6 +141,7 @@ export class DiscordChannel implements AdminChannelProvider {
 
 // Self-register on module load
 registerChannelProvider('discord', (config: unknown) => {
-    const { webhook_url } = config as discord_config;
-    return new DiscordChannel(webhook_url);
+    // When called for metadata, config might be empty/partial
+    const { webhook_url } = (config || {}) as Partial<discord_config>;
+    return new DiscordChannel(webhook_url || '');
 });

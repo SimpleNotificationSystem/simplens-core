@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { AdminChannelModel } from "@/lib/models/admin-channel";
 import { getOrCreateEncryptionKey, encrypt } from "@/lib/encryption";
+import { API_BASE_URL } from "@/lib/api-config";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,20 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Note: Channel-specific validation is handled by the backend provider's credential schema
+        // Validate channel config against backend schema
+        const validationRes = await fetch(`${API_BASE_URL}/api/admin-channels/validate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel_type, config }),
+        });
+
+        if (!validationRes.ok) {
+            const errorData = await validationRes.json();
+            return NextResponse.json(
+                { error: "Validation failed", details: errorData.errors || [] },
+                { status: 400 }
+            );
+        }
 
         // Encrypt config before storing
         const encryptionKey = await getOrCreateEncryptionKey();
