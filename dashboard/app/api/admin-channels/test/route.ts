@@ -1,59 +1,29 @@
 /**
  * API Route: POST /api/admin-channels/test
- * Test channel connectivity before saving
+ * Proxies test request to backend API
  */
 
 import { NextRequest, NextResponse } from "next/server";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
 export async function POST(request: NextRequest) {
     try {
-        const { channel_type, config } = await request.json();
+        const body = await request.json();
 
-        if (channel_type === 'discord') {
-            const webhookUrl = config?.webhook_url;
+        // Proxy to backend API
+        const response = await fetch(`${API_URL}/api/admin-channels/test`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
 
-            // Validate webhook URL format
-            if (!webhookUrl?.startsWith('https://discord.com/api/webhooks/')) {
-                return NextResponse.json(
-                    { success: false, error: "Invalid Discord webhook URL" },
-                    { status: 400 }
-                );
-            }
-
-            // Send test message to Discord
-            const response = await fetch(webhookUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    embeds: [{
-                        title: '✅ SimpleNS Connection Test',
-                        description: 'Your Discord webhook is configured correctly! You will receive admin alerts on this channel.',
-                        color: 3066993, // Green
-                        timestamp: new Date().toISOString(),
-                        footer: { text: 'SimpleNS Admin Alerts' }
-                    }]
-                }),
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text().catch(() => 'Unknown error');
-                return NextResponse.json({
-                    success: false,
-                    error: `Discord API error: ${response.status} - ${errorText}`
-                });
-            }
-
-            return NextResponse.json({ success: true, message: "Test message sent!" });
-        }
-
-        return NextResponse.json(
-            { success: false, error: "Unsupported channel type" },
-            { status: 400 }
-        );
+        const data = await response.json();
+        return NextResponse.json(data, { status: response.status });
     } catch (error) {
         console.error("Error testing channel:", error);
         return NextResponse.json(
-            { success: false, error: "Test failed" },
+            { success: false, error: "Test failed - could not reach backend" },
             { status: 500 }
         );
     }

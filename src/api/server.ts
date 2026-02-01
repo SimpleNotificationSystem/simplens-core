@@ -5,6 +5,7 @@ import { connectMongoDB } from '@src/config/db.config.js';
 import { exit } from 'process';
 import notification_router from './routes/notification.routes.js';
 import plugins_router from './routes/plugins.routes.js';
+import admin_channels_router from './routes/admin-channels.routes.js';
 import { auth_middleware } from './middlewares/auth_middleware.js';
 import http from 'http';
 import helmet from 'helmet';
@@ -13,6 +14,9 @@ import { createTopics } from '@src/config/kafka.config.js';
 import { apiLogger as logger } from '@src/workers/utils/logger.js';
 import { buildKafkaTopics } from '@src/config/kafka.config.js';
 import { loadProvidersFromEnv } from '@src/plugins/index.js';
+
+//Import the admin channel provider files here for them to self-register
+import "@src/admin-alerts/channels/discord.channel.js";
 
 const app = express();
 
@@ -42,6 +46,7 @@ app.get("/health", (req: Request, res: Response) => {
 
 app.use('/api/notification', auth_middleware, notification_router);
 app.use('/api/plugins', plugins_router);
+app.use('/api/admin-channels', admin_channels_router);
 
 const start_server = async () => {
     try {

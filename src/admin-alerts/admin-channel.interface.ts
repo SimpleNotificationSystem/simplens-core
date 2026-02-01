@@ -26,11 +26,36 @@ export interface AlertMetadata {
 }
 
 /**
+ * Credential field definition for dynamic form generation
+ * Used by dashboard to render provider-specific configuration forms
+ */
+export interface CredentialField {
+    /** Field name (used as key in config object) */
+    name: string;
+    /** Field type for input rendering */
+    type: 'string' | 'url' | 'secret';
+    /** Display label for the field */
+    label: string;
+    /** Placeholder text for input */
+    placeholder?: string;
+    /** Help text / description */
+    description?: string;
+    /** Whether field is required */
+    required: boolean;
+    /** Regex pattern for validation */
+    pattern?: string;
+}
+
+/**
  * Interface for admin alert channel providers
  * All channel implementations must implement this interface
  */
 export interface AdminChannelProvider {
+    /** The channel type identifier */
     readonly channelType: AdminChannelType;
+    
+    /** Display name for UI */
+    readonly displayName: string;
 
     /**
      * Send an alert message through this channel
@@ -44,4 +69,11 @@ export interface AdminChannelProvider {
      * @returns Result indicating if the connection test was successful
      */
     testConnection(): Promise<ChannelResult>;
+
+    /**
+     * Get credential schema for dynamic form generation
+     * @returns Array of credential field definitions
+     */
+    getCredentialSchema(): CredentialField[];
 }
+

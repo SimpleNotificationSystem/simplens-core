@@ -12,11 +12,6 @@ import { decrypt } from '@src/utils/encryption.utils.js';
 import { getChannelProvider } from './channel-registry.js';
 import { createLogger } from '@src/workers/utils/logger.js';
 
-// Import channels to trigger self-registration
-import './channels/discord.channel.js';
-// Future: import './channels/telegram.channel.js';
-// Future: import './channels/slack.channel.js';
-
 const logger = createLogger('worker');
 
 /**

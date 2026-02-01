@@ -7,6 +7,7 @@ import type {
     AdminChannelProvider,
     ChannelResult,
     AlertMetadata,
+    CredentialField,
 } from '../admin-channel.interface.js';
 import type { discord_config } from '@src/types/types.js';
 import { registerChannelProvider } from '../channel-registry.js';
@@ -36,8 +37,21 @@ const ALERT_EMOJIS: Record<string, string> = {
  */
 export class DiscordChannel implements AdminChannelProvider {
     readonly channelType = 'discord' as const;
+    readonly displayName = 'Discord';
 
     constructor(private webhookUrl: string) {}
+
+    getCredentialSchema(): CredentialField[] {
+        return [{
+            name: 'webhook_url',
+            type: 'url',
+            label: 'Discord Webhook URL',
+            placeholder: 'https://discord.com/api/webhooks/...',
+            description: 'Create a webhook in Server Settings → Integrations → Webhooks',
+            required: true,
+            pattern: '^https://discord\\.com/api/webhooks/.+',
+        }];
+    }
 
     async send(message: string, metadata?: AlertMetadata): Promise<ChannelResult> {
         try {

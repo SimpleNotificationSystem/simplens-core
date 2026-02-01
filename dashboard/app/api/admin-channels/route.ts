@@ -42,15 +42,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Validate Discord webhook URL format
-        if (channel_type === 'discord') {
-            if (!config.webhook_url?.startsWith('https://discord.com/api/webhooks/')) {
-                return NextResponse.json(
-                    { error: "Invalid Discord webhook URL" },
-                    { status: 400 }
-                );
-            }
-        }
+        // Note: Channel-specific validation is handled by the backend provider's credential schema
 
         // Encrypt config before storing
         const encryptionKey = await getOrCreateEncryptionKey();

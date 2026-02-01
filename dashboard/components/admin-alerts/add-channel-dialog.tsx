@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
     Dialog,
     DialogContent,
@@ -20,13 +20,29 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Loader2, TestTube2, Save, } from "lucide-react";
+import { Loader2, TestTube2, Save, AlertCircle } from "lucide-react";
 import type { AlertFilters } from "@/lib/types";
 
 interface AddChannelDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onSuccess: () => void;
+}
+
+interface CredentialField {
+    name: string;
+    type: 'string' | 'url' | 'secret';
+    label: string;
+    placeholder?: string;
+    description?: string;
+    required: boolean;
+    pattern?: string;
+}
+
+interface ProviderMeta {
+    channelType: string;
+    displayName: string;
+    credentialFields: CredentialField[];
 }
 
 const DEFAULT_FILTERS: AlertFilters = {
@@ -67,20 +83,81 @@ export const DiscordIcon = ({ className }: { className?: string }) => (
     </svg>
 );
 
+// Icon mapping for channel types
+const CHANNEL_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+    discord: DiscordIcon,
+};
+
 export function AddChannelDialog({ open, onOpenChange, onSuccess }: AddChannelDialogProps) {
-    const [channelType, setChannelType] = useState("discord");
+    const [providers, setProviders] = useState<ProviderMeta[]>([]);
+    const [loadingProviders, setLoadingProviders] = useState(false);
+    const [providerError, setProviderError] = useState<string | null>(null);
+    
+    const [channelType, setChannelType] = useState("");
     const [name, setName] = useState("");
-    const [webhookUrl, setWebhookUrl] = useState("");
+    const [config, setConfig] = useState<Record<string, string>>({});
     const [filters, setFilters] = useState<AlertFilters>(DEFAULT_FILTERS);
     const [loading, setLoading] = useState(false);
     const [testing, setTesting] = useState(false);
     const [testResult, setTestResult] = useState<{ success: boolean; message?: string } | null>(null);
 
+    // Fetch providers when dialog opens
+    useEffect(() => {
+        if (open && providers.length === 0) {
+            fetchProviders();
+        }
+    }, [open, providers.length]);
+
+    const fetchProviders = async () => {
+        setLoadingProviders(true);
+        setProviderError(null);
+        try {
+            const res = await fetch("/api/admin-channels/providers");
+            if (!res.ok) throw new Error("Failed to fetch providers");
+            const data = await res.json();
+            setProviders(data.providers || []);
+            // Set default channel type to first provider
+            if (data.providers?.length > 0 && !channelType) {
+                setChannelType(data.providers[0].channelType);
+            }
+        } catch (err) {
+            setProviderError(err instanceof Error ? err.message : "Failed to load providers");
+        } finally {
+            setLoadingProviders(false);
+        }
+    };
+
+    const currentProvider = providers.find(p => p.channelType === channelType);
+
     const resetForm = () => {
         setName("");
-        setWebhookUrl("");
+        setConfig({});
         setFilters(DEFAULT_FILTERS);
         setTestResult(null);
+    };
+
+    const handleConfigChange = (fieldName: string, value: string) => {
+        setConfig(prev => ({ ...prev, [fieldName]: value }));
+    };
+
+    const validateConfig = (): boolean => {
+        if (!currentProvider) return false;
+        
+        for (const field of currentProvider.credentialFields) {
+            const value = config[field.name] || "";
+            
+            if (field.required && !value.trim()) {
+                return false;
+            }
+            
+            if (value && field.pattern) {
+                const regex = new RegExp(field.pattern);
+                if (!regex.test(value)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     };
 
     const handleTest = async () => {
@@ -92,13 +169,13 @@ export function AddChannelDialog({ open, onOpenChange, onSuccess }: AddChannelDi
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     channel_type: channelType,
-                    config: { webhook_url: webhookUrl },
+                    config,
                 }),
             });
             const data = await res.json();
             setTestResult({
                 success: data.success,
-                message: data.success ? "Test message sent! Check your Discord." : data.error,
+                message: data.success ? `Test message sent! Check your ${currentProvider?.displayName || 'channel'}.` : data.error,
             });
         } catch {
             setTestResult({ success: false, message: "Test failed - network error" });
@@ -116,7 +193,7 @@ export function AddChannelDialog({ open, onOpenChange, onSuccess }: AddChannelDi
                 body: JSON.stringify({
                     channel_type: channelType,
                     name,
-                    config: { webhook_url: webhookUrl },
+                    config,
                     alert_filters: filters,
                 }),
             });
@@ -136,7 +213,8 @@ export function AddChannelDialog({ open, onOpenChange, onSuccess }: AddChannelDi
         }
     };
 
-    const isValid = name.trim() && webhookUrl.includes("discord.com/api/webhooks/");
+    const isValid = name.trim() && validateConfig();
+    const hasConfigValues = Object.values(config).some(v => v?.trim());
 
     return (
         <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) resetForm(); }}>
@@ -150,103 +228,134 @@ export function AddChannelDialog({ open, onOpenChange, onSuccess }: AddChannelDi
 
                 <ScrollArea className="h-[70%] overflow-hidden pr-4">
                     <div className="space-y-4 py-4">
-                    {/* Channel Type */}
-                    <div className="space-y-2">
-                        <Label>Channel Type</Label>
-                        <Select value={channelType} onValueChange={setChannelType}>
-                            <SelectTrigger>
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="discord">
-                                    <span className="flex items-center gap-2">
-                                        <DiscordIcon className="h-4 w-4" />
-                                        Discord
-                                    </span>
-                                </SelectItem>
-                                {/*<SelectItem value="telegram" disabled>
-                                    📱 Telegram (Coming Soon)
-                                </SelectItem>
-                                <SelectItem value="slack" disabled>
-                                    💼 Slack (Coming Soon)
-                                </SelectItem>*/}
-                            </SelectContent>
-                        </Select>
-                    </div>
+                        {/* Loading/Error state for providers */}
+                        {loadingProviders && (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader2 className="h-6 w-6 animate-spin" />
+                                <span className="ml-2">Loading providers...</span>
+                            </div>
+                        )}
 
-                    {/* Channel Name */}
-                    <div className="space-y-2">
-                        <Label>Channel Name</Label>
-                        <Input
-                            placeholder="e.g., Production Alerts"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                        />
-                    </div>
+                        {providerError && (
+                            <div className="flex items-center gap-2 text-destructive p-4 border border-destructive/50 rounded-lg">
+                                <AlertCircle className="h-5 w-5" />
+                                <span>{providerError}</span>
+                                <Button variant="outline" size="sm" onClick={fetchProviders}>
+                                    Retry
+                                </Button>
+                            </div>
+                        )}
 
-                    {/* Discord Webhook URL */}
-                    <div className="space-y-2">
-                        <Label>Discord Webhook URL</Label>
-                        <Input
-                            placeholder="https://discord.com/api/webhooks/..."
-                            value={webhookUrl}
-                            onChange={(e) => setWebhookUrl(e.target.value)}
-                            type="url"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                            Create a webhook in your Discord server settings → Integrations → Webhooks
-                        </p>
-                    </div>
+                        {!loadingProviders && !providerError && providers.length === 0 && (
+                            <div className="text-center py-8 text-muted-foreground">
+                                No channel providers available. Start the backend API server.
+                            </div>
+                        )}
 
-                    {/* Test Button & Result */}
-                    {webhookUrl && (
-                        <div className="space-y-2">
-                            <Button
-                                variant="outline"
-                                onClick={handleTest}
-                                disabled={testing || !webhookUrl.includes("discord.com")}
-                                className="w-full"
-                            >
-                                {testing ? (
-                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                ) : (
-                                    <TestTube2 className="h-4 w-4 mr-2" />
-                                )}
-                                Test Connection
-                            </Button>
-                            {testResult && (
-                                <p className={`text-sm ${testResult.success ? "text-green-600" : "text-red-600"}`}>
-                                    {testResult.message}
-                                </p>
-                            )}
-                        </div>
-                    )}
+                        {providers.length > 0 && (
+                            <>
+                                {/* Channel Type */}
+                                <div className="space-y-2">
+                                    <Label>Channel Type</Label>
+                                    <Select value={channelType} onValueChange={setChannelType}>
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {providers.map((provider) => {
+                                                const Icon = CHANNEL_ICONS[provider.channelType];
+                                                return (
+                                                    <SelectItem key={provider.channelType} value={provider.channelType}>
+                                                        <span className="flex items-center gap-2">
+                                                            {Icon && <Icon className="h-4 w-4" />}
+                                                            {provider.displayName}
+                                                        </span>
+                                                    </SelectItem>
+                                                );
+                                            })}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
 
-                    {/* Alert Filters */}
-                    <div className="space-y-3">
-                        <Label>Alert Types</Label>
-                        <div className="space-y-3 rounded-lg border p-4">
-                            {(Object.keys(FILTER_LABELS) as Array<keyof AlertFilters>).map((key) => (
-                                <div key={key} className="flex items-start gap-3">
-                                    <Checkbox
-                                        id={key}
-                                        checked={filters[key]}
-                                        onCheckedChange={(checked) =>
-                                            setFilters({ ...filters, [key]: !!checked })
-                                        }
+                                {/* Channel Name */}
+                                <div className="space-y-2">
+                                    <Label>Channel Name</Label>
+                                    <Input
+                                        placeholder="e.g., Production Alerts"
+                                        value={name}
+                                        onChange={(e) => setName(e.target.value)}
                                     />
-                                    <div className="grid gap-1">
-                                        <label htmlFor={key} className="text-sm font-medium cursor-pointer">
-                                            {FILTER_LABELS[key].label}
-                                        </label>
-                                        <p className="text-xs text-muted-foreground">
-                                            {FILTER_LABELS[key].description}
-                                        </p>
+                                </div>
+
+                                {/* Dynamic Credential Fields */}
+                                {currentProvider?.credentialFields.map((field) => (
+                                    <div key={field.name} className="space-y-2">
+                                        <Label>{field.label}</Label>
+                                        <Input
+                                            placeholder={field.placeholder}
+                                            value={config[field.name] || ""}
+                                            onChange={(e) => handleConfigChange(field.name, e.target.value)}
+                                            type={field.type === 'secret' ? 'password' : field.type === 'url' ? 'url' : 'text'}
+                                        />
+                                        {field.description && (
+                                            <p className="text-xs text-muted-foreground">
+                                                {field.description}
+                                            </p>
+                                        )}
+                                    </div>
+                                ))}
+
+                                {/* Test Button & Result */}
+                                {hasConfigValues && (
+                                    <div className="space-y-2">
+                                        <Button
+                                            variant="outline"
+                                            onClick={handleTest}
+                                            disabled={testing || !validateConfig()}
+                                            className="w-full"
+                                        >
+                                            {testing ? (
+                                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                            ) : (
+                                                <TestTube2 className="h-4 w-4 mr-2" />
+                                            )}
+                                            Test Connection
+                                        </Button>
+                                        {testResult && (
+                                            <p className={`text-sm ${testResult.success ? "text-green-600" : "text-red-600"}`}>
+                                                {testResult.message}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Alert Filters */}
+                                <div className="space-y-3">
+                                    <Label>Alert Types</Label>
+                                    <div className="space-y-3 rounded-lg border p-4">
+                                        {(Object.keys(FILTER_LABELS) as Array<keyof AlertFilters>).map((key) => (
+                                            <div key={key} className="flex items-start gap-3">
+                                                <Checkbox
+                                                    id={key}
+                                                    checked={filters[key]}
+                                                    onCheckedChange={(checked) =>
+                                                        setFilters({ ...filters, [key]: !!checked })
+                                                    }
+                                                />
+                                                <div className="grid gap-1">
+                                                    <label htmlFor={key} className="text-sm font-medium cursor-pointer">
+                                                        {FILTER_LABELS[key].label}
+                                                    </label>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {FILTER_LABELS[key].description}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    </div>
+                            </>
+                        )}
                     </div>
                 </ScrollArea>
 
@@ -255,7 +364,7 @@ export function AddChannelDialog({ open, onOpenChange, onSuccess }: AddChannelDi
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
                         Cancel
                     </Button>
-                    <Button onClick={handleSubmit} disabled={!isValid || loading}>
+                    <Button onClick={handleSubmit} disabled={!isValid || loading || providers.length === 0}>
                         {loading ? (
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         ) : (

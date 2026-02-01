@@ -3,7 +3,7 @@
  * Extensible pattern - new channels register themselves here
  */
 
-import type { AdminChannelProvider } from './admin-channel.interface.js';
+import type { AdminChannelProvider, CredentialField } from './admin-channel.interface.js';
 import type { AdminChannelType } from '@src/types/types.js';
 
 /**
@@ -63,3 +63,40 @@ export function hasChannelProvider(channelType: AdminChannelType): boolean {
 export function getRegisteredChannelTypes(): AdminChannelType[] {
     return Array.from(providerRegistry.keys());
 }
+
+/**
+ * Admin channel metadata for dashboard
+ */
+export interface AdminChannelMeta {
+    channelType: AdminChannelType;
+    displayName: string;
+    credentialFields: CredentialField[];
+}
+
+/**
+ * Get metadata for all registered admin channel providers
+ * Used by dashboard for dynamic form generation
+ * @returns Array of provider metadata
+ */
+export function getAdminChannelMetadata(): AdminChannelMeta[] {
+    const metadata: AdminChannelMeta[] = [];
+    
+    for (const [channelType, factory] of providerRegistry.entries()) {
+        // Create a temporary instance to get metadata
+        // Using empty config since we only need schema info
+        try {
+            const provider = factory({ webhook_url: '' });
+            metadata.push({
+                channelType,
+                displayName: provider.displayName,
+                credentialFields: provider.getCredentialSchema(),
+            });
+        } catch {
+            // Skip providers that fail to instantiate with empty config
+            console.warn(`Failed to get metadata for channel: ${channelType}`);
+        }
+    }
+    
+    return metadata;
+}
+
