@@ -59,4 +59,8 @@ export const env = {
     LOKI_URL: <string>process.env.LOKI_URL || "",
     LOG_LEVEL: <string>process.env.LOG_LEVEL || "info",
     LOG_TO_FILE: process.env.LOG_TO_FILE === "true",
+
+    // Admin Alerts (optional - auto-generated if not provided)
+    // Must be 64-character hex string (32 bytes) if provided
+    ADMIN_ALERT_ENCRYPTION_KEY: <string>process.env.ADMIN_ALERT_ENCRYPTION_KEY || "",
 }

@@ -164,6 +164,79 @@ export const statusOutboxSchema = z.object({
 });
 
 // ============================================================================
+// ADMIN NOTIFICATION CHANNEL SCHEMAS
+// ============================================================================
+
+/**
+ * Admin alert channel types
+ */
+export const ADMIN_CHANNEL_TYPE = ['discord', 'telegram', 'email', 'slack'] as const;
+
+/**
+ * Admin alert types for filtering
+ */
+export const ADMIN_ALERT_TYPE = [
+    'failed_notification',
+    'service_health',
+    'stuck_processing',
+    'orphaned_pending',
+    'ghost_delivery'
+] as const;
+
+/**
+ * Encrypted config schema - used for storing sensitive channel credentials
+ */
+export const encryptedConfigSchema = z.object({
+    encrypted_data: z.string(),
+    iv: z.string(),
+    auth_tag: z.string(),
+});
+
+/**
+ * Alert filters schema - controls which alert types a channel receives
+ */
+export const alertFiltersSchema = z.object({
+    failed_notifications: z.boolean().default(true),
+    service_health: z.boolean().default(true),
+    stuck_processing: z.boolean().default(true),
+    orphaned_pending: z.boolean().default(true),
+    ghost_delivery: z.boolean().default(false),
+});
+
+/**
+ * Admin notification channel schema
+ */
+export const adminChannelSchema = z.object({
+    channel_type: z.enum(ADMIN_CHANNEL_TYPE),
+    name: z.string().min(1).max(100),
+    enabled: z.boolean().default(true),
+    config: encryptedConfigSchema,
+    alert_filters: alertFiltersSchema,
+    created_at: z.coerce.date().optional(),
+    updated_at: z.coerce.date().optional(),
+});
+
+/**
+ * System config schema - for storing system-wide config like encryption keys
+ */
+export const systemConfigSchema = z.object({
+    key: z.string(),
+    value: z.string(),
+    created_at: z.coerce.date().optional(),
+    updated_at: z.coerce.date().optional(),
+});
+
+/**
+ * Discord config schema - for validation before encryption
+ */
+export const discordConfigSchema = z.object({
+    webhook_url: z.string().url().refine(
+        (url) => url.startsWith('https://discord.com/api/webhooks/'),
+        { message: 'Must be a valid Discord webhook URL' }
+    ),
+});
+
+// ============================================================================
 // API REQUEST SCHEMAS
 // ============================================================================
 

@@ -19,7 +19,8 @@ const SERVICE_LABELS = {
     delayedWorker: 'delayed-processor',
     unifiedProcessor: 'unified-processor',
     redis: 'redis',
-    recoveryService: 'recovery-service'
+    recoveryService: 'recovery-service',
+    adminAlert: 'admin-alert'
 } as const;
 
 type ServiceContext = keyof typeof SERVICE_LABELS;
@@ -77,7 +78,8 @@ const SERVICE_EMOJI: Record<ServiceContext, string> = {
     delayedWorker: '⏰',
     unifiedProcessor: '🔌',
     redis: '🔴',
-    recoveryService: '🔧'
+    recoveryService: '🔧',
+    adminAlert: '🔔'
 };
 
 /**
@@ -225,6 +227,7 @@ export const whatsappProcessorLogger = createLogger('whatsappProcessor');
 export const delayedWorkerLogger = createLogger('delayedWorker');
 export const redisLogger = createLogger('redis');
 export const recoveryLogger = createLogger('recoveryService');
+export const adminAlertLogger = createLogger('adminAlert');
 
 /**
  * Graceful shutdown - flush all logs before exit

@@ -121,3 +121,44 @@ export interface ChannelMetadata {
 export interface PluginMetadata {
     channels: Record<string, ChannelMetadata>;
 }
+
+// ============================================================================
+// ADMIN NOTIFICATION CHANNEL TYPES
+// ============================================================================
+
+export const ADMIN_CHANNEL_TYPE = ['discord', 'telegram', 'email', 'slack'] as const;
+export type AdminChannelType = (typeof ADMIN_CHANNEL_TYPE)[number];
+
+export const ADMIN_ALERT_TYPE = [
+    'failed_notification',
+    'service_health',
+    'stuck_processing',
+    'orphaned_pending',
+    'ghost_delivery'
+] as const;
+export type AdminAlertType = (typeof ADMIN_ALERT_TYPE)[number];
+
+export interface AlertFilters {
+    failed_notifications: boolean;
+    service_health: boolean;
+    stuck_processing: boolean;
+    orphaned_pending: boolean;
+    ghost_delivery: boolean;
+}
+
+export interface AdminChannel {
+    _id: string;
+    channel_type: AdminChannelType;
+    name: string;
+    enabled: boolean;
+    alert_filters: AlertFilters;
+    created_at: Date;
+    updated_at: Date;
+}
+
+export interface AdminChannelFormData {
+    channel_type: AdminChannelType;
+    name: string;
+    webhook_url: string;
+    alert_filters: AlertFilters;
+}

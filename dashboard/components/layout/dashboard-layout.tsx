@@ -15,6 +15,7 @@ import {
     Book,
     Puzzle,
     Code,
+    BellRing,
 } from "lucide-react";
 import {
     Sidebar,
@@ -87,6 +88,11 @@ const navItems: NavItem[] = [
         title: "Payload Studio",
         href: "/payload-studio",
         icon: Code,
+    },
+    {
+        title: "Admin Alerts",
+        href: "/admin-alerts",
+        icon: BellRing,
     },
 ];
 
