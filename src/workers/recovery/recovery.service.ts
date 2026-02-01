@@ -19,6 +19,10 @@ import { startRecoveryCron, stopRecoveryCron, setHealthChecker } from './recover
 import { recoveryLogger as logger, flushLogs } from '@src/workers/utils/logger.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 
+//Import the admin channel provider files here for them to self-register
+import "@src/admin-alerts/channels/discord.channel.js";
+import "@src/admin-alerts/channels/telegram.channel.js";
+
 let isShuttingDown = false;
 let mongoReconnecting = false;
 let redisReconnecting = false;

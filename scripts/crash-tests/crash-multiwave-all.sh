@@ -117,14 +117,14 @@ kill_containers() {
 # Restart all application services
 restart_all_app_services() {
     log_recover "Restarting all application services..."
-    docker compose -f "$PROJECT_ROOT/docker-compose.yml" up -d "${APP_SERVICES[@]}"
+    docker compose -f "$PROJECT_ROOT/docker-compose.dev.yaml" up -d "${APP_SERVICES[@]}"
     sleep 3
 }
 
 # Restart all infrastructure services
 restart_all_infra_services() {
     log_recover "Restarting all infrastructure services..."
-    docker compose -f "$PROJECT_ROOT/docker-compose.yml" up -d "${INFRA_SERVICES[@]}"
+    docker compose -f "$PROJECT_ROOT/docker-compose.dev.yaml" up -d "${INFRA_SERVICES[@]}"
     sleep 5
     wait_for_infra_health
 }
@@ -132,10 +132,10 @@ restart_all_infra_services() {
 # Restart all services (infra first, then app)
 restart_all_services() {
     log_recover "Restarting all services..."
-    docker compose -f "$PROJECT_ROOT/docker-compose.yml" up -d "${INFRA_SERVICES[@]}"
+    docker compose -f "$PROJECT_ROOT/docker-compose.dev.yaml" up -d "${INFRA_SERVICES[@]}"
     sleep 5
     wait_for_infra_health
-    docker compose -f "$PROJECT_ROOT/docker-compose.yml" up -d "${APP_SERVICES[@]}"
+    docker compose -f "$PROJECT_ROOT/docker-compose.dev.yaml" up -d "${APP_SERVICES[@]}"
     sleep 3
 }
 
@@ -143,7 +143,7 @@ restart_all_services() {
 restart_services() {
     for service in "$@"; do
         log_recover "$service"
-        docker compose -f "$PROJECT_ROOT/docker-compose.yml" up -d "$service"
+        docker compose -f "$PROJECT_ROOT/docker-compose.dev.yaml" up -d "$service"
     done
 }
 
@@ -191,7 +191,7 @@ start_load() {
     local requests=$1
     log_info "Starting load test with $requests requests..."
     cd "$PROJECT_ROOT"
-    node scripts/load-test.js "$requests" 50 &
+    node scripts/load-test.js -n "$requests" -c 50 -ch mock -p mock -m "Chaos test message" -h local &
     LOAD_PID=$!
     sleep 2  # Give load test time to start
 }

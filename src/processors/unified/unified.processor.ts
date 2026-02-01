@@ -14,6 +14,10 @@ import { startUnifiedConsumer, stopUnifiedConsumer, stopAllConsumers } from './u
 import { unifiedProcessorLogger as logger } from './unified.logger.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 
+//Import the admin channel provider files here for them to self-register
+import "@src/admin-alerts/channels/discord.channel.js";
+import "@src/admin-alerts/channels/telegram.channel.js";
+
 // Track active channels for shutdown
 let activeChannels: string[] = [];
 let isShuttingDown = false;
