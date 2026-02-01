@@ -236,6 +236,14 @@ export const discordConfigSchema = z.object({
     ),
 });
 
+/**
+ * Telegram config schema
+ */
+export const telegramConfigSchema = z.object({
+    bot_token: z.string().regex(/^[0-9]+:[a-zA-Z0-9_-]+$/, 'Invalid Telegram Bot Token'),
+    chat_id: z.string().regex(/^-?[0-9]+$/, 'Invalid Chat ID'),
+});
+
 // ============================================================================
 // API REQUEST SCHEMAS
 // ============================================================================

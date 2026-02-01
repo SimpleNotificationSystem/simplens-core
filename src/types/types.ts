@@ -83,6 +83,7 @@ import {
     encryptedConfigSchema,
     alertFiltersSchema,
     discordConfigSchema,
+    telegramConfigSchema,
     ADMIN_CHANNEL_TYPE,
     ADMIN_ALERT_TYPE,
 } from "./schemas.js";
@@ -118,5 +119,6 @@ export type system_config = z.infer<typeof systemConfigSchema>;
 export type encrypted_config = z.infer<typeof encryptedConfigSchema>;
 export type alert_filters = z.infer<typeof alertFiltersSchema>;
 export type discord_config = z.infer<typeof discordConfigSchema>;
+export type telegram_config = z.infer<typeof telegramConfigSchema>;
 export type AdminChannelType = (typeof ADMIN_CHANNEL_TYPE)[number];
 export type AdminAlertType = (typeof ADMIN_ALERT_TYPE)[number];

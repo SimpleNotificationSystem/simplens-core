@@ -17,6 +17,7 @@ import { loadProvidersFromEnv } from '@src/plugins/index.js';
 
 //Import the admin channel provider files here for them to self-register
 import "@src/admin-alerts/channels/discord.channel.js";
+import "@src/admin-alerts/channels/telegram.channel.js";
 
 const app = express();
 

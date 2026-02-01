@@ -7,30 +7,11 @@ import type {
     AdminChannelProvider,
     ChannelResult,
     AlertMetadata,
-    CredentialField,
+    CredentialField
 } from '../admin-channel.interface.js';
+import { SEVERITY_COLORS, ALERT_EMOJIS } from '../admin-channel.interface.js';
 import type { discord_config } from '@src/types/types.js';
 import { registerChannelProvider } from '../channel-registry.js';
-
-/**
- * Severity colors for Discord embeds
- */
-const SEVERITY_COLORS = {
-    info: 3447003,      // Blue
-    warning: 16776960,  // Yellow  
-    critical: 15158332, // Red
-} as const;
-
-/**
- * Emoji prefixes for different alert types
- */
-const ALERT_EMOJIS: Record<string, string> = {
-    failed_notification: '❌',
-    service_health: '🔴',
-    stuck_processing: '⏳',
-    orphaned_pending: '👻',
-    ghost_delivery: '👻',
-};
 
 /**
  * Discord webhook channel implementation
