@@ -264,7 +264,37 @@ const processMessage = async (
             return true;
         }
         else if (result.success === false && result.error?.retryable === false) {
-            // commit kafka offet, already the events gets flagged as failed
+            // Non-retryable failure from router (e.g., ALL_PROVIDERS_FAILED, SCHEMA_VALIDATION_ERROR)
+            // Schema validation failures are already handled by handleSchemaValidationFailure
+            // But ALL_PROVIDERS_FAILED and PROVIDER_NOT_FOUND need explicit handling here
+            if (result.error?.code === 'ALL_PROVIDERS_FAILED') {
+                logger.error(`[${channel}] All providers failed: ${notificationId} - ${result.error?.message}`);
+
+                void AdminAlertService.sendAlert('failed_notification',
+                    `🔴 ALL PROVIDERS FAILED\n` +
+                    `Notification ID: ${notificationId}\n` +
+                    `Channel: ${channel}\n` +
+                    `Error: ${result.error?.message}\n` +
+                    `Action: Check provider credentials and connectivity. Review simplens.config.yaml.`,
+                    { severity: 'critical', notificationId, channel });
+
+                await setFailed(notificationId, validationResult.data.retry_count);
+                await publishFailureStatus(notification, channel, result.error?.message || 'All providers failed');
+            } else if (result.error?.code === 'PROVIDER_NOT_FOUND') {
+                logger.error(`[${channel}] Provider not found: ${notificationId} - ${result.error?.message}`);
+
+                void AdminAlertService.sendAlert('failed_notification',
+                    `🔴 PROVIDER NOT FOUND\n` +
+                    `Notification ID: ${notificationId}\n` +
+                    `Channel: ${channel}\n` +
+                    `Error: ${result.error?.message}\n` +
+                    `Action: Check simplens.config.yaml. Verify provider is installed and configured.`,
+                    { severity: 'critical', notificationId, channel });
+
+                await setFailed(notificationId, validationResult.data.retry_count);
+                await publishFailureStatus(notification, channel, result.error?.message || 'Provider not found');
+            }
+            // Commit kafka offset
             return true;
         }
         else {

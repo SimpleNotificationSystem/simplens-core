@@ -64,6 +64,12 @@ vi.mock('../../../../src/workers/utils/logger.js', () => ({
     recoveryLogger: mockLogger,
 }));
 
+vi.mock('../../../../src/admin-alerts/admin-alert.service.js', () => ({
+    AdminAlertService: {
+        sendAlert: vi.fn().mockResolvedValue(undefined),
+    },
+}));
+
 vi.mock('../../../../src/processors/shared/idempotency.js', () => ({
     getIdempotencyStatus: vi.fn(),
     setFailed: vi.fn(),

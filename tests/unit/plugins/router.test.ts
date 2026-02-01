@@ -5,6 +5,26 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 
+// Mock dependencies before importing the module
+vi.mock('../../../src/admin-alerts/admin-alert.service.js', () => ({
+    AdminAlertService: {
+        sendAlert: vi.fn().mockResolvedValue(undefined),
+    },
+}));
+
+vi.mock('../../../src/processors/shared/schema-failure-handler.js', () => ({
+    handleSchemaValidationFailure: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../../src/processors/unified/unified.logger.js', () => ({
+    unifiedProcessorLogger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+    },
+}));
+
 // Create a mock provider factory
 function createMockProvider(options: {
     name: string;

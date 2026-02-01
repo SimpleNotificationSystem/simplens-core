@@ -3,6 +3,7 @@ import { initProducer, disconnectProducer } from "@src/workers/producers/backgro
 import { startCronJobs, stopCronJobs } from "@src/workers/cron/background.cron.js";
 import { startStatusConsumer, stopStatusConsumer } from "@src/workers/consumers/status.consumer.js";
 import { workerLogger as logger } from "@src/workers/utils/logger.js";
+import { AdminAlertService } from "@src/admin-alerts/admin-alert.service.js";
 
 let isShuttingDown = false;
 let dbConnection: Awaited<ReturnType<typeof connectMongoDB>> | null = null;
@@ -55,11 +56,26 @@ const registerShutdownHandlers = (): void => {
 
     process.on('uncaughtException', async (err) => {
         logger.error('Uncaught exception:', err);
+
+        void AdminAlertService.sendAlert('service_health',
+            `🔴 UNCAUGHT EXCEPTION - Background Worker\n` +
+            `Error: ${err instanceof Error ? err.message : String(err)}\n` +
+            `Stack: ${err instanceof Error ? err.stack?.slice(0, 200) : 'N/A'}\n` +
+            `Action: Check worker logs. Process is shutting down.`,
+            { severity: 'critical' });
+
         await gracefulShutdown('uncaughtException');
     });
 
     process.on('unhandledRejection', async (reason) => {
         logger.error('Unhandled rejection:', reason);
+
+        void AdminAlertService.sendAlert('service_health',
+            `🔴 UNHANDLED REJECTION - Background Worker\n` +
+            `Reason: ${reason instanceof Error ? reason.message : String(reason)}\n` +
+            `Action: Check worker logs. Process is shutting down.`,
+            { severity: 'critical' });
+
         await gracefulShutdown('unhandledRejection');
     });
 };
@@ -97,6 +113,13 @@ const main = async (): Promise<void> => {
         registerShutdownHandlers();
     } catch (err) {
         logger.error("Failed to start background worker:", err);
+
+        void AdminAlertService.sendAlert('service_health',
+            `🔴 STARTUP FAILURE - Background Worker\n` +
+            `Error: ${err instanceof Error ? err.message : String(err)}\n` +
+            `Action: Check worker logs. Verify MongoDB and Kafka connectivity.`,
+            { severity: 'critical' });
+
         process.exit(1);
     }
 };

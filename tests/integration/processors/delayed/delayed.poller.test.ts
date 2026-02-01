@@ -49,6 +49,12 @@ vi.mock('@src/workers/utils/logger.js', () => ({
     },
 }));
 
+vi.mock('@src/admin-alerts/admin-alert.service.js', () => ({
+    AdminAlertService: {
+        sendAlert: vi.fn().mockResolvedValue(undefined),
+    },
+}));
+
 describe('Delayed Poller', () => {
     let delayedPoller: typeof import('../../../../src/processors/delayed/delayed.poller.js');
 

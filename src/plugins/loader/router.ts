@@ -11,9 +11,85 @@ import { handleSchemaValidationFailure } from '@src/processors/shared/schema-fai
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 
 /**
+ * Try fallback provider when primary fails with non-retryable error
+ */
+async function tryFallback<T extends BaseNotification>(
+    channel: string,
+    notification: T,
+    primaryError: DeliveryResult['error']
+): Promise<DeliveryResult | null> {
+    const fallbackProvider = PluginRegistry.getFallbackProvider(channel);
+
+    if (!fallbackProvider) {
+        console.log(`[ProviderRouter] No fallback provider for ${channel}, returning error`);
+        return null;
+    }
+
+    console.log(`[ProviderRouter] Primary provider failed, trying fallback: ${fallbackProvider.manifest.name}`);
+
+    void AdminAlertService.sendAlert('service_health',
+        `ℹ️ USING FALLBACK PROVIDER\n` +
+        `Channel: ${channel}\n` +
+        `Notification ID: ${notification.notification_id}\n` +
+        `Primary provider error: ${primaryError?.message}\n` +
+        `Fallback provider: ${fallbackProvider.manifest.displayName}\n` +
+        `Action: Check primary provider configuration if this occurs frequently.`,
+        { severity: 'info', notificationId: notification.notification_id, channel });
+
+    const schema = fallbackProvider.getNotificationSchema();
+    const validationResult = schema.safeParse(notification);
+
+    if (!validationResult.success) {
+        logger.error(`[${channel}] Invalid notification schema for fallback provider of channel:${channel} and provider name ${fallbackProvider.manifest.displayName}:`,
+            validationResult.error.issues);
+
+        await handleSchemaValidationFailure(
+            notification.notification_id,
+            channel,
+            notification,
+            validationResult.error,
+            'fallback provider'
+        );
+        return {
+            success: false,
+            error: {
+                code: 'FALLBACK_SCHEMA_VALIDATION_ERROR',
+                message: 'Fallback provider schema validation failed',
+                retryable: false
+            }
+        };
+    }
+
+    const fallbackResult = await fallbackProvider.send(notification);
+
+    if (fallbackResult.success) {
+        return fallbackResult;
+    }
+
+    // Both failed - return last error
+    void AdminAlertService.sendAlert('failed_notification',
+        `🔴 ALL PROVIDERS FAILED\n` +
+        `Channel: ${channel}\n` +
+        `Notification ID: ${notification.notification_id}\n` +
+        `Primary provider error: ${primaryError?.message}\n` +
+        `Fallback error: ${fallbackResult.error?.message}\n` +
+        `Action: Verify provider credentials. Check SMTP/API connectivity. Review simplens.config.yaml.`,
+        { severity: 'critical', notificationId: notification.notification_id, channel });
+
+    return {
+        success: false,
+        error: {
+            code: 'ALL_PROVIDERS_FAILED',
+            message: `All providers failed. Last error: ${fallbackResult.error?.message || 'Unknown'}`,
+            retryable: false,
+        },
+    };
+}
+
+/**
  * Send notification with automatic fallback
  * 
- * 1. Try default provider for channel
+ * 1. Try explicit/default provider for channel
  * 2. If fails with non-retryable error, try fallback
  * 3. Return result (success or final failure)
  */
@@ -24,7 +100,16 @@ export async function sendWithFallback<T extends BaseNotification>(
     // 0. Use explicit provider if specified
     if (notification.provider) {
         console.log(`[ProviderRouter] Using explicit provider: ${notification.provider}`);
-        return sendToProvider(notification.provider, notification);
+        const result = await sendToProvider(notification.provider, notification);
+
+        // If success or retryable error, return as-is
+        if (result.success || result.error?.retryable) {
+            return result;
+        }
+
+        // Non-retryable failure - try fallback provider
+        const fallbackResult = await tryFallback(channel, notification, result.error);
+        return fallbackResult ?? result;
     }
 
     const defaultProvider = PluginRegistry.getDefaultProvider(channel);
@@ -53,74 +138,8 @@ export async function sendWithFallback<T extends BaseNotification>(
     }
 
     // Try fallback provider
-    const fallbackProvider = PluginRegistry.getFallbackProvider(channel);
-
-    if (!fallbackProvider) {
-        console.log(`[ProviderRouter] No fallback provider for ${channel}, returning error`);
-        return result;
-    }
-
-    console.log(`[ProviderRouter] Default provider failed, trying fallback: ${fallbackProvider.manifest.name}`);
-
-    void AdminAlertService.sendAlert('service_health',
-        `ℹ️ USING FALLBACK PROVIDER\n` +
-        `Channel: ${channel}\n` +
-        `Notification ID: ${notification.notification_id}\n` +
-        `Default provider error: ${result.error?.message}\n` +
-        `Fallback provider: ${fallbackProvider.manifest.displayName}\n` +
-        `Action: Check default provider configuration if this occurs frequently.`,
-        { severity: 'info', notificationId: notification.notification_id, channel });
-
-    const schema = fallbackProvider.getNotificationSchema();
-
-    const validationResult = schema.safeParse(notification);
-
-    if (!validationResult.success) {
-        logger.error(`[${channel}] Invalid notification schema for fallback provider of channel:${channel} and provider name ${fallbackProvider.manifest.displayName}:`,
-            validationResult.error.issues);
-
-        const notificationId = notification.notification_id;
-        await handleSchemaValidationFailure(
-            notificationId,
-            channel,
-            notification,
-            validationResult.error,
-            'fallback provider'
-        );
-        return {
-            success: false,
-            error: {
-                code: 'FALLBACK_SCHEMA_VALIDATION_ERROR',
-                message: 'Fallback provider schema validation failed',
-                retryable: false
-            }
-        };
-    }
-
-    const fallbackResult = await fallbackProvider.send(notification);
-
-    if (fallbackResult.success) {
-        return fallbackResult;
-    }
-
-    // Both failed - return last error
-    void AdminAlertService.sendAlert('failed_notification',
-        `🔴 ALL PROVIDERS FAILED\n` +
-        `Channel: ${channel}\n` +
-        `Notification ID: ${notification.notification_id}\n` +
-        `Default provider error: ${result.error?.message}\n` +
-        `Fallback error: ${fallbackResult.error?.message}\n` +
-        `Action: Verify provider credentials. Check SMTP/API connectivity. Review simplens.config.yaml.`,
-        { severity: 'critical', notificationId: notification.notification_id, channel });
-
-    return {
-        success: false,
-        error: {
-            code: 'ALL_PROVIDERS_FAILED',
-            message: `All providers failed. Last error: ${fallbackResult.error?.message || 'Unknown'}`,
-            retryable: false,
-        },
-    };
+    const fallbackResult = await tryFallback(channel, notification, result.error);
+    return fallbackResult ?? result;
 }
 
 /**

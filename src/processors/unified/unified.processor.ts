@@ -12,6 +12,7 @@ import { initDelayedProducer, disconnectDelayedProducer } from '@src/processors/
 import { loadProvidersFromEnv, PluginRegistry } from '@src/plugins/index.js';
 import { startUnifiedConsumer, stopUnifiedConsumer, stopAllConsumers } from './unified.consumer.js';
 import { unifiedProcessorLogger as logger } from './unified.logger.js';
+import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 
 // Track active channels for shutdown
 let activeChannels: string[] = [];
@@ -85,11 +86,28 @@ const registerShutdownHandlers = (): void => {
 
     process.on('uncaughtException', async (err) => {
         logger.error('Uncaught exception:', err);
+
+        void AdminAlertService.sendAlert('service_health',
+            `🔴 UNCAUGHT EXCEPTION - Unified Processor\n` +
+            `Channels: ${activeChannels.join(', ')}\n` +
+            `Error: ${err instanceof Error ? err.message : String(err)}\n` +
+            `Stack: ${err instanceof Error ? err.stack?.slice(0, 200) : 'N/A'}\n` +
+            `Action: Check processor logs. Process is shutting down.`,
+            { severity: 'critical' });
+
         await gracefulShutdown('uncaughtException');
     });
 
     process.on('unhandledRejection', async (reason) => {
         logger.error('Unhandled rejection:', reason);
+
+        void AdminAlertService.sendAlert('service_health',
+            `🔴 UNHANDLED REJECTION - Unified Processor\n` +
+            `Channels: ${activeChannels.join(', ')}\n` +
+            `Reason: ${reason instanceof Error ? reason.message : String(reason)}\n` +
+            `Action: Check processor logs. Process is shutting down.`,
+            { severity: 'critical' });
+
         await gracefulShutdown('unhandledRejection');
     });
 };
@@ -143,6 +161,13 @@ const main = async (): Promise<void> => {
 
         if (channelsToProcess.length === 0) {
             logger.error('No valid channels to process! Exiting...');
+
+            void AdminAlertService.sendAlert('service_health',
+                `🔴 STARTUP FAILURE - Unified Processor\n` +
+                `Error: No valid channels to process\n` +
+                `Action: Check simplens.config.yaml. Verify plugins are installed.`,
+                { severity: 'critical' });
+
             process.exit(1);
         }
 
@@ -161,6 +186,13 @@ const main = async (): Promise<void> => {
 
     } catch (err) {
         logger.error('Failed to start Unified Processor:', err);
+
+        void AdminAlertService.sendAlert('service_health',
+            `🔴 STARTUP FAILURE - Unified Processor\n` +
+            `Error: ${err instanceof Error ? err.message : String(err)}\n` +
+            `Action: Check processor logs. Verify Redis and Kafka connectivity.`,
+            { severity: 'critical' });
+
         process.exit(1);
     }
 };

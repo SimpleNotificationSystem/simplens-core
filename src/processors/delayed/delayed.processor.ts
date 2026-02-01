@@ -16,6 +16,7 @@ import { initDLQStatusProducer, disconnectDLQStatusProducer } from './dlq.status
 import { startDelayedConsumer, stopDelayedConsumer } from './delayed.consumer.js';
 import { startDelayedPoller, stopDelayedPoller } from './delayed.poller.js';
 import { delayedWorkerLogger as logger } from '@src/workers/utils/logger.js';
+import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 
 let isShuttingDown = false;
 
@@ -68,11 +69,26 @@ const registerShutdownHandlers = (): void => {
 
     process.on('uncaughtException', async (err) => {
         logger.error('Uncaught exception:', err);
+
+        void AdminAlertService.sendAlert('service_health',
+            `🔴 UNCAUGHT EXCEPTION - Delayed Processor\n` +
+            `Error: ${err instanceof Error ? err.message : String(err)}\n` +
+            `Stack: ${err instanceof Error ? err.stack?.slice(0, 200) : 'N/A'}\n` +
+            `Action: Check processor logs. Process is shutting down.`,
+            { severity: 'critical' });
+
         await gracefulShutdown('uncaughtException');
     });
 
     process.on('unhandledRejection', async (reason) => {
         logger.error('Unhandled rejection:', reason);
+
+        void AdminAlertService.sendAlert('service_health',
+            `🔴 UNHANDLED REJECTION - Delayed Processor\n` +
+            `Reason: ${reason instanceof Error ? reason.message : String(reason)}\n` +
+            `Action: Check processor logs. Process is shutting down.`,
+            { severity: 'critical' });
+
         await gracefulShutdown('unhandledRejection');
     });
 };
@@ -112,6 +128,13 @@ const main = async (): Promise<void> => {
         registerShutdownHandlers();
     } catch (err) {
         logger.error('Failed to start delayed processor:', err);
+
+        void AdminAlertService.sendAlert('service_health',
+            `🔴 STARTUP FAILURE - Delayed Processor\n` +
+            `Error: ${err instanceof Error ? err.message : String(err)}\n` +
+            `Action: Check processor logs. Verify Redis and Kafka connectivity.`,
+            { severity: 'critical' });
+
         process.exit(1);
     }
 };
