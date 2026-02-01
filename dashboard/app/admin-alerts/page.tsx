@@ -104,7 +104,7 @@ export default function AdminAlertsPage() {
                 )}
 
                 {/* Channel Cards */}
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-3">
                     {data?.channels?.map((channel) => (
                         <Card key={channel._id} className={!channel.enabled ? "opacity-60" : ""}>
                             <CardHeader className="pb-3">

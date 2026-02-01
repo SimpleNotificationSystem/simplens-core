@@ -235,7 +235,7 @@ export function AddChannelDialog({ open, onOpenChange, onSuccess }: AddChannelDi
                     </DialogDescription>
                 </DialogHeader>
 
-                <ScrollArea className="h-[70%] overflow-hidden pr-4">
+                <ScrollArea className="h-[80%] overflow-hidden pr-4">
                     <div className="space-y-4 py-4">
                         {/* Loading/Error state for providers */}
                         {loadingProviders && (
