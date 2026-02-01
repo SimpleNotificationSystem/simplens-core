@@ -10,6 +10,7 @@ import { setFailed } from './idempotency.js';
 import { publishStatus } from './status.producer.js';
 import { NOTIFICATION_STATUS_SF } from '@src/types/types.js';
 import { unifiedProcessorLogger as logger } from '../unified/unified.logger.js';
+import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 
 /**
  * Format Zod validation errors into a readable message
@@ -40,6 +41,15 @@ export async function handleSchemaValidationFailure(
     try {
         // Mark as failed in Redis to prevent recovery service from flagging as orphaned
         await setFailed(notificationId, rawData.retry_count as number || 0);
+
+        void AdminAlertService.sendAlert('failed_notification',
+            `📋 SCHEMA VALIDATION FAILED\n` +
+            `Notification ID: ${notificationId}\n` +
+            `Channel: ${channel}\n` +
+            `Context: ${context}\n` +
+            `Validation errors: ${formatValidationErrors(validationError)}\n` +
+            `Action: Check notification payload format. Verify required fields match provider schema.`,
+            { severity: 'warning', notificationId, channel });
 
         // Publish failure status if we have enough data
         if (rawData.request_id && rawData.client_id) {

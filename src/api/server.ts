@@ -14,6 +14,7 @@ import { createTopics } from '@src/config/kafka.config.js';
 import { apiLogger as logger } from '@src/workers/utils/logger.js';
 import { buildKafkaTopics } from '@src/config/kafka.config.js';
 import { loadProvidersFromEnv } from '@src/plugins/index.js';
+import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 
 //Import the admin channel provider files here for them to self-register
 import "@src/admin-alerts/channels/discord.channel.js";
@@ -68,6 +69,13 @@ const start_server = async () => {
         server.listen(env.PORT, () => logger.success(`Notification Service running at http://localhost:${env.PORT}`));
         server.on('error', (err) => {
             logger.error('Server error:', err);
+
+            void AdminAlertService.sendAlert('service_health',
+                `🔴 API SERVER ERROR\n` +
+                `Error: ${err.message}\n` +
+                `Port: ${env.PORT}\n` +
+                `Action: Check if port is in use. Review server logs for stack trace.`,
+                { severity: 'critical' });
         });
         const gracefulShutdown = async (err?: Error, reason?: string) => {
             logger.error('Shutting down server', { reason: reason ?? '', error: err?.message ?? '' });
@@ -85,11 +93,26 @@ const start_server = async () => {
 
         process.on('uncaughtException', (err) => {
             logger.error('Uncaught exception:', err);
+
+            void AdminAlertService.sendAlert('service_health',
+                `🔴 UNCAUGHT EXCEPTION IN API SERVER\n` +
+                `Error: ${err.message}\n` +
+                `Stack: ${err.stack?.split('\n').slice(0, 3).join('\n')}\n` +
+                `Action: Review error handling. Check for async operations without try-catch.`,
+                { severity: 'critical' });
+
             gracefulShutdown(err, 'uncaughtException');
         });
 
         process.on('unhandledRejection', (reason) => {
             logger.error('Unhandled rejection:', reason);
+
+            void AdminAlertService.sendAlert('service_health',
+                `🔴 UNHANDLED PROMISE REJECTION IN API SERVER\n` +
+                `Reason: ${reason}\n` +
+                `Action: Add .catch() handlers to promises. Review async/await error handling.`,
+                { severity: 'critical' });
+
             gracefulShutdown(undefined, 'unhandledRejection');
         });
 

@@ -8,6 +8,7 @@ import { PluginRegistry } from './registry.js';
 import type { DeliveryResult, BaseNotification } from '../interfaces/provider.types.js';
 import { unifiedProcessorLogger as logger } from '@src/processors/unified/unified.logger.js';
 import { handleSchemaValidationFailure } from '@src/processors/shared/schema-failure-handler.js';
+import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 
 /**
  * Send notification with automatic fallback
@@ -61,6 +62,15 @@ export async function sendWithFallback<T extends BaseNotification>(
 
     console.log(`[ProviderRouter] Default provider failed, trying fallback: ${fallbackProvider.manifest.name}`);
 
+    void AdminAlertService.sendAlert('service_health',
+        `ℹ️ USING FALLBACK PROVIDER\n` +
+        `Channel: ${channel}\n` +
+        `Notification ID: ${notification.notification_id}\n` +
+        `Default provider error: ${result.error?.message}\n` +
+        `Fallback provider: ${fallbackProvider.manifest.displayName}\n` +
+        `Action: Check default provider configuration if this occurs frequently.`,
+        { severity: 'info', notificationId: notification.notification_id, channel });
+
     const schema = fallbackProvider.getNotificationSchema();
 
     const validationResult = schema.safeParse(notification);
@@ -94,6 +104,15 @@ export async function sendWithFallback<T extends BaseNotification>(
     }
 
     // Both failed - return last error
+    void AdminAlertService.sendAlert('failed_notification',
+        `🔴 ALL PROVIDERS FAILED\n` +
+        `Channel: ${channel}\n` +
+        `Notification ID: ${notification.notification_id}\n` +
+        `Default provider error: ${result.error?.message}\n` +
+        `Fallback error: ${fallbackResult.error?.message}\n` +
+        `Action: Verify provider credentials. Check SMTP/API connectivity. Review simplens.config.yaml.`,
+        { severity: 'critical', notificationId: notification.notification_id, channel });
+
     return {
         success: false,
         error: {

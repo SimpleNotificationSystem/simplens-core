@@ -19,7 +19,7 @@ const logger = createLogger('worker');
  * Maps alertType -> lastSentTimestamp
  */
 const throttleMap = new Map<string, number>();
-const THROTTLE_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+const THROTTLE_WINDOW_MS = 5 * 60 * 1000; // 5 minutes //Later add this in .env
 
 /**
  * Map alert types to their corresponding filter field names

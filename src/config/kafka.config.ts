@@ -3,6 +3,7 @@ import { env } from "./env.config.js";
 import { producerLogger as logger } from "@src/workers/utils/logger.js";
 import { getConfiguredChannels } from '@src/plugins/index.js';
 import { getTopicForChannel, CORE_TOPICS } from '@src/types/types.js';
+import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 
 export const kafka = new Kafka({
     clientId: "notification-service",
@@ -101,6 +102,14 @@ export const createTopics = async (topics: ITopicConfig[]) => {
         logger.info(`Created topics: ${topicsToCreate.map(t => t.topic).join(', ')}`);
     } catch (err) {
         logger.error('Error creating topics:', err);
+
+        void AdminAlertService.sendAlert('service_health',
+            `🔴 KAFKA TOPIC CREATION FAILED\n` +
+            `Error: ${err instanceof Error ? err.message : 'Unknown error'}\n` +
+            `Brokers: ${env.BROKERS.join(', ')}\n` +
+            `Action: Verify Kafka brokers are running. Check network connectivity. Review broker logs.`,
+            { severity: 'critical' });
+
         throw err;
     } finally {
         await admin.disconnect();

@@ -19,6 +19,7 @@ import alert_model from '@src/database/models/alert.models.js';
 import status_outbox_model from '@src/database/models/status-outbox.models.js';
 import { getIdempotencyStatus, setFailed } from '@src/processors/shared/idempotency.js';
 import { recoveryLogger as logger } from '@src/workers/utils/logger.js';
+import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 
 // Health checker function type
 type HealthChecker = () => Promise<boolean>;
@@ -87,6 +88,14 @@ const recoverStuckProcessing = async (): Promise<void> => {
                     // GHOST DELIVERY - Redis says delivered but DB says processing
                     logger.info(`Ghost delivery detected for ${notification._id}`);
 
+                    void AdminAlertService.sendAlert('ghost_delivery',
+                        `🔄 GHOST DELIVERY DETECTED\n` +
+                        `Notification ID: ${notification._id}\n` +
+                        `Redis shows: delivered | MongoDB shows: processing\n` +
+                        `Root cause: Redis update succeeded but MongoDB transaction failed\n` +
+                        `Action: Auto-resolved by recovery. Check MongoDB connectivity if recurring.`,
+                        { severity: 'warning', notificationId: notification._id.toString() });
+
                     await notification_model.updateOne(
                         { _id: notification._id },
                         {
@@ -108,6 +117,15 @@ const recoverStuckProcessing = async (): Promise<void> => {
                     if (redisStatus.retry_count >= env.MAX_RETRY_COUNT) {
                         // EXHAUSTED RETRIES
                         logger.info(`Notification ${notification._id} exhausted retries (${redisStatus.retry_count})`);
+
+                        void AdminAlertService.sendAlert('failed_notification',
+                            `❌ NOTIFICATION FAILED - MAX RETRIES EXHAUSTED\n` +
+                            `Notification ID: ${notification._id}\n` +
+                            `Retry count: ${redisStatus.retry_count}/${env.MAX_RETRY_COUNT}\n` +
+                            `Status: ${redisStatus.status}\n` +
+                            `Recovered by: Recovery Service\n` +
+                            `Action: Review notification in dashboard. Check provider logs for failure reason.`,
+                            { severity: 'critical', notificationId: notification._id.toString() });
 
                         await notification_model.updateOne(
                             { _id: notification._id },
@@ -131,6 +149,14 @@ const recoverStuckProcessing = async (): Promise<void> => {
                         // RETRY COUNT NOT EXHAUSTED BUT REDIS SAYS FAILED
                         // Create alert for manual retry via dashboard
                         logger.warn(`Creating alert for failed notification ${notification._id} (retry: ${redisStatus.retry_count}/${env.MAX_RETRY_COUNT})`);
+
+                        void AdminAlertService.sendAlert('stuck_processing',
+                            `⚠️ NOTIFICATION STUCK WITH RETRIES\n` +
+                            `Notification ID: ${notification._id}\n` +
+                            `Retry count: ${redisStatus.retry_count}/${env.MAX_RETRY_COUNT}\n` +
+                            `Status: ${redisStatus.status}\n` +
+                            `Action: Can retry via dashboard at /alerts or wait for auto-retry.`,
+                            { severity: 'warning', notificationId: notification._id.toString() });
 
                         await alert_model.updateOne(
                             { notification_id: notification._id, alert_type: ALERT_TYPE.stuck_processing },
@@ -162,6 +188,15 @@ const recoverStuckProcessing = async (): Promise<void> => {
                     // STUCK - Redis says processing or no record
                     // Create alert for manual inspection
                     logger.warn(`Creating alert for stuck notification ${notification._id}`);
+
+                    void AdminAlertService.sendAlert('stuck_processing',
+                        `🚨 NOTIFICATION STUCK - NO REDIS STATUS\n` +
+                        `Notification ID: ${notification._id}\n` +
+                        `MongoDB status: ${notification.status}\n` +
+                        `Redis status: ${redisStatus?.status || 'not_found'}\n` +
+                        `Root cause: Processor may have crashed mid-processing or Redis key expired\n` +
+                        `Action: Check processor logs. Manual retry via dashboard may be needed.`,
+                        { severity: 'critical', notificationId: notification._id.toString() });
 
                     await alert_model.updateOne(
                         { notification_id: notification._id, alert_type: ALERT_TYPE.stuck_processing },
@@ -290,6 +325,15 @@ const detectOrphanedPending = async (): Promise<void> => {
             );
 
             logger.warn(`Created alert for orphaned pending notification ${notification._id}`);
+
+            void AdminAlertService.sendAlert('orphaned_pending',
+                `📭 ORPHANED PENDING NOTIFICATION\n` +
+                `Notification ID: ${notification._id}\n` +
+                `Created: ${notification.created_at}\n` +
+                `Stuck duration: ${env.PENDING_STUCK_THRESHOLD_MS / 1000}s+\n` +
+                `Root cause: May not have been published to outbox or Kafka\n` +
+                `Action: Check outbox table. Verify background worker is running.`,
+                { severity: 'warning', notificationId: notification._id.toString() });
 
             // Clear claim after processing
             await notification_model.updateOne(

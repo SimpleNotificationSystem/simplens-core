@@ -14,6 +14,7 @@ import { publishToTarget } from './target.producer.js';
 import { publishDLQFailureStatus } from './dlq.status.js';
 import { delayedWorkerLogger as logger } from '@src/workers/utils/logger.js';
 import type { delayed_notification_topic } from '@src/types/types.js';
+import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 
 let pollerInterval: NodeJS.Timeout | null = null;
 let isPolling = false;
@@ -49,6 +50,15 @@ const processDueEvent = async (event: DelayedEventWithRetries): Promise<boolean>
     if (pollerRetries >= env.MAX_POLLER_RETRIES) {
         const errorMessage = `Max poller retries exceeded after ${pollerRetries} attempts`;
         logger.error(`Event ${notificationId} exceeded max poller retries (${env.MAX_POLLER_RETRIES}), marking as failed`);
+
+        void AdminAlertService.sendAlert('failed_notification',
+            `💀 NOTIFICATION MOVED TO DLQ\n` +
+            `Notification ID: ${notificationId}\n` +
+            `Target topic: ${event.target_topic}\n` +
+            `Poller retries exhausted: ${pollerRetries}/${env.MAX_POLLER_RETRIES}\n` +
+            `Root cause: Kafka publish to target topic repeatedly failed\n` +
+            `Action: Check Kafka connectivity. Verify target topic exists. Review delayed worker logs.`,
+            { severity: 'critical', notificationId: notificationId.toString() });
 
         try {
             // Publish failure status to Kafka -> MongoDB update via status worker

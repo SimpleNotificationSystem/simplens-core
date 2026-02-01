@@ -26,6 +26,7 @@ import { consumeToken } from '@src/processors/shared/rate-limiter.js';
 import { publishStatus } from '@src/processors/shared/status.producer.js';
 import { publishDelayed, buildDelayedPayloadGeneric } from '@src/processors/shared/delayed.producer.js';
 import { handleSchemaValidationFailure } from '../shared/schema-failure-handler.js';
+import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 // Track active consumers by channel
 const consumers: Map<string, Consumer> = new Map();
 const consumingState: Map<string, boolean> = new Map();
@@ -132,6 +133,15 @@ const processMessage = async (
             // Mark as failed and publish failure status (defense-in-depth)
             const notificationId = rawData?.notification_id?.toString();
             if (notificationId) {
+                void AdminAlertService.sendAlert('failed_notification',
+                    `🔴 PROVIDER NOT FOUND\n` +
+                    `Notification ID: ${notificationId}\n` +
+                    `Channel: ${channel}\n` +
+                    `Requested provider: ${rawData.provider || 'default'}\n` +
+                    `Error: ${msg}\n` +
+                    `Action: Check simplens.config.yaml. Verify provider is installed and configured.`,
+                    { severity: 'critical', notificationId, channel });
+
                 await setFailed(notificationId, rawData.retry_count || 0);
                 await publishFailureStatus({
                     notification_id: rawData.notification_id,
@@ -194,6 +204,16 @@ const processMessage = async (
             const newRetryCount = notification.retry_count + 1;
             if (newRetryCount > env.MAX_RETRY_COUNT) {
                 logger.error(`[${channel}] Max retries exceeded: ${notificationId}`);
+
+                void AdminAlertService.sendAlert('failed_notification',
+                    `❌ MAX RETRIES EXCEEDED (RATE LIMITED)\n` +
+                    `Notification ID: ${notificationId}\n` +
+                    `Channel: ${channel}\n` +
+                    `Provider: ${providerId}\n` +
+                    `Root cause: Provider rate limit exhausted after ${env.MAX_RETRY_COUNT} retries\n` +
+                    `Action: Check provider rate limits in simplens.config.yaml. Consider increasing limits or adding fallback provider.`,
+                    { severity: 'critical', notificationId, channel });
+
                 await setFailed(notificationId, validationResult.data.retry_count);
                 await publishFailureStatus(notification, channel, 'Max retry count exceeded (rate limiting)');
                 return true;
@@ -223,6 +243,15 @@ const processMessage = async (
             } catch (redisErr) {
                 // Redis failed but notification sent - "ghost delivery" scenario
                 logger.error(`[${channel}] Failed to update idempotency, but notification was sent: ${notificationId}`, redisErr);
+
+                void AdminAlertService.sendAlert('ghost_delivery',
+                    `⚠️ REDIS UPDATE FAILED AFTER DELIVERY\n` +
+                    `Notification ID: ${notificationId}\n` +
+                    `Channel: ${channel}\n` +
+                    `Status: Notification was SENT but idempotency key update failed\n` +
+                    `Root cause: Redis may be unreachable\n` +
+                    `Action: Check Redis connectivity. Recovery cron will auto-resolve.`,
+                    { severity: 'warning', notificationId, channel });
             }
 
             try {
@@ -244,6 +273,16 @@ const processMessage = async (
 
             if (!result.error?.retryable || newRetryCount > env.MAX_RETRY_COUNT) {
                 logger.error(`[${channel}] Final failure: ${notificationId} - ${result.error?.message}`);
+
+                void AdminAlertService.sendAlert('failed_notification',
+                    `❌ NOTIFICATION PERMANENTLY FAILED\n` +
+                    `Notification ID: ${notificationId}\n` +
+                    `Channel: ${channel}\n` +
+                    `Error: ${result.error?.message}\n` +
+                    `Retryable: ${result.error?.retryable}\n` +
+                    `Action: Check provider configuration. Review error in notification details via dashboard.`,
+                    { severity: 'critical', notificationId, channel });
+
                 await setFailed(notificationId, validationResult.data.retry_count);
                 await publishFailureStatus(notification, channel, result.error?.message || 'Unknown error');
                 return true;

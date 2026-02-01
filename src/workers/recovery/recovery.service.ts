@@ -17,6 +17,7 @@ import { env } from '@src/config/env.config.js';
 import { connectRedis, disconnectRedis, getRedisClient } from '@src/config/redis.config.js';
 import { startRecoveryCron, stopRecoveryCron, setHealthChecker } from './recovery.cron.js';
 import { recoveryLogger as logger, flushLogs } from '@src/workers/utils/logger.js';
+import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 
 let isShuttingDown = false;
 let mongoReconnecting = false;
@@ -62,6 +63,14 @@ const connectMongo = async (attempt = 1): Promise<boolean> => {
             return connectMongo(attempt + 1);
         }
 
+        void AdminAlertService.sendAlert('service_health',
+            `🔴 MONGODB RECONNECTION EXHAUSTED\n` +
+            `Attempts: ${MAX_RECONNECT_ATTEMPTS}\n` +
+            `Service: Recovery Worker\n` +
+            `Impact: Recovery cron cannot detect stuck notifications\n` +
+            `Action: Check MongoDB status. Restart recovery service after fixing.`,
+            { severity: 'critical' });
+
         return false;
     }
 };
@@ -99,6 +108,14 @@ const connectRedisWithRetry = async (attempt = 1): Promise<boolean> => {
             await new Promise(resolve => setTimeout(resolve, RECONNECT_DELAY_MS));
             return connectRedisWithRetry(attempt + 1);
         }
+
+        void AdminAlertService.sendAlert('service_health',
+            `🔴 REDIS RECONNECTION EXHAUSTED\n` +
+            `Attempts: ${MAX_RECONNECT_ATTEMPTS}\n` +
+            `Service: Recovery Worker\n` +
+            `Impact: Cannot cross-reference idempotency status\n` +
+            `Action: Check Redis status. Restart recovery service after fixing.`,
+            { severity: 'critical' });
 
         return false;
     }
@@ -152,11 +169,31 @@ const checkHealth = async (): Promise<boolean> => {
 
     if (!mongoHealthy) {
         logger.warn('MongoDB is not healthy, attempting reconnect...');
+
+        void AdminAlertService.sendAlert('service_health',
+            `⚠️ DATABASE HEALTH CHECK FAILED\n` +
+            `MongoDB: ❌\n` +
+            `Redis: ${redisHealthy ? '✅' : '❌'}\n` +
+            `Service: Recovery Worker\n` +
+            `Action: Automatic reconnection in progress. Monitor for resolution.`,
+            { severity: 'warning' });
+
         handleMongoReconnect();
     }
 
     if (!redisHealthy) {
         logger.warn('Redis is not healthy, attempting reconnect...');
+
+        if (mongoHealthy) { // Only alert if MongoDB alert wasn't already sent
+            void AdminAlertService.sendAlert('service_health',
+                `⚠️ DATABASE HEALTH CHECK FAILED\n` +
+                `MongoDB: ✅\n` +
+                `Redis: ❌\n` +
+                `Service: Recovery Worker\n` +
+                `Action: Automatic reconnection in progress. Monitor for resolution.`,
+                { severity: 'warning' });
+        }
+
         handleRedisReconnect();
     }
 
