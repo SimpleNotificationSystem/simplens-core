@@ -67,16 +67,6 @@ const start_server = async () => {
 
         const server = http.createServer(app);
         server.listen(env.PORT, () => logger.success(`Notification Service running at http://localhost:${env.PORT}`));
-        server.on('error', (err) => {
-            logger.error('Server error:', err);
-
-            void AdminAlertService.sendAlert('service_health',
-                `🔴 API SERVER ERROR\n` +
-                `Error: ${err.message}\n` +
-                `Port: ${env.PORT}\n` +
-                `Action: Check if port is in use. Review server logs for stack trace.`,
-                { severity: 'critical' });
-        });
         const gracefulShutdown = async (err?: Error, reason?: string) => {
             logger.error('Shutting down server', { reason: reason ?? '', error: err?.message ?? '' });
             try {
@@ -118,6 +108,12 @@ const start_server = async () => {
 
         server.on('error', (err) => {
             logger.error('Server error:', err);
+            void AdminAlertService.sendAlert('service_health',
+                `🔴 API SERVER ERROR\n` +
+                `Error: ${err.message}\n` +
+                `Port: ${env.PORT}\n` +
+                `Action: Check if port is in use. Review server logs for stack trace.`,
+                { severity: 'critical' });
             gracefulShutdown(err, 'serverError');
         });
     }

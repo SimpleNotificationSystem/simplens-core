@@ -21,11 +21,11 @@ async function tryFallback<T extends BaseNotification>(
     const fallbackProvider = PluginRegistry.getFallbackProvider(channel);
 
     if (!fallbackProvider) {
-        console.log(`[ProviderRouter] No fallback provider for ${channel}, returning error`);
+        logger.debug(`[ProviderRouter] No fallback provider for ${channel}, returning error`);
         return null;
     }
 
-    console.log(`[ProviderRouter] Primary provider failed, trying fallback: ${fallbackProvider.manifest.name}`);
+    logger.debug(`[ProviderRouter] Primary provider failed, trying fallback: ${fallbackProvider.manifest.name}`);
 
     void AdminAlertService.sendAlert('service_health',
         `ℹ️ USING FALLBACK PROVIDER\n` +
@@ -99,7 +99,7 @@ export async function sendWithFallback<T extends BaseNotification>(
 ): Promise<DeliveryResult> {
     // 0. Use explicit provider if specified
     if (notification.provider) {
-        console.log(`[ProviderRouter] Using explicit provider: ${notification.provider}`);
+        logger.debug(`[ProviderRouter] Using explicit provider: ${notification.provider}`);
         const result = await sendToProvider(notification.provider, notification);
 
         // If success or retryable error, return as-is

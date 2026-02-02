@@ -27,6 +27,7 @@ import { publishStatus } from '@src/processors/shared/status.producer.js';
 import { publishDelayed, buildDelayedPayloadGeneric } from '@src/processors/shared/delayed.producer.js';
 import { handleSchemaValidationFailure } from '../shared/schema-failure-handler.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
+import status_outbox_model from '@src/database/models/status-outbox.models.js';
 // Track active consumers by channel
 const consumers: Map<string, Consumer> = new Map();
 const consumingState: Map<string, boolean> = new Map();
@@ -258,6 +259,27 @@ const processMessage = async (
                 await publishSuccessStatus(notification, channel, result.messageId);
             } catch (kafkaErr) {
                 logger.error(`[${channel}] Failed to publish success status: ${notificationId}`, kafkaErr);
+                
+                // Fallback: create status_outbox entry for the background worker to pick up
+                try {
+                    await status_outbox_model.create({
+                        notification_id: notificationId,
+                        status: 'delivered',
+                        processed: false
+                    });
+                    logger.info(`[${channel}] Created status_outbox fallback for: ${notificationId}`);
+                } catch (outboxErr) {
+                    logger.error(`[${channel}] Failed to create status_outbox fallback: ${notificationId}`, outboxErr);
+                    
+                    void AdminAlertService.sendAlert('ghost_delivery',
+                        `🔴 STATUS UPDATE COMPLETELY FAILED\n` +
+                        `Notification ID: ${notificationId}\n` +
+                        `Channel: ${channel}\n` +
+                        `Kafka publish failed, status_outbox creation also failed\n` +
+                        `Root cause: Check Kafka and MongoDB connectivity\n` +
+                        `Action: Recovery cron will auto-resolve via ghost delivery detection.`,
+                        { severity: 'critical', notificationId, channel });
+                }
             }
 
             logger.success(`[${channel}] Delivered: ${notificationId}`);
