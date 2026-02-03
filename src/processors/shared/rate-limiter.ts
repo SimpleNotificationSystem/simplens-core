@@ -8,6 +8,7 @@
 import { getRedisClient } from '@src/config/redis.config.js';
 import { env } from '@src/config/env.config.js';
 import { getRateLimitConfig as getPluginRateLimitConfig } from '@src/plugins/index.js';
+import { rateLimiterLogger as logger } from '@src/workers/utils/logger.js';
 
 // Redis key prefixes
 const TOKENS_KEY_PREFIX = 'ratelimit:tokens';
@@ -95,7 +96,7 @@ export const consumeToken = async (providerId: string): Promise<RateLimitResult>
     const { tokensKey, lastRefillKey, queueKey } = buildKeys(providerId);
 
     // Debug logging
-    console.log(`[RateLimiter] Provider: ${providerId}, Config: maxTokens=${config.maxTokens}, refillRate=${config.refillRate}/${config.refillInterval || 'second'} (normalized: ${normalizedRate.toFixed(6)}/sec)`);
+    logger.debug(`Provider: ${providerId}, Config: maxTokens=${config.maxTokens}, refillRate=${config.refillRate}/${config.refillInterval || 'second'} (normalized: ${normalizedRate.toFixed(6)}/sec)`);
 
     const now = Date.now();
 

@@ -14,13 +14,14 @@ const SERVICE_LABELS = {
     consumer: 'consumer',
     cron: 'cron',
     worker: 'background-worker',
-    emailProcessor: 'email-processor',
-    whatsappProcessor: 'whatsapp-processor',
     delayedWorker: 'delayed-processor',
     unifiedProcessor: 'unified-processor',
     redis: 'redis',
     recoveryService: 'recovery-service',
-    adminAlert: 'admin-alert'
+    adminAlert: 'admin-alert',
+    pluginLoader: 'plugin-loader',
+    pluginRegistry: 'plugin-registry',
+    rateLimiter: 'rate-limiter'
 } as const;
 
 type ServiceContext = keyof typeof SERVICE_LABELS;
@@ -73,13 +74,14 @@ const SERVICE_EMOJI: Record<ServiceContext, string> = {
     consumer: '📥',
     cron: '⏰',
     worker: '🚀',
-    emailProcessor: '📧',
-    whatsappProcessor: '💬',
     delayedWorker: '⏰',
     unifiedProcessor: '🔌',
     redis: '🔴',
     recoveryService: '🔧',
-    adminAlert: '🔔'
+    adminAlert: '🔔',
+    pluginLoader: '🔌',
+    pluginRegistry: '📦',
+    rateLimiter: '⏱️'
 };
 
 /**
@@ -222,11 +224,12 @@ export const producerLogger = createLogger('producer');
 export const consumerLogger = createLogger('consumer');
 export const cronLogger = createLogger('cron');
 export const workerLogger = createLogger('worker');
-export const emailProcessorLogger = createLogger('emailProcessor');
-export const whatsappProcessorLogger = createLogger('whatsappProcessor');
 export const delayedWorkerLogger = createLogger('delayedWorker');
 export const redisLogger = createLogger('redis');
 export const recoveryLogger = createLogger('recoveryService');
+export const pluginLoaderLogger = createLogger('pluginLoader');
+export const pluginRegistryLogger = createLogger('pluginRegistry');
+export const rateLimiterLogger = createLogger('rateLimiter');
 export const adminAlertLogger = createLogger('adminAlert');
 
 /**

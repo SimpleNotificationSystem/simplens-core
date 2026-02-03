@@ -119,7 +119,7 @@ const processMessage = async (
         const providerId = rawData.provider || PluginRegistry.getDefaultProviderId(channel);
 
         // Debug logging
-        console.log(`[UnifiedConsumer] Channel: ${channel}, Raw provider: ${rawData.provider}, Resolved providerId: ${providerId}`);
+        logger.debug(`Channel: ${channel}, Raw provider: ${rawData.provider}, Resolved providerId: ${providerId}`);
 
         let provider = providerId
             ? PluginRegistry.get(providerId)

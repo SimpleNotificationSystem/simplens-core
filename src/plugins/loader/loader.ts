@@ -12,6 +12,7 @@ import { pathToFileURL } from 'url';
 import { parse as parseYaml } from 'yaml';
 import { PluginRegistry, type ChannelConfig } from './registry.js';
 import type { SimpleNSProvider, ProviderConfig } from '../interfaces/provider.types.js';
+import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
 
 // Plugins directory for user-installed plugins
 const PLUGINS_DIR = join(process.cwd(), '.plugins');
@@ -61,19 +62,19 @@ async function installMissingPlugins(config: SimpleNSConfig): Promise<void> {
         return;
     }
 
-    console.log(`[PluginLoader] Auto-installing ${missingPackages.length} missing plugin(s)...`);
+    logger.info(`Auto-installing ${missingPackages.length} missing plugin(s)...`);
     initPluginsDir();
 
     for (const pkg of missingPackages) {
-        console.log(`[PluginLoader] Installing ${pkg}...`);
+        logger.info(`Installing ${pkg}...`);
         try {
             execSync(`npm install ${pkg}`, {
                 cwd: PLUGINS_DIR,
                 stdio: 'pipe' // Suppress output for cleaner logs
             });
-            console.log(`[PluginLoader] ✅ Installed ${pkg}`);
+            logger.success(`Installed ${pkg}`);
         } catch (err) {
-            console.error(`[PluginLoader] ❌ Failed to install ${pkg}:`, err);
+            logger.error(`Failed to install ${pkg}`, err);
             throw new Error(`Failed to auto-install plugin: ${pkg}`);
         }
     }
@@ -146,12 +147,12 @@ function loadConfig(configPath: string): SimpleNSConfig | null {
     const pathToUse = localConfigPath || configPath;
 
     if (localConfigPath) {
-        console.log(`[PluginLoader] Using local config: ${localConfigPath}`);
+        logger.info(`Using local config: ${localConfigPath}`);
     }
 
     if (!existsSync(pathToUse)) {
         // No config file - this is okay, just means no plugins configured
-        console.log(`[PluginLoader] No configuration file found at ${pathToUse}`);
+        logger.info(`No configuration file found at ${pathToUse}`);
         return null;
     }
 
@@ -178,7 +179,7 @@ function resolveCredentials(credentials: Record<string, string> | undefined): Re
             const envVar = value.slice(2, -1);
             const envValue = process.env[envVar];
             if (!envValue) {
-                console.warn(`[PluginLoader] Environment variable ${envVar} not set`);
+                logger.warn(`Environment variable ${envVar} not set`);
             }
             resolved[key] = envValue || '';
         } else {
@@ -209,7 +210,7 @@ function resolveOptionalConfig(
 
             if (envValue) {
                 resolved[key] = envValue;
-                console.log(`[PluginLoader] ✓ Loaded optional config: ${key}`);
+                logger.debug(`Loaded optional config: ${key}`);
             }
             // If not set, just skip (don't add to resolved)
         } else {
@@ -280,7 +281,7 @@ async function importAndInstantiateProvider(packageName: string): Promise<Simple
         // First, try to import from plugins directory
         const pluginPath = join(PLUGINS_NODE_MODULES, packageName);
         if (existsSync(pluginPath)) {
-            console.log(`[PluginLoader] Loading from plugins directory: ${packageName}`);
+            logger.debug(`Loading from plugins directory: ${packageName}`);
             // Resolve the actual entry file from package.json
             const entryFile = resolvePackageEntry(pluginPath);
             // Convert to file:// URL for cross-platform compatibility
@@ -308,7 +309,7 @@ async function importAndInstantiateProvider(packageName: string): Promise<Simple
 async function loadProvider(entry: ProviderEntry, options: { initialize?: boolean } = {}): Promise<void> {
     const shouldInitialize = options.initialize !== false; // Default true
 
-    console.log(`[PluginLoader] Loading provider: ${entry.id} from ${entry.package}`);
+    logger.info(`Loading provider: ${entry.id} from ${entry.package}`);
 
     try {
         // Import and instantiate the provider
@@ -336,23 +337,23 @@ async function loadProvider(entry: ProviderEntry, options: { initialize?: boolea
             // Health check
             const healthy = await provider.healthCheck();
             if (!healthy) {
-                console.warn(`[PluginLoader] Provider ${entry.id} health check failed`);
+                logger.warn(`Provider ${entry.id} health check failed`);
             }
         } else {
             // For metadata-only mode, we might still want to set basic config if the plugin supports it without init?
             // Usually init is where config is stored. 
             // If we don't init, the provider instance is "fresh". 
             // As long as schema methods don't depend on init being called, we are good.
-            console.log(`[PluginLoader] ℹ️ Skipping initialization for ${entry.id} (metadata mode)`);
+            logger.info(`Skipping initialization for ${entry.id} (metadata mode)`);
         }
 
         // Register
         const priority = entry.options?.priority || 0;
         PluginRegistry.register(provider, entry.id, priority);
 
-        console.log(`[PluginLoader] ✅ Loaded provider: ${entry.id}`);
+        logger.success(`Loaded provider: ${entry.id}`);
     } catch (err) {
-        console.error(`[PluginLoader] ❌ Failed to load ${entry.package}:`, err);
+        logger.error(`Failed to load ${entry.package}`, err);
         throw err;
     }
 }
@@ -361,13 +362,13 @@ async function loadProvider(entry: ProviderEntry, options: { initialize?: boolea
  * Load all providers from configuration
  */
 export async function loadProviders(configPath: string = './simplens.config.yaml', options: { initialize?: boolean } = {}): Promise<void> {
-    console.log(`[PluginLoader] Loading configuration from: ${configPath}`);
+    logger.info(`Loading configuration from: ${configPath}`);
 
     const config = loadConfig(configPath);
 
     // No config file or empty config - just mark as initialized with no providers
     if (!config || !config.providers || config.providers.length === 0) {
-        console.warn('[PluginLoader] No providers configured - starting without plugins');
+        logger.warn('No providers configured - starting without plugins');
         PluginRegistry.setInitialized(true);
         return;
     }
@@ -389,8 +390,8 @@ export async function loadProviders(configPath: string = './simplens.config.yaml
 
     PluginRegistry.setInitialized(true);
 
-    console.log(`[PluginLoader] ✅ Loaded ${PluginRegistry.getProviderIds().length} providers`);
-    console.log(`[PluginLoader] 📢 Channels: ${PluginRegistry.getChannels().join(', ')}`);
+    logger.success(`Loaded ${PluginRegistry.getProviderIds().length} providers`);
+    logger.info(`Channels: ${PluginRegistry.getChannels().join(', ')}`);
 }
 
 /**
@@ -414,7 +415,7 @@ export function getConfiguredChannels(configPath?: string): string[] {
             return Object.keys(config.channels || {});
         }
     } catch (err) {
-        console.warn(`[PluginLoader] Could not read config for channels: ${err}`);
+        logger.warn(`Could not read config for channels: ${err}`);
     }
     return [];
 }

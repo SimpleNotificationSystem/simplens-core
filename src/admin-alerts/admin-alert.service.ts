@@ -10,9 +10,7 @@ import admin_channel_model from '@src/database/models/admin-channel.models.js';
 import { getOrCreateEncryptionKey } from './key-manager.js';
 import { decrypt } from '@src/utils/encryption.utils.js';
 import { getChannelProvider } from './channel-registry.js';
-import { createLogger } from '@src/workers/utils/logger.js';
-
-const logger = createLogger('worker');
+import { adminAlertLogger as logger } from '@src/workers/utils/logger.js';
 
 /**
  * Throttle map to prevent alert storms

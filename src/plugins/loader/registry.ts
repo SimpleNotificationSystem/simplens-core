@@ -6,6 +6,7 @@
  */
 
 import type { SimpleNSProvider, ProviderManifest } from '../interfaces/provider.types.js';
+import { pluginRegistryLogger as logger } from '@src/workers/utils/logger.js';
 
 /**
  * Registered provider with configuration
@@ -152,7 +153,7 @@ class PluginRegistryClass {
         });
         this.channelProviders.set(channel, existing);
 
-        console.log(`[PluginRegistry] Registered provider: ${id} (${provider.manifest.displayName}) for channel: ${channel}`);
+        logger.info(`Registered provider: ${id} (${provider.manifest.displayName}) for channel: ${channel}`);
     }
 
     /**
@@ -269,13 +270,13 @@ class PluginRegistryClass {
      * Shutdown all providers
      */
     async shutdownAll(): Promise<void> {
-        console.log(`[PluginRegistry] Shutting down ${this.providers.size} providers...`);
+        logger.info(`Shutting down ${this.providers.size} providers...`);
         for (const { provider, id } of this.providers.values()) {
             try {
                 await provider.shutdown();
-                console.log(`[PluginRegistry] Shutdown provider: ${id}`);
+                logger.info(`Shutdown provider: ${id}`);
             } catch (err) {
-                console.error(`[PluginRegistry] Error shutting down ${id}:`, err);
+                logger.error(`Error shutting down ${id}`, err);
             }
         }
         this.providers.clear();
