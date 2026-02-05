@@ -26,8 +26,9 @@ import { Notification, NOTIFICATION_STATUS, PluginMetadata, ProviderMetadata } f
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
+import { withBasePath } from "@/lib/utils";
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
 
 interface PageProps {
     params: Promise<{ id: string }>;
@@ -68,7 +69,7 @@ export default function EventDetailPage({ params }: PageProps) {
 
         setIsRetrying(true);
         try {
-            const response = await fetch(`/api/notifications/${notification._id}/retry`, {
+            const response = await fetch(withBasePath(`/api/notifications/${notification._id}/retry`), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({}),
@@ -94,7 +95,7 @@ export default function EventDetailPage({ params }: PageProps) {
 
         setIsDeleting(true);
         try {
-            const response = await fetch(`/api/notifications/${notification._id}`, {
+            const response = await fetch(withBasePath(`/api/notifications/${notification._id}`), {
                 method: "DELETE",
             });
 

@@ -10,10 +10,10 @@ import {
     Bell, CheckCircle, Clock, AlertTriangle, Mail, MessageCircle,
     ShieldAlert, LucideIcon, Activity, Smartphone, Zap, ChevronLeft, ChevronRight
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, withBasePath } from "@/lib/utils";
 import type { DashboardStats } from "@/lib/types";
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
 
 interface StatsCardConfig {
     title: string;

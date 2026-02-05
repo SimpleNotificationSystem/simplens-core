@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/dialog";
 
 import { Alert as AlertType, ALERT_TYPE } from "@/lib/types";
+import { withBasePath } from "@/lib/utils";
 
 interface AlertWithNotification extends AlertType {
     notification?: {
@@ -79,7 +80,7 @@ export default function AlertsPage() {
 
     const fetchAlerts = useCallback(async (pageNum = 1, append = false, type = "all") => {
         try {
-            const response = await fetch(`/api/alerts?page=${pageNum}&limit=50&type=${type}`);
+            const response = await fetch(withBasePath(`/api/alerts?page=${pageNum}&limit=50&type=${type}`));
             const data = await response.json();
 
             if (append) {
@@ -130,7 +131,7 @@ export default function AlertsPage() {
 
         setBulkLoading(true);
         try {
-            const response = await fetch("/api/alerts/bulk-resolve", {
+            const response = await fetch(withBasePath("/api/alerts/bulk-resolve"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -160,7 +161,7 @@ export default function AlertsPage() {
     const handleRetry = async (alertId: string, appendWarning: boolean) => {
         setActionLoading(alertId);
         try {
-            const response = await fetch(`/api/alerts/${alertId}/resolve`, {
+            const response = await fetch(withBasePath(`/api/alerts/${alertId}/resolve`), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -185,7 +186,7 @@ export default function AlertsPage() {
     const handleDismiss = async (alertId: string) => {
         setActionLoading(alertId);
         try {
-            const response = await fetch(`/api/alerts/${alertId}`, {
+            const response = await fetch(withBasePath(`/api/alerts/${alertId}`), {
                 method: "DELETE",
             });
 

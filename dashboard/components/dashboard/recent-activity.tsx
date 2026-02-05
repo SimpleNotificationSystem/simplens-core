@@ -8,8 +8,9 @@ import { StatusBadge } from "@/components/events/status-badge";
 import { ChannelBadge } from "@/components/events/channel-badge";
 import type { Notification } from "@/lib/types";
 import { formatDistanceToNow } from "date-fns";
+import { withBasePath } from "@/lib/utils";
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
 
 export function RecentActivity() {
     const { data: notifications, isLoading, error } = useSWR<Notification[]>(

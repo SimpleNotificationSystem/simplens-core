@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2, TestTube2, Save, AlertCircle } from "lucide-react";
 import type { AlertFilters } from "@/lib/types";
+import { withBasePath } from "@/lib/utils";
 
 interface AddChannelDialogProps {
     open: boolean;
@@ -121,7 +122,7 @@ export function AddChannelDialog({ open, onOpenChange, onSuccess }: AddChannelDi
         setLoadingProviders(true);
         setProviderError(null);
         try {
-            const res = await fetch("/api/admin-channels/providers");
+            const res = await fetch(withBasePath("/api/admin-channels/providers"));
             if (!res.ok) throw new Error("Failed to fetch providers");
             const data = await res.json();
             setProviders(data.providers || []);
@@ -173,7 +174,7 @@ export function AddChannelDialog({ open, onOpenChange, onSuccess }: AddChannelDi
         setTesting(true);
         setTestResult(null);
         try {
-            const res = await fetch("/api/admin-channels/test", {
+            const res = await fetch(withBasePath("/api/admin-channels/test"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -196,7 +197,7 @@ export function AddChannelDialog({ open, onOpenChange, onSuccess }: AddChannelDi
     const handleSubmit = async () => {
         setLoading(true);
         try {
-            const res = await fetch("/api/admin-channels", {
+            const res = await fetch(withBasePath("/api/admin-channels"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

@@ -14,6 +14,7 @@ import { DynamicField } from "./dynamic-field";
 import { PluginMetadata, ProviderMetadata, FieldDefinition } from "@/lib/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { withBasePath } from "@/lib/utils";
 
 // Generate a UUIDv4
 function generateUUID(): string {
@@ -53,7 +54,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
     useEffect(() => {
         const fetchPlugins = async () => {
             try {
-                const res = await fetch('/api/plugins');
+                const res = await fetch(withBasePath('/api/plugins'));
                 if (!res.ok) {
                     throw new Error(`Failed to load plugins: ${res.statusText}`);
                 }
@@ -184,7 +185,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                 }
             }
 
-            const response = await fetch("/api/send", {
+            const response = await fetch(withBasePath("/api/send"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),

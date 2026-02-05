@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import useSWR from "swr";
 import { Puzzle, RefreshCw, ChevronDown, Mail, MessageCircle, TestTube2, Zap, User, FileText } from "lucide-react";
 import { useMemo, useState } from "react";
+import { withBasePath } from "@/lib/utils";
 
 interface FieldDefinition {
     name: string;
@@ -39,7 +40,7 @@ interface PluginsResponse {
     channels: Record<string, ChannelMetadata>;
 }
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
 
 // Channel-specific colors and icons
 const channelConfig: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string }> = {

@@ -36,8 +36,9 @@ import { Separator } from "@/components/ui/separator";
 import { SidebarThemeToggle } from "@/components/theme-toggle";
 import { LogoutButton } from "@/components/logout-button";
 import type { DashboardStats } from "@/lib/types";
+import { withBasePath } from "@/lib/utils";
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
 
 interface NavItem {
     title: string;

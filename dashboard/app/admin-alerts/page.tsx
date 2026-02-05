@@ -22,7 +22,8 @@ import { ComponentType, useState } from "react";
 import { AddChannelDialog } from "@/components/admin-alerts/add-channel-dialog";
 import type { AdminChannel } from "@/lib/types";
 import { CHANNEL_ICONS } from "@/components/admin-alerts/add-channel-dialog";
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import { withBasePath } from "@/lib/utils";
+const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
 
 const ALERT_TYPE_LABELS: Record<string, string> = {
     failed_notifications: "Failed Notifications",
@@ -42,7 +43,7 @@ export default function AdminAlertsPage() {
 
     const handleToggle = async (id: string, enabled: boolean) => {
         try {
-            await fetch(`/api/admin-channels/${id}`, {
+            await fetch(withBasePath(`/api/admin-channels/${id}`), {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ enabled }),
@@ -55,7 +56,7 @@ export default function AdminAlertsPage() {
 
     const handleDelete = async (id: string) => {
         try {
-            await fetch(`/api/admin-channels/${id}`, { method: "DELETE" });
+            await fetch(withBasePath(`/api/admin-channels/${id}`), { method: "DELETE" });
             mutate();
         } catch (error) {
             console.error("Failed to delete channel:", error);

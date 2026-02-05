@@ -36,8 +36,9 @@ import { PageToolbar, PageToolbarSection, PageToolbarSpacer } from "@/components
 import { format } from "date-fns";
 import type { PaginatedResponse, Notification, NOTIFICATION_STATUS, PluginMetadata } from "@/lib/types";
 import Link from "next/link";
+import { withBasePath } from "@/lib/utils";
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
 
 export default function EventsPage() {
     const [page, setPage] = useState(1);

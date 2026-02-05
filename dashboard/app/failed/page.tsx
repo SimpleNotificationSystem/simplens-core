@@ -38,7 +38,8 @@ import { format } from "date-fns";
 import type { PaginatedResponse, Notification } from "@/lib/types";
 import Link from "next/link";
 import { toast } from "sonner";
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import { withBasePath } from "@/lib/utils";
+const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
 
 export default function FailedPage() {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -79,7 +80,7 @@ export default function FailedPage() {
 
         for (const id of selectedIds) {
             try {
-                const response = await fetch(`/api/notifications/${id}/retry`, {
+                const response = await fetch(withBasePath(`/api/notifications/${id}/retry`), {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({}),

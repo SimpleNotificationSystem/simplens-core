@@ -13,6 +13,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useSWR from "swr";
 import { useState, useMemo, useCallback } from "react";
 import { Copy, Check, Code, Zap, AlertCircle } from "lucide-react";
+import { withBasePath } from "@/lib/utils";
 
 // Types
 interface FieldDefinition {
@@ -48,7 +49,7 @@ interface ChannelSelection {
     enabled: boolean;
 }
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
 
 // Map field type to schema type display - show (optional) for non-required fields
 function getTypeDisplay(field: FieldDefinition): string {
