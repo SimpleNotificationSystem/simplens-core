@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { motion } from "motion/react";
@@ -11,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { AlertTriangle, Eye, EyeOff, Loader2, Lock, User } from "lucide-react";
 import { ElegantShape } from "@/components/elegant-shape";
+import { useState } from "react";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -26,19 +25,26 @@ export default function LoginPage() {
         setIsLoading(true);
 
         try {
-            const result = await signIn("credentials", {
-                username,
-                password,
-                redirect: false,
+            const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/api/auth/login`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ username, password }),
             });
 
-            if (result?.error) {
-                setError("Invalid username or password");
+            const data = await response.json();
+
+            if (!response.ok) {
+                setError(data.error || "Invalid username or password");
                 setIsLoading(false);
-            } else {
-                router.push("/dashboard");
-                router.refresh();
+                return;
             }
+            setIsLoading(false);
+            // Redirect to dashboard
+            router.push(`/dashboard`);
+            router.refresh();
+            return;
         } catch {
             setError("An error occurred. Please try again.");
             setIsLoading(false);
@@ -122,7 +128,7 @@ export default function LoginPage() {
                     <CardHeader className="text-center pb-2">
                         <div className="flex justify-center mb-4">
                             <Image
-                                src="/SimpleNSLogo.png"
+                                src={`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/SimpleNSLogo.png`}
                                 alt="SimpleNS Logo"
                                 width={200}
                                 height={80}

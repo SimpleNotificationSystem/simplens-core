@@ -131,7 +131,7 @@ function AppSidebar() {
             <SidebarHeader>
                 <Link href="/" className="flex items-center gap-3 px-2 py-2">
                     <Image
-                        src="/SimpleNSLogo.png"
+                        src={`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/SimpleNSLogo.png`}
                         alt="SimpleNS Logo"
                         width={130}
                         height={120}

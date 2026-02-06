@@ -1,13 +1,28 @@
 "use client";
 
-import { signOut } from "next-auth/react";
 import { LogOut } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { SidebarMenuButton } from "@/components/ui/sidebar";
 
 export function LogoutButton() {
+    const router = useRouter();
+
     const handleLogout = async () => {
-        await signOut({ redirect: false });
-        window.location.href = "/login";
+        try {
+            const response = await fetch(
+                `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/api/auth/logout`,
+                { method: "POST" }
+            );
+
+            if (response.ok) {
+                router.push(`/login`);
+                router.refresh();
+            }
+        } catch (error) {
+            console.error("Logout failed:", error);
+            // Force redirect even on error
+            window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/login`;
+        }
     };
 
     return (

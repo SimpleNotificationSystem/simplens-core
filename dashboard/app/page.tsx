@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
-
 export default function Home() {
-  redirect(`${basePath}/login`);
+  // Redirect to dashboard - middleware will handle authentication
+  // If user is not authenticated, middleware redirects to login
+  redirect(`/dashboard`);
 }

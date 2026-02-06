@@ -320,6 +320,8 @@ services:
     build:
       context: ./dashboard
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH:-""}
     container_name: dashboard
     ports:
       - "3002:3002"
