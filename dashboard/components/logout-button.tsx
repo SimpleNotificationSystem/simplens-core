@@ -3,6 +3,7 @@
 import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { SidebarMenuButton } from "@/components/ui/sidebar";
+import { withBasePath } from "@/lib/utils";
 
 export function LogoutButton() {
     const router = useRouter();
@@ -10,18 +11,18 @@ export function LogoutButton() {
     const handleLogout = async () => {
         try {
             const response = await fetch(
-                `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/api/auth/logout`,
+                withBasePath("/api/auth/logout"),
                 { method: "POST" }
             );
 
             if (response.ok) {
-                router.push(`/login`);
+                router.push(withBasePath(`/login`));
                 router.refresh();
             }
         } catch (error) {
             console.error("Logout failed:", error);
             // Force redirect even on error
-            window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/login`;
+            window.location.href = withBasePath("/login");
         }
     };
 

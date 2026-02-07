@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { withBasePath } from "@/lib/utils";
 
 interface User {
     id: string;
@@ -23,11 +24,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
-
     const refreshSession = useCallback(async () => {
         try {
-            const response = await fetch(`${basePath}/api/auth/session`);
+            const response = await fetch(withBasePath(`/api/auth/session`));
             const data = await response.json();
 
             if (data.authenticated && data.user) {
@@ -41,19 +40,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } finally {
             setIsLoading(false);
         }
-    }, [basePath]);
+    }, []);
 
     const logout = useCallback(async () => {
         try {
-            await fetch(`${basePath}/api/auth/logout`, { method: "POST" });
+            await fetch(withBasePath(`/api/auth/logout`), { method: "POST" });
             setUser(null);
-            router.push(`${basePath}/login`);
+            router.push(withBasePath(`/login`));
             router.refresh();
         } catch (error) {
             console.error("Logout failed:", error);
-            window.location.href = `${basePath}/login`;
+            window.location.href = withBasePath(`/login`);
         }
-    }, [basePath, router]);
+    }, [router]);
 
     useEffect(() => {
         refreshSession();

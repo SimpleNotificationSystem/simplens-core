@@ -158,7 +158,7 @@ export default function EventsPage() {
 
                         {channel !== "all" && availableProviders.length > 0 && (
                             <Select value={provider} onValueChange={handleProviderChange}>
-                                <SelectTrigger className="w-[140px] sm:w-[160px]">
+                                <SelectTrigger className="w-[140px] sm:w-40">
                                     <SelectValue placeholder="Provider" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -173,7 +173,7 @@ export default function EventsPage() {
                         )}
 
                         <Select value={sortBy} onValueChange={handleSortChange}>
-                            <SelectTrigger className="w-[140px] sm:w-[160px]">
+                            <SelectTrigger className="w-[140px] sm:w-40">
                                 <ArrowUpDown className="h-4 w-4 mr-2" />
                                 <SelectValue placeholder="Sort by" />
                             </SelectTrigger>
@@ -272,7 +272,7 @@ export default function EventsPage() {
                                             {format(new Date(notification.created_at), "MMM d, HH:mm")}
                                         </TableCell>
                                         <TableCell>
-                                            <Link href={`/events/${notification._id}`}>
+                                            <Link href={withBasePath(`/events/${notification._id}`)}>
                                                 <Button variant="ghost" size="icon">
                                                     <Eye className="h-4 w-4" />
                                                 </Button>

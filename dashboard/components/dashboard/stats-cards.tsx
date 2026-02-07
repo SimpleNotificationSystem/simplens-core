@@ -103,7 +103,7 @@ function StatsCard({ card }: { card: StatsCardConfig }) {
     );
 
     if (card.href) {
-        return <Link href={card.href} className={cn("block group h-full", card.className)}>{Content}</Link>;
+        return <Link href={withBasePath(card.href)} className={cn("block group h-full", card.className)}>{Content}</Link>;
     }
 
     return <div className={cn("h-full group", card.className)}>{Content}</div>;

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+const basePath = process.env.BASE_PATH || "";
 const SESSION_COOKIE_NAME = "simplens_session";
 
 // Routes that don't require authentication
@@ -17,6 +17,7 @@ const publicRoutes = [
 const staticPatterns = [
     "/_next/",
     "/favicon.ico",
+    "/runtime-config.js",
     ".png",
     ".jpg",
     ".svg",
@@ -127,37 +128,87 @@ function isStaticFile(pathname: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
-    const { pathname } = request.nextUrl;
+    let pathname = request.nextUrl.pathname;
 
-    // Skip static files
-    if (isStaticFile(pathname)) {
-        return NextResponse.next();
+    // STEP 0: Handle root path when base path is configured
+    // Redirect "/" to basePath (e.g., "/dashboard")
+    if (basePath && pathname === "/" && basePath !== "") {
+        return NextResponse.redirect(new URL(basePath, request.url));
     }
 
-    // Allow public routes
-    if (isPublicRoute(pathname)) {
-        return NextResponse.next();
+    // STEP 1: Strip base path if present and rewrite the request
+    // This allows Next.js to serve pages at /dashboard/path while routing internally to /path
+    if (basePath && pathname.startsWith(basePath)) {
+        const strippedPath = pathname.slice(basePath.length) || '/';
+        
+        // Create URL with stripped path for internal processing
+        const url = request.nextUrl.clone();
+        url.pathname = strippedPath;
+        
+        // Update pathname for subsequent checks
+        pathname = strippedPath;
+        
+        // Skip static files - rewrite and return immediately
+        if (isStaticFile(pathname)) {
+            return NextResponse.rewrite(url);
+        }
+        
+        // For non-static files, we'll rewrite at the end after auth checks
+        // Continue with auth checks using the stripped pathname
+    } else {
+        // No base path or doesn't start with base path
+        // Skip static files
+        if (isStaticFile(pathname)) {
+            return NextResponse.next();
+        }
     }
 
-    // Validate session from request cookies
+    // STEP 2: Validate session from request cookies
     const session = await validateSessionFromRequest(request);
 
+    // STEP 3: Handle root path after stripping base path
+    // When user visits /dashboard (with basePath=/dashboard), it becomes / internally
+    // Redirect authenticated users to the dashboard route, unauthenticated to login
+    if (pathname === "/") {
+        if (session.isValid) {
+            // Authenticated: redirect to dashboard route
+            return NextResponse.redirect(new URL(`${basePath}/dashboard`, request.url));
+        } else {
+            // Not authenticated: redirect to login
+            return NextResponse.redirect(new URL(`${basePath}/login`, request.url));
+        }
+    }
+
+    // STEP 4: Check if authenticated user is trying to access login page
+    if (pathname === "/login" && session.isValid) {
+        // Redirect to dashboard
+        return NextResponse.redirect(new URL(`${basePath}/dashboard`, request.url));
+    }
+
+    // STEP 6: Allow public routes (for non-authenticated users)
+    if (isPublicRoute(pathname)) {
+        // If we stripped base path, rewrite the request
+        if (basePath && request.nextUrl.pathname.startsWith(basePath)) {
+            const url = request.nextUrl.clone();
+            url.pathname = pathname;
+            return NextResponse.rewrite(url);
+        }
+        return NextResponse.next();
+    }
+
+    // STEP 7: Protected routes - require authentication
     if (!session.isValid) {
         // Redirect to login
         const loginUrl = new URL(`${basePath}/login`, request.url);
-        loginUrl.searchParams.set("callbackUrl", pathname);
+        loginUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);
         return NextResponse.redirect(loginUrl);
     }
 
-    // Check if user is on login page but already authenticated
-    let normalizedPath = pathname;
-    if (basePath && pathname.startsWith(basePath)) {
-        normalizedPath = pathname.slice(basePath.length) || "/";
-    }
-
-    if (normalizedPath === "/login" && session.isValid) {
-        // Redirect to dashboard
-        return NextResponse.redirect(new URL(`${basePath}/dashboard`, request.url));
+    // STEP 8: If we stripped base path earlier, rewrite the request for Next.js
+    if (basePath && request.nextUrl.pathname.startsWith(basePath)) {
+        const url = request.nextUrl.clone();
+        url.pathname = pathname;
+        return NextResponse.rewrite(url);
     }
 
     return NextResponse.next();

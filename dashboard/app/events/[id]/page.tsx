@@ -101,7 +101,7 @@ export default function EventDetailPage({ params }: PageProps) {
 
             if (response.ok) {
                 toast.success("Notification deleted");
-                router.push("/events");
+                router.push(withBasePath("/events"));
             } else {
                 const data = await response.json();
                 toast.error(data.error || "Failed to delete notification");
@@ -133,7 +133,7 @@ export default function EventDetailPage({ params }: PageProps) {
             <DashboardLayout title="Event Details" description="Error">
                 <div className="text-center py-12">
                     <p className="text-muted-foreground mb-4">Notification not found</p>
-                    <Link href="/events">
+                    <Link href={withBasePath("/events")}>
                         <Button variant="outline">
                             <ArrowLeft className="mr-2 h-4 w-4" />
                             Back to Events
@@ -154,7 +154,7 @@ export default function EventDetailPage({ params }: PageProps) {
             <div className="space-y-6">
                 {/* Header Actions */}
                 <div className="flex items-center justify-between">
-                    <Link href="/events">
+                    <Link href={withBasePath("/events")}>
                         <Button variant="outline" size="sm">
                             <ArrowLeft className="mr-2 h-4 w-4" />
                             Back

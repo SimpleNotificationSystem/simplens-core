@@ -19,12 +19,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-ARG NEXT_PUBLIC_BASE_PATH
-
 # Set environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
-ENV NEXT_PUBLIC_BASE_PATH=${NEXT_PUBLIC_BASE_PATH:-""}
 
 # Build the application with cache mount for Next.js
 RUN --mount=type=cache,target=/app/.next/cache \
@@ -48,9 +45,16 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
+# Copy entrypoint script
+COPY entrypoint.sh ./
+RUN chmod +x entrypoint.sh
+
 # Create the .next/cache directory and set correct ownership
 RUN mkdir -p .next/cache
 RUN chown -R nextjs:nodejs .next
+
+# Set ownership of public directory so entrypoint can write runtime-config.js
+RUN chown -R nextjs:nodejs public
 
 # Switch to non-root user
 USER nextjs
@@ -63,5 +67,5 @@ ENV HOSTNAME="0.0.0.0"
 # Expose the port
 EXPOSE ${PORT} 
 
-# Start the application (standalone mode - no npm/next needed)
-CMD ["node", "server.js"]
+# Start the application using entrypoint script
+CMD ["./entrypoint.sh"]

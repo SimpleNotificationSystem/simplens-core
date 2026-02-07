@@ -1,14 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { motion } from "motion/react";
+import Image from "next/image";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { AlertTriangle, Eye, EyeOff, Loader2, Lock, User } from "lucide-react";
 import { ElegantShape } from "@/components/elegant-shape";
+import { withBasePath } from "@/lib/utils";
 import { useState } from "react";
 
 export default function LoginPage() {
@@ -25,7 +26,7 @@ export default function LoginPage() {
         setIsLoading(true);
 
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/api/auth/login`, {
+            const response = await fetch(withBasePath("/api/auth/login"), {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -42,7 +43,7 @@ export default function LoginPage() {
             }
             setIsLoading(false);
             // Redirect to dashboard
-            router.push(`/dashboard`);
+            router.push(withBasePath(`/dashboard`));
             router.refresh();
             return;
         } catch {
@@ -128,11 +129,11 @@ export default function LoginPage() {
                     <CardHeader className="text-center pb-2">
                         <div className="flex justify-center mb-4">
                             <Image
-                                src={`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/SimpleNSLogo.png`}
+                                src="/SimpleNSLogo.png"
                                 alt="SimpleNS Logo"
                                 width={200}
                                 height={80}
-                                priority
+                                preload={true}
                             />
                         </div>
                         <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>

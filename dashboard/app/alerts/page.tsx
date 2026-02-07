@@ -422,7 +422,7 @@ export default function AlertsPage() {
 
                                         {/* Actions */}
                                         <div className="grid grid-cols-3 gap-2 mt-auto pt-3">
-                                            <Link href={`/events/${alert.notification_id}`}>
+                                            <Link href={withBasePath(`/events/${alert.notification_id}`)}>
                                                 <Button
                                                     variant="outline"
                                                     size="sm"

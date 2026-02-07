@@ -12,7 +12,6 @@ import {
     BarChart3,
     Settings,
     Send,
-    Book,
     Puzzle,
     Code,
     BellRing,
@@ -129,13 +128,14 @@ function AppSidebar() {
     return (
         <Sidebar>
             <SidebarHeader>
-                <Link href="/" className="flex items-center gap-3 px-2 py-2">
+                <Link href={withBasePath("/dashboard")} className="flex items-center gap-3 px-2 py-2">
                     <Image
-                        src={`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/SimpleNSLogo.png`}
+                        src="/SimpleNSLogo.png"
                         alt="SimpleNS Logo"
                         width={130}
                         height={120}
                         className="rounded-lg"
+                        preload={true}
                     />
                 </Link>
             </SidebarHeader>
@@ -145,10 +145,11 @@ function AppSidebar() {
                         <SidebarMenu>
                             {navItems.map((item) => {
                                 const count = item.badgeKey ? badgeCounts[item.badgeKey] : 0;
+                                const itemHref = withBasePath(item.href);
                                 return (
                                     <SidebarMenuItem key={item.href}>
-                                        <SidebarMenuButton asChild isActive={pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))}>
-                                            <Link href={item.href}>
+                                        <SidebarMenuButton asChild isActive={pathname === itemHref || (item.href !== "/dashboard" && pathname.startsWith(itemHref))}>
+                                            <Link href={itemHref}>
                                                 <item.icon className="h-4 w-4" />
                                                 <span>{item.title}</span>
                                             </Link>
@@ -173,16 +174,19 @@ function AppSidebar() {
             </SidebarContent>
             <SidebarFooter>
                 <SidebarMenu>
-                    {settingsItems.map((item) => (
-                        <SidebarMenuItem key={item.href}>
-                            <SidebarMenuButton asChild isActive={pathname === item.href}>
-                                <Link href={item.href}>
-                                    <item.icon className="h-4 w-4" />
-                                    <span>{item.title}</span>
-                                </Link>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem>
-                    ))}
+                    {settingsItems.map((item) => {
+                        const itemHref = withBasePath(item.href);
+                        return (
+                            <SidebarMenuItem key={item.href}>
+                                <SidebarMenuButton asChild isActive={pathname === itemHref}>
+                                    <Link href={itemHref}>
+                                        <item.icon className="h-4 w-4" />
+                                        <span>{item.title}</span>
+                                    </Link>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                        );
+                    })}
                     <SidebarMenuItem>
                         <SidebarThemeToggle />
                     </SidebarMenuItem>

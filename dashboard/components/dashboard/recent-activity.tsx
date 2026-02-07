@@ -68,7 +68,7 @@ export function RecentActivity() {
                         notifications.map((notification) => (
                             <Link
                                 key={notification._id}
-                                href={`/events/${notification._id}`}
+                                href={withBasePath(`/events/${notification._id}`)}
                                 className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 hover:bg-muted/50 rounded-md p-2 transition-colors cursor-pointer"
                             >
                                 <div className="flex flex-col gap-1 min-w-0 flex-1">

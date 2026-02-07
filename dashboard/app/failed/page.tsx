@@ -244,7 +244,7 @@ export default function FailedPage() {
                                             {format(new Date(notification.updated_at), "MMM d, HH:mm")}
                                         </TableCell>
                                         <TableCell>
-                                            <Link href={`/events/${notification._id}`}>
+                                            <Link href={withBasePath(`/events/${notification._id}`)}>
                                                 <Button variant="ghost" size="icon">
                                                     <Eye className="h-4 w-4" />
                                                 </Button>
