@@ -1,5 +1,6 @@
 import { execa } from 'execa';
-import { logError, logSuccess, logWarning } from './utils.js';
+import ora from 'ora';
+import { logSuccess, logWarning } from './utils.js';
 import {
     DockerNotInstalledError,
     DockerNotRunningError,
@@ -11,9 +12,9 @@ export type OSType = 'windows' | 'linux' | 'darwin';
 
 /**
  * Checks if Docker is installed on the system by running `docker --version`.
- * 
+ *
  * @throws {DockerNotInstalledError} When Docker is not found in PATH or not installed
- * 
+ *
  * @example
  * ```ts
  * try {
@@ -35,10 +36,10 @@ export async function checkDockerInstalled(): Promise<void> {
 /**
  * Checks if the Docker daemon is running by executing `docker ps`.
  * Provides specific error types based on the failure reason.
- * 
+ *
  * @throws {DockerPermissionError} When user lacks permissions to access Docker socket
  * @throws {DockerNotRunningError} When Docker daemon is not running or unreachable
- * 
+ *
  * @example
  * ```ts
  * try {
@@ -55,15 +56,15 @@ export async function checkDockerRunning(): Promise<void> {
         await execa('docker', ['ps']);
     } catch (error: any) {
         const errorMessage = error.message?.toLowerCase() || '';
-        
+
         if (errorMessage.includes('permission denied') || errorMessage.includes('eacces')) {
             throw new DockerPermissionError();
         }
-        
+
         if (errorMessage.includes('cannot connect') || errorMessage.includes('is the docker daemon running')) {
             throw new DockerNotRunningError();
         }
-        
+
         // Generic docker error
         throw new DockerNotRunningError();
     }
@@ -71,10 +72,10 @@ export async function checkDockerRunning(): Promise<void> {
 
 /**
  * Detects the operating system platform.
- * 
+ *
  * @returns OS type: 'windows', 'darwin' (macOS), or 'linux'
  * @note Defaults to 'linux' for unknown platforms
- * 
+ *
  * @example
  * ```ts
  * const os = detectOS();
@@ -94,11 +95,11 @@ export function detectOS(): OSType {
 /**
  * Validates all system prerequisites before starting the onboarding process.
  * Checks Docker installation, daemon status, and detects the operating system.
- * 
+ *
  * @throws {DockerNotInstalledError} If Docker is not installed
- * @throws {DockerNotRunningError} If Docker daemon is not running  
+ * @throws {DockerNotRunningError} If Docker daemon is not running
  * @throws {DockerPermissionError} If user lacks Docker permissions
- * 
+ *
  * @example
  * ```ts
  * try {
@@ -110,22 +111,26 @@ export function detectOS(): OSType {
  * ```
  */
 export async function validatePrerequisites(): Promise<void> {
-    console.log('\n🔍 Checking prerequisites...\n');
+    logSuccess('Running prerequisite checks...');
 
     // Check Docker installation
+    const dockerInstalledSpinner = ora('Checking Docker installation...').start();
     try {
         await checkDockerInstalled();
-        logSuccess('Docker is installed');
+        dockerInstalledSpinner.succeed('Docker installation detected');
     } catch (error) {
+        dockerInstalledSpinner.fail('Docker installation check failed');
         // Error will be caught by main() and displayed with troubleshooting
         throw error;
     }
 
     // Check Docker daemon
+    const dockerRunningSpinner = ora('Checking Docker daemon status...').start();
     try {
         await checkDockerRunning();
-        logSuccess('Docker daemon is running');
+        dockerRunningSpinner.succeed('Docker daemon is running');
     } catch (error) {
+        dockerRunningSpinner.fail('Docker daemon check failed');
         // Error will be caught by main() and displayed with troubleshooting
         throw error;
     }
@@ -142,17 +147,17 @@ export async function validatePrerequisites(): Promise<void> {
 /**
  * Validates environment variable values based on the variable name/type.
  * Performs format-specific validation for URLs, ports, and security credentials.
- * 
+ *
  * @param key - Environment variable name (e.g., 'MONGO_URI', 'PORT', 'API_KEY')
  * @param value - Value to validate
  * @returns `true` if valid, `false` otherwise
- * 
+ *
  * @remarks
  * Validation rules:
  * - URLs: Must contain protocol (mongodb://, redis://)
  * - Ports: Must be 1-65535
  * - Secrets/Keys/Passwords: Must be at least 8 characters
- * 
+ *
  * @example
  * ```ts
  * validateEnvValue('MONGO_URI', 'mongodb://localhost:27017'); // true

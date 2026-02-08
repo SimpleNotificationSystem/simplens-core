@@ -1,15 +1,15 @@
 import inquirer from 'inquirer';
 import { execa } from 'execa';
 import ora from 'ora';
-import { logInfo, logSuccess, logError, logWarning } from './utils.js';
 import chalk from 'chalk';
-import { HEALTH_CHECK, SERVICE_PORTS, getServiceURL } from './config/constants.js';
+import { logInfo, logWarning, divider, printSummaryCard, printCommandHints } from './utils.js';
+import { HEALTH_CHECK, getServiceURL } from './config/constants.js';
 
 /**
  * Prompts user whether to start the services immediately after setup.
- * 
+ *
  * @returns `true` if user wants to start services, `false` otherwise
- * 
+ *
  * @example
  * ```ts
  * if (await promptStartServices()) {
@@ -33,10 +33,10 @@ export async function promptStartServices(): Promise<boolean> {
 /**
  * Starts infrastructure services using docker-compose.
  * Runs `docker-compose -f docker-compose.infra.yaml up -d` in the target directory.
- * 
+ *
  * @param targetDir - Directory containing docker-compose.infra.yaml
  * @throws Error if docker-compose command fails
- * 
+ *
  * @example
  * ```ts
  * await startInfraServices('/opt/simplens');
@@ -62,14 +62,14 @@ export async function startInfraServices(targetDir: string): Promise<void> {
 
 /**
  * Waits for infrastructure services to become healthy.
- * Polls Docker health checks for up to 60 seconds (30 retries × 2s).
- * 
+ * Polls Docker health checks for up to 60 seconds (30 retries x 2s).
+ *
  * @param targetDir - Directory where services are running
- * 
+ *
  * @remarks
  * Checks for healthy containers running MongoDB or Redis.
  * Configuration: 30 max retries, 2000ms delay between retries.
- * 
+ *
  * @example
  * ```ts
  * await startInfraServices(targetDir);
@@ -92,7 +92,7 @@ export async function waitForInfraHealth(targetDir: string): Promise<void> {
             const healthyContainers = stdout.split('\n').filter(Boolean);
 
             // Check for critical services
-            const hasMongoOrRedis = healthyContainers.some(name => 
+            const hasMongoOrRedis = healthyContainers.some(name =>
                 name.includes('mongo') || name.includes('redis')
             );
 
@@ -138,45 +138,51 @@ export async function startAppServices(targetDir: string): Promise<void> {
  * Display service status and URLs
  */
 export async function displayServiceStatus(): Promise<void> {
-    console.log('\n' + chalk.green('═'.repeat(60)));
-    console.log(chalk.green.bold('  ✅ Services Started Successfully!'));
-    console.log(chalk.green('═'.repeat(60)) + '\n');
+    console.log(`\n${divider('green', '═')}`);
+    console.log(chalk.greenBright(chalk.bold('Services Started')));
+    console.log(divider('green', '═'));
 
     try {
         // Get running containers
         const { stdout } = await execa('docker', ['ps', '--format', '{{.Names}}']);
-        const containers = stdout.split('\n').filter(Boolean);
+        const containers = stdout.split('\n').filter(Boolean).sort();
 
-        console.log(chalk.cyan.bold('🔗 Access URLs:\n'));
+        const accessRows: Array<{ label: string; value: string }> = [];
 
         // Display URLs for known services
         if (containers.some(c => c.includes('api'))) {
-            console.log(`  ${chalk.bold('API Server:')}      ${chalk.underline(getServiceURL('API'))}`);
-            console.log(`  ${chalk.bold('API Health:')}     ${chalk.underline(getServiceURL('API') + '/health')}\n`);
+            accessRows.push({ label: 'API Server', value: getServiceURL('API') });
+            accessRows.push({ label: 'API Health', value: `${getServiceURL('API')}/health` });
         }
 
         if (containers.some(c => c.includes('dashboard'))) {
-            console.log(`  ${chalk.bold('Dashboard:')}      ${chalk.underline(getServiceURL('DASHBOARD'))}\n`);
+            accessRows.push({ label: 'Dashboard', value: getServiceURL('DASHBOARD') });
         }
 
         if (containers.some(c => c.includes('kafka-ui'))) {
-            console.log(`  ${chalk.bold('Kafka UI:')}       ${chalk.underline(getServiceURL('KAFKA_UI'))}\n`);
+            accessRows.push({ label: 'Kafka UI', value: getServiceURL('KAFKA_UI') });
         }
 
         if (containers.some(c => c.includes('grafana'))) {
-            console.log(`  ${chalk.bold('Grafana:')}        ${chalk.underline(getServiceURL('GRAFANA'))}`);
-            console.log(`  ${chalk.gray('(default login: admin/admin)')}\n`);
+            accessRows.push({ label: 'Grafana', value: `${getServiceURL('GRAFANA')} (admin/admin)` });
         }
 
-        console.log(chalk.cyan.bold('📦 Running Containers:\n'));
+        if (accessRows.length > 0) {
+            printSummaryCard('Access URLs', accessRows);
+        }
+
+        console.log(chalk.cyanBright('Running Containers'));
+        console.log(divider());
         for (const container of containers) {
-            console.log(`  ${chalk.green('✓')} ${container}`);
+            console.log(`  ${chalk.greenBright('•')} ${container}`);
         }
+        console.log('');
 
-        console.log('\n' + chalk.cyan('To view logs:') + ' docker-compose logs -f');
-        console.log(chalk.cyan('To stop services:') + ' docker-compose down\n');
-        console.log(chalk.green('═'.repeat(60)) + '\n');
-
+        printCommandHints('Helpful commands', [
+            'docker-compose logs -f',
+            'docker-compose down',
+        ]);
+        console.log(`${divider('green', '═')}\n`);
     } catch (error) {
         logWarning('Could not fetch container status');
     }

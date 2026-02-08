@@ -1,7 +1,5 @@
 import chalk from 'chalk';
 import { appendFile as fsAppendFile } from 'fs/promises';
-import path from 'path';
-import { FILES } from '../config/constants.js';
 
 /**
  * Logging level
@@ -22,6 +20,30 @@ let loggerConfig: LoggerConfig = {
     debug: false,
 };
 
+function formatTag(tag: string, color: (text: string) => string): string {
+    return color(`[${tag.toUpperCase().padEnd(7)}]`);
+}
+
+function printLogLine(tag: 'debug' | 'info' | 'ok' | 'warn' | 'error', message: string): void {
+    switch (tag) {
+        case 'debug':
+            console.log(`${formatTag('debug', chalk.gray)} ${chalk.gray(message)}`);
+            return;
+        case 'info':
+            console.log(`${formatTag('info', chalk.blueBright)} ${message}`);
+            return;
+        case 'ok':
+            console.log(`${formatTag('ok', chalk.greenBright)} ${message}`);
+            return;
+        case 'warn':
+            console.log(`${formatTag('warn', chalk.yellowBright)} ${message}`);
+            return;
+        case 'error':
+            console.log(`${formatTag('error', chalk.redBright)} ${message}`);
+            return;
+    }
+}
+
 /**
  * Initialize logger with configuration
  */
@@ -41,7 +63,7 @@ export function getLoggerConfig(): Readonly<LoggerConfig> {
  */
 async function writeToLogFile(level: LogLevel, message: string): Promise<void> {
     if (!loggerConfig.logFile) return;
-    
+
     try {
         const timestamp = new Date().toISOString();
         const logEntry = `[${timestamp}] [${level.toUpperCase()}] ${message}\n`;
@@ -56,7 +78,7 @@ async function writeToLogFile(level: LogLevel, message: string): Promise<void> {
  */
 export function logDebug(message: string): void {
     if (loggerConfig.debug) {
-        console.log(chalk.gray(`🔧 ${message}`));
+        printLogLine('debug', message);
     }
     writeToLogFile('debug', message);
 }
@@ -66,7 +88,7 @@ export function logDebug(message: string): void {
  */
 export function logVerbose(message: string): void {
     if (loggerConfig.verbose || loggerConfig.debug) {
-        console.log(chalk.cyan(`ℹ️  ${message}`));
+        console.log(`${formatTag('verbose', chalk.cyanBright)} ${message}`);
     }
     writeToLogFile('info', message);
 }
@@ -75,7 +97,7 @@ export function logVerbose(message: string): void {
  * Log info message (always displayed)
  */
 export function logInfo(message: string): void {
-    console.log(chalk.blue(`ℹ️  ${message}`));
+    printLogLine('info', message);
     writeToLogFile('info', message);
 }
 
@@ -83,7 +105,7 @@ export function logInfo(message: string): void {
  * Log success message (always displayed)
  */
 export function logSuccess(message: string): void {
-    console.log(chalk.green(`✅ ${message}`));
+    printLogLine('ok', message);
     writeToLogFile('info', message);
 }
 
@@ -91,7 +113,7 @@ export function logSuccess(message: string): void {
  * Log warning message (always displayed)
  */
 export function logWarning(message: string): void {
-    console.log(chalk.yellow(`⚠️  ${message}`));
+    printLogLine('warn', message);
     writeToLogFile('warn', message);
 }
 
@@ -99,7 +121,7 @@ export function logWarning(message: string): void {
  * Log error message (always displayed)
  */
 export function logError(message: string): void {
-    console.log(chalk.red(`❌ ${message}`));
+    printLogLine('error', message);
     writeToLogFile('error', message);
 }
 

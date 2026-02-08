@@ -3,7 +3,16 @@
 import { Command } from 'commander';
 import path from 'path';
 import inquirer from 'inquirer';
-import { displayBanner, logSuccess, logInfo, initLogger, logDebug } from './utils.js';
+import {
+    displayBanner,
+    logSuccess,
+    logInfo,
+    initLogger,
+    logDebug,
+    printStepHeader,
+    printSummaryCard,
+    printCommandHints,
+} from './utils.js';
 import { validatePrerequisites } from './validators.js';
 import {
     promptInfraServicesWithBasePath,
@@ -57,7 +66,7 @@ interface OnboardSetupOptions {
 }
 
 function printStep(step: number, total: number, title: string): void {
-    logInfo(`\n[${step}/${total}] ${title}\n`);
+    printStepHeader(step, total, title);
 }
 
 function shouldAutoEnableNginx(basePath: string): boolean {
@@ -67,14 +76,16 @@ function shouldAutoEnableNginx(basePath: string): boolean {
 function showSetupSummary(setupOptions: OnboardSetupOptions, targetDir: string, autoNginx: boolean): void {
     const basePathLabel = setupOptions.basePath || '(root)';
 
-    console.log('\nSetup Summary');
-    console.log('-------------');
-    console.log(`Target directory: ${targetDir}`);
-    console.log(`Infrastructure setup: ${setupOptions.infra ? 'enabled' : 'disabled'}`);
-    console.log(`Environment mode: ${setupOptions.envMode}`);
-    console.log(`BASE_PATH: ${basePathLabel}`);
-    console.log(`Nginx auto-inclusion: ${autoNginx ? 'enabled (BASE_PATH is non-default)' : 'disabled'}`);
-    console.log('');
+    printSummaryCard('Setup Summary', [
+        { label: 'Target directory', value: targetDir },
+        { label: 'Infrastructure setup', value: setupOptions.infra ? 'enabled' : 'disabled' },
+        { label: 'Environment mode', value: setupOptions.envMode },
+        { label: 'BASE_PATH', value: basePathLabel },
+        {
+            label: 'Nginx auto-inclusion',
+            value: autoNginx ? 'enabled (BASE_PATH is non-default)' : 'disabled',
+        },
+    ]);
 }
 
 /**
@@ -259,27 +270,35 @@ async function main() {
             await displayServiceStatus();
         } else {
             logInfo('Services not started. You can start them later with:');
+            const commands: string[] = [];
             if (setupOptions.infra) {
-                console.log('  docker-compose -f docker-compose.infra.yaml up -d');
+                commands.push('docker-compose -f docker-compose.infra.yaml up -d');
             }
-            console.log('  docker-compose up -d\n');
+            commands.push('docker-compose up -d');
+            printCommandHints('Manual startup commands', commands);
         }
 
         // Final success message
-        logSuccess('\nSimpleNS onboarding completed successfully!\n');
+        logSuccess('SimpleNS onboarding completed successfully.');
 
         // Display access information
         if (nginxEnabled) {
             if (setupOptions.basePath) {
-                logInfo(`\nDashboard Access: http://localhost${setupOptions.basePath}`);
-                logInfo('API Access: http://localhost/api/notification/\n');
+                printSummaryCard('Service Access', [
+                    { label: 'Dashboard', value: `http://localhost${setupOptions.basePath}` },
+                    { label: 'API', value: 'http://localhost/api/notification/' },
+                ]);
             } else {
-                logInfo('\nDashboard Access: http://localhost');
-                logInfo('API Access: http://localhost/api/notification/\n');
+                printSummaryCard('Service Access', [
+                    { label: 'Dashboard', value: 'http://localhost' },
+                    { label: 'API', value: 'http://localhost/api/notification/' },
+                ]);
             }
         } else {
-            logInfo('\nDashboard Access: http://localhost:3002');
-            logInfo('API Access: http://localhost:3000\n');
+            printSummaryCard('Service Access', [
+                { label: 'Dashboard', value: 'http://localhost:3002' },
+                { label: 'API', value: 'http://localhost:3000' },
+            ]);
         }
 
     } catch (error: any) {

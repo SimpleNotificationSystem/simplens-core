@@ -18,6 +18,71 @@ export {
     getLoggerConfig,
 } from './utils/logger.js';
 
+const MAX_TUI_WIDTH = 78;
+const MIN_TUI_WIDTH = 52;
+
+type AccentColor = 'blue' | 'cyan' | 'green' | 'yellow' | 'red' | 'gray';
+
+function getTerminalWidth(): number {
+    const columns = process.stdout.columns ?? MAX_TUI_WIDTH;
+    return Math.max(MIN_TUI_WIDTH, Math.min(MAX_TUI_WIDTH, columns));
+}
+
+function accent(text: string, color: AccentColor): string {
+    switch (color) {
+        case 'blue':
+            return chalk.blueBright(text);
+        case 'cyan':
+            return chalk.cyanBright(text);
+        case 'green':
+            return chalk.greenBright(text);
+        case 'yellow':
+            return chalk.yellowBright(text);
+        case 'red':
+            return chalk.redBright(text);
+        case 'gray':
+        default:
+            return chalk.gray(text);
+    }
+}
+
+export function divider(color: AccentColor = 'gray', char: string = '─'): string {
+    return accent(char.repeat(getTerminalWidth()), color);
+}
+
+export function printStepHeader(step: number, total: number, title: string): void {
+    const filled = '■'.repeat(Math.max(0, step));
+    const empty = '·'.repeat(Math.max(0, total - step));
+    const progress = chalk.gray(`${filled}${empty}`);
+
+    console.log(`\n${divider()}`);
+    console.log(`${accent(`[${step}/${total}]`, 'cyan')} ${chalk.whiteBright(title)} ${progress}`);
+    console.log(divider());
+}
+
+export function printSummaryCard(
+    title: string,
+    rows: Array<{ label: string; value: string }>
+): void {
+    const labelWidth = Math.max(...rows.map(row => row.label.length), 0);
+
+    console.log(`\n${accent(title, 'cyan')}`);
+    console.log(divider());
+    for (const row of rows) {
+        const label = chalk.gray(row.label.padEnd(labelWidth));
+        console.log(`${label}  ${chalk.white(row.value)}`);
+    }
+    console.log(`${divider()}\n`);
+}
+
+export function printCommandHints(title: string, commands: string[]): void {
+    console.log(accent(title, 'cyan'));
+    for (const command of commands) {
+        console.log(`  ${accent('›', 'gray')} ${chalk.white(command)}`);
+    }
+    console.log('');
+}
+
 /**
  * Display SimpleNS banner in blue using figlet
  */
@@ -32,8 +97,12 @@ export function displayBanner(): void {
         horizontalLayout: 'default',
     });
 
-    console.log(chalk.blue(simpleNS));
-    console.log(chalk.blue(onboard));
+    console.log('');
+    console.log(divider('blue', '═'));
+    console.log(chalk.blueBright(simpleNS));
+    console.log(chalk.cyanBright(onboard));
+    console.log(chalk.gray('SimpleNS local setup assistant'));
+    console.log(divider('blue', '═'));
     console.log('');
 }
 
