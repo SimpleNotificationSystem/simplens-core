@@ -22,7 +22,7 @@ export async function promptStartServices(): Promise<boolean> {
         {
             type: 'confirm',
             name: 'start',
-            message: 'Do you want to start the services now?',
+            message: 'Start services now after setup?',
             default: true,
         },
     ]);

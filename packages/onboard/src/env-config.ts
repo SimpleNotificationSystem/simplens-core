@@ -1,8 +1,62 @@
 import inquirer from 'inquirer';
-import { readFile, writeFile, appendFile, logInfo, logSuccess, logWarning } from './utils.js';
+import { writeFile, appendFile, logInfo, logSuccess } from './utils.js';
 import path from 'path';
-import { CRITICAL_ENV_KEYS, VALIDATION } from './config/constants.js';
+import { CRITICAL_ENV_KEYS } from './config/constants.js';
 import type { EnvVariable } from './types/domain.js';
+
+export const DEFAULT_BASE_PATH = '';
+
+/**
+ * Validate BASE_PATH value.
+ * Accepts:
+ * - Empty value for root path
+ * - Slash-prefixed lowercase segments (e.g. /dashboard, /admin/v1)
+ */
+export function validateBasePath(input: string): true | string {
+    const value = input.trim();
+
+    if (!value) {
+        return true;
+    }
+
+    if (!value.startsWith('/')) {
+        return 'Base path must start with / (example: /dashboard)';
+    }
+
+    if (value.endsWith('/')) {
+        return 'Base path must not end with /';
+    }
+
+    if (!/^\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(value)) {
+        return 'Use lowercase letters, numbers, hyphens, and "/" separators only';
+    }
+
+    return true;
+}
+
+/**
+ * Normalize BASE_PATH for consistent downstream use.
+ */
+export function normalizeBasePath(input: string): string {
+    return input.trim();
+}
+
+/**
+ * Prompt BASE_PATH once at the beginning of onboarding.
+ */
+export async function promptBasePath(defaultValue: string = DEFAULT_BASE_PATH): Promise<string> {
+    const answer = await inquirer.prompt<{ basePath: string }>([
+        {
+            type: 'input',
+            name: 'basePath',
+            message: 'BASE_PATH for dashboard (leave empty for root, example: /dashboard):',
+            default: defaultValue,
+            validate: validateBasePath,
+        },
+    ]);
+
+    return normalizeBasePath(answer.basePath);
+}
 
 /**
  * Load and parse .env.example from embedded template
@@ -98,6 +152,7 @@ AUTH_TRUST_HOST=true
 API_BASE_URL=http://api:3000
 WEBHOOK_HOST=dashboard
 WEBHOOK_PORT=3002
+BASE_PATH=
 DASHBOARD_PORT=3002
 `;
 
@@ -164,12 +219,16 @@ function parseEnvContent(content: string): EnvVariable[] {
  */
 export async function promptEnvVariables(
     mode: 'default' | 'interactive',
-    infraServices: string[]
+    infraServices: string[],
+    basePath: string = DEFAULT_BASE_PATH
 ): Promise<Map<string, string>> {
     logInfo('Configuring environment variables...');
 
     const envVars = await loadEnvExample();
     const result = new Map<string, string>();
+    const normalizedBasePath = normalizeBasePath(basePath);
+    const basePathLabel = normalizedBasePath || '(root)';
+    logInfo(`BASE_PATH selected: ${basePathLabel}`);
 
     // Auto-fill infra connection URLs based on selected services using Docker service names
     const autoInfraUrls: Record<string, string> = {
@@ -193,6 +252,12 @@ export async function promptEnvVariables(
             // Use auto-filled infra URLs
             if (autoInfraUrls[envVar.key]) {
                 result.set(envVar.key, autoInfraUrls[envVar.key]);
+                continue;
+            }
+
+            // BASE_PATH is collected upfront in onboarding flow
+            if (envVar.key === 'BASE_PATH') {
+                result.set(envVar.key, normalizedBasePath);
                 continue;
             }
 
@@ -227,6 +292,12 @@ export async function promptEnvVariables(
         
         for (const envVar of envVars) {
             const defaultValue = autoInfraUrls[envVar.key] || envVar.value || getSuggestedValue(envVar.key);
+            
+            // BASE_PATH is collected upfront in onboarding flow
+            if (envVar.key === 'BASE_PATH') {
+                result.set(envVar.key, normalizedBasePath);
+                continue;
+            }
             
             const answer = await inquirer.prompt<{ value: string }>([
                 {

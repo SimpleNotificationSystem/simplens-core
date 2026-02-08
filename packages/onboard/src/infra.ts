@@ -1,7 +1,6 @@
 import inquirer from 'inquirer';
-import { detectOS } from './validators.js';
-import { INFRA_COMPOSE_TEMPLATE, APP_COMPOSE_TEMPLATE } from './templates.js';
-import { writeFile, logInfo, logSuccess, logWarning } from './utils.js';
+import { APP_COMPOSE_TEMPLATE, APP_NGINX_SERVICE_TEMPLATE } from './templates.js';
+import { writeFile, logInfo, logSuccess } from './utils.js';
 import path from 'path';
 import type { InfraService } from './types/domain.js';
 
@@ -10,6 +9,7 @@ const INFRA_SERVICES: InfraService[] = [
     { name: 'Kafka (Message Queue)', value: 'kafka', checked: true },
     { name: 'Kafka UI (Dashboard)', value: 'kafka-ui', checked: true },
     { name: 'Redis (Cache)', value: 'redis', checked: true },
+    { name: 'Nginx (Reverse Proxy)', value: 'nginx', checked: false },
     { name: 'Loki (Log Aggregation)', value: 'loki', checked: false },
     { name: 'Grafana (Observability Dashboard)', value: 'grafana', checked: false },
 ];
@@ -28,12 +28,28 @@ const INFRA_SERVICES: InfraService[] = [
  * ```
  */
 export async function promptInfraServices(): Promise<string[]> {
+    return promptInfraServicesWithBasePath({ allowNginx: true });
+}
+
+/**
+ * Prompts infrastructure services with optional nginx availability.
+ * If nginx is disabled, it is removed from choices and from result safety-check.
+ */
+export async function promptInfraServicesWithBasePath(options: {
+    allowNginx: boolean;
+}): Promise<string[]> {
+    const choices = options.allowNginx
+        ? INFRA_SERVICES
+        : INFRA_SERVICES.filter(service => service.value !== 'nginx');
+
     const answer = await inquirer.prompt<{ services: string[] }>([
         {
             type: 'checkbox',
             name: 'services',
-            message: 'Select infrastructure services to run:',
-            choices: INFRA_SERVICES,
+            message: options.allowNginx
+                ? 'Select infrastructure services to run (Space to toggle, Enter to confirm):'
+                : 'Select infrastructure services to run (nginx disabled because BASE_PATH is empty):',
+            choices,
             validate: (input: string[]) => {
                 if (input.length === 0) {
                     return 'Please select at least one service';
@@ -43,7 +59,11 @@ export async function promptInfraServices(): Promise<string[]> {
         },
     ]);
 
-    return answer.services;
+    if (options.allowNginx) {
+        return answer.services;
+    }
+
+    return answer.services.filter(service => service !== 'nginx');
 }
 
 
@@ -152,6 +172,15 @@ const SERVICE_CHUNKS: Record<string, string> = {
     depends_on:
       loki:
         condition: service_healthy`,
+    
+    'nginx': `  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - "./nginx.conf:/etc/nginx/conf.d/default.conf:ro"
+    restart: unless-stopped`,
 };
 
 /**
@@ -162,6 +191,7 @@ const SERVICE_VOLUMES: Record<string, string[]> = {
     'kafka': ['kafka_data'],
     'kafka-ui': [],
     'redis': ['redis_data'],
+    'nginx': [],
     'loki': ['loki_data'],
     'grafana': ['grafana_data'],
 };
@@ -236,10 +266,149 @@ export async function generateInfraCompose(
 }
 
 /**
+ * Build app docker-compose content.
+ * Optionally inject nginx reverse-proxy service before the volumes section.
+ */
+export function buildAppComposeContent(includeNginx: boolean): string {
+    if (!includeNginx) {
+        return APP_COMPOSE_TEMPLATE;
+    }
+
+    const marker = '\nvolumes:';
+    if (!APP_COMPOSE_TEMPLATE.includes(marker)) {
+        return APP_COMPOSE_TEMPLATE;
+    }
+
+    return APP_COMPOSE_TEMPLATE.replace(marker, `\n${APP_NGINX_SERVICE_TEMPLATE}\n${marker}`);
+}
+
+/**
  * Write app docker-compose.yaml
  */
-export async function writeAppCompose(targetDir: string): Promise<void> {
+export async function writeAppCompose(
+    targetDir: string,
+    options: { includeNginx?: boolean } = {}
+): Promise<void> {
     const appPath = path.join(targetDir, 'docker-compose.yaml');
-    await writeFile(appPath, APP_COMPOSE_TEMPLATE);
+    const appContent = buildAppComposeContent(options.includeNginx === true);
+    await writeFile(appPath, appContent);
     logSuccess('Generated docker-compose.yaml');
+}
+
+/**
+ * Generate nginx.conf based on basePath configuration
+ * 
+ * @param targetDir - Target directory to write nginx.conf
+ * @param basePath - Base path for dashboard (e.g., '/dashboard' or empty for root)
+ * 
+ * @remarks
+ * This function generates an nginx reverse proxy configuration that:
+ * - Routes API requests to the SimpleNS API server
+ * - Serves the dashboard at the configured basePath
+ * - Handles static assets (_next, public files)
+ * - Properly proxies all requests to the appropriate services
+ */
+export async function generateNginxConfig(
+    targetDir: string,
+    basePath: string
+): Promise<void> {
+    logInfo('Generating nginx.conf...');
+
+    // Normalize basePath (remove leading/trailing slashes for template)
+    const normalizedPath = basePath.trim().replace(/^\/|\/$/g, '');
+    const hasBasePath = normalizedPath.length > 0;
+
+    // Template for nginx.conf
+    const nginxTemplate = `server {
+    listen 80;
+    server_name localhost;
+
+    location /api/notification/ {
+        proxy_pass http://api:3000;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location = /runtime-config.js {
+        proxy_pass http://dashboard:3002/runtime-config.js;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # optional: prevent caching if config is dynamic
+        add_header Cache-Control "no-store";
+    }
+
+    location ^~ /_next/ {
+        proxy_pass http://dashboard:3002/_next/;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+${hasBasePath ? `
+    location ^~ /${normalizedPath}/_next/ {
+        proxy_pass http://dashboard:3002/_next/;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+` : ''}
+    location ~* \\.(png|jpg|jpeg|gif|ico|svg|webp|woff|woff2|ttf|eot)$ {
+        proxy_pass http://dashboard:3002;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        expires 1y;
+        add_header Cache-Control "public, max-age=31536000";
+    }
+${hasBasePath ? `
+    location ^~ /${normalizedPath} {
+        proxy_pass http://dashboard:3002;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+` : `
+    location / {
+        proxy_pass http://dashboard:3002;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+`}
+}
+`;
+
+    const nginxPath = path.join(targetDir, 'nginx.conf');
+    await writeFile(nginxPath, nginxTemplate);
+    logSuccess(`Generated nginx.conf${hasBasePath ? ` with base path: /${normalizedPath}` : ' (root path)'}`);
 }

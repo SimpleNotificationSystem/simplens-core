@@ -81,6 +81,7 @@ npx @simplens/onboard --infra --dir /path/to/setup
 | `--infra` | Setup infrastructure services (MongoDB, Kafka, Redis, Loki, Grafana) | `false` |
 | `--env <mode>` | Environment setup mode: `default` or `interactive` | `default` |
 | `--dir <path>` | Target directory for setup files | Current directory |
+| `--base-path <path>` | Dashboard base path (example: `/dashboard`) | Empty (root) |
 
 ## Workflow
 
@@ -93,10 +94,13 @@ npx @simplens/onboard --infra --dir /path/to/setup
    - Select infrastructure services
    - Auto-detect host configuration (Linux-aware)
    - Generate `docker-compose.infra.yaml`
+   - Auto-include Nginx when `BASE_PATH` is non-empty
+   - Nginx is disabled entirely when `BASE_PATH` is empty
 
 3. **Environment Configuration**
    - Load defaults from `.env.example`
    - Auto-fill infra connection URLs
+   - Ask for `BASE_PATH` first and reuse it throughout setup
    - Prompt for critical values (API keys, passwords)
    - Generate `.env` file
 

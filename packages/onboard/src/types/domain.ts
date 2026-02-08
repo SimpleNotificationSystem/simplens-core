@@ -50,6 +50,8 @@ export interface SetupOptions {
     envMode: 'default' | 'interactive';
     /** Target directory for setup */
     targetDir: string;
+    /** Dashboard base path (empty string means root) */
+    basePath: string;
 }
 
 /**

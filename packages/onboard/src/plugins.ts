@@ -76,7 +76,7 @@ export async function promptPluginSelection(availablePlugins: PluginInfo[]): Pro
         {
             type: 'checkbox',
             name: 'plugins',
-            message: 'Select plugins to install:',
+            message: 'Select plugins to install (Space to toggle, Enter to confirm):',
             choices: availablePlugins.map(p => ({
                 name: `${p.name} (${p.package}) - ${p.description}`,
                 value: p.package,

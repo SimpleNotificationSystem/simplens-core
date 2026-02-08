@@ -185,6 +185,7 @@ export const APP_COMPOSE_TEMPLATE = `services:
       API_BASE_URL: http://api:\${PORT:-3000}
       WEBHOOK_HOST: dashboard
       WEBHOOK_PORT: \${DASHBOARD_PORT:-3002}
+      NEXT_PUBLIC_BASE_PATH: \${BASE_PATH:-}
     restart: unless-stopped
 
 volumes:
@@ -194,3 +195,15 @@ networks:
   default:
     name: simplens
 `;
+
+export const APP_NGINX_SERVICE_TEMPLATE = `  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - "./nginx.conf:/etc/nginx/conf.d/default.conf:ro"
+    depends_on:
+      - api
+      - dashboard
+    restart: unless-stopped`;
