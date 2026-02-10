@@ -1,6 +1,7 @@
-import inquirer from 'inquirer';
 import { APP_COMPOSE_TEMPLATE, APP_NGINX_SERVICE_TEMPLATE } from './templates.js';
 import { writeFile, logInfo, logSuccess } from './utils.js';
+import { multiselect, spinner } from '@clack/prompts';
+import { handleCancel } from './ui.js';
 import path from 'path';
 import type { InfraService } from './types/domain.js';
 
@@ -16,16 +17,9 @@ const INFRA_SERVICES: InfraService[] = [
 
 /**
  * Prompts user to select which infrastructure services to deploy.
- * Services include MongoDB, Kafka, Redis, Loki, and Grafana.
- * 
+ *
  * @returns Array of selected service IDs (e.g., ['mongo', 'kafka', 'redis'])
  * @throws Error if no services are selected
- * 
- * @example
- * ```ts
- * const services = await promptInfraServices();
- * // Returns: ['mongo', 'kafka', 'kafka-ui', 'redis']
- * ```
  */
 export async function promptInfraServices(): Promise<string[]> {
     return promptInfraServicesWithBasePath({ allowNginx: true });
@@ -42,28 +36,30 @@ export async function promptInfraServicesWithBasePath(options: {
         ? INFRA_SERVICES
         : INFRA_SERVICES.filter(service => service.value !== 'nginx');
 
-    const answer = await inquirer.prompt<{ services: string[] }>([
-        {
-            type: 'checkbox',
-            name: 'services',
-            message: options.allowNginx
-                ? 'Select infrastructure services to run (Space to toggle, Enter to confirm):'
-                : 'Select infrastructure services to run (nginx disabled because BASE_PATH is empty):',
-            choices,
-            validate: (input: string[]) => {
-                if (input.length === 0) {
-                    return 'Please select at least one service';
-                }
-                return true;
-            },
-        },
-    ]);
+    const message = options.allowNginx
+        ? 'Select infrastructure services to run:'
+        : 'Select infrastructure services to run (nginx disabled — BASE_PATH is empty):';
+
+    const selected = await multiselect({
+        message,
+        options: choices.map(s => ({
+            value: s.value,
+            label: s.name,
+            hint: s.checked ? 'recommended' : undefined,
+        })),
+        initialValues: choices.filter(s => s.checked).map(s => s.value),
+        required: true,
+        withGuide: true,
+    });
+
+    handleCancel(selected);
+    const result = selected as string[];
 
     if (options.allowNginx) {
-        return answer.services;
+        return result;
     }
 
-    return answer.services.filter(service => service !== 'nginx');
+    return result.filter(service => service !== 'nginx');
 }
 
 
@@ -254,7 +250,8 @@ export async function generateInfraCompose(
     targetDir: string,
     selectedServices: string[]
 ): Promise<void> {
-    logInfo('Generating docker-compose.infra.yaml...');
+    const s = spinner();
+    s.start('Generating docker-compose.infra.yaml...');
 
     // Build compose content from service chunks
     const infraContent = buildInfraCompose(selectedServices);
@@ -262,7 +259,7 @@ export async function generateInfraCompose(
     // Write infrastructure compose file
     const infraPath = path.join(targetDir, 'docker-compose.infra.yaml');
     await writeFile(infraPath, infraContent);
-    logSuccess('Generated docker-compose.infra.yaml');
+    s.stop('Generated docker-compose.infra.yaml');
 }
 
 /**
@@ -289,30 +286,23 @@ export async function writeAppCompose(
     targetDir: string,
     options: { includeNginx?: boolean } = {}
 ): Promise<void> {
+    const s = spinner();
+    s.start('Generating docker-compose.yaml...');
     const appPath = path.join(targetDir, 'docker-compose.yaml');
     const appContent = buildAppComposeContent(options.includeNginx === true);
     await writeFile(appPath, appContent);
-    logSuccess('Generated docker-compose.yaml');
+    s.stop('Generated docker-compose.yaml');
 }
 
 /**
  * Generate nginx.conf based on basePath configuration
- * 
- * @param targetDir - Target directory to write nginx.conf
- * @param basePath - Base path for dashboard (e.g., '/dashboard' or empty for root)
- * 
- * @remarks
- * This function generates an nginx reverse proxy configuration that:
- * - Routes API requests to the SimpleNS API server
- * - Serves the dashboard at the configured basePath
- * - Handles static assets (_next, public files)
- * - Properly proxies all requests to the appropriate services
  */
 export async function generateNginxConfig(
     targetDir: string,
     basePath: string
 ): Promise<void> {
-    logInfo('Generating nginx.conf...');
+    const s = spinner();
+    s.start('Generating nginx.conf...');
 
     // Normalize basePath (remove leading/trailing slashes for template)
     const normalizedPath = basePath.trim().replace(/^\/|\/$/g, '');
@@ -410,5 +400,5 @@ ${hasBasePath ? `
 
     const nginxPath = path.join(targetDir, 'nginx.conf');
     await writeFile(nginxPath, nginxTemplate);
-    logSuccess(`Generated nginx.conf${hasBasePath ? ` with base path: /${normalizedPath}` : ' (root path)'}`);
+    s.stop(`Generated nginx.conf${hasBasePath ? ` with base path: /${normalizedPath}` : ' (root path)'}`);
 }

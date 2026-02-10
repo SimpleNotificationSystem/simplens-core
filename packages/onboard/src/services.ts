@@ -1,33 +1,24 @@
-import inquirer from 'inquirer';
 import { execa } from 'execa';
-import ora from 'ora';
 import chalk from 'chalk';
 import { logInfo, logWarning, divider, printSummaryCard, printCommandHints } from './utils.js';
+import { confirm, spinner } from '@clack/prompts';
+import { handleCancel } from './ui.js';
 import { HEALTH_CHECK, getServiceURL } from './config/constants.js';
 
 /**
  * Prompts user whether to start the services immediately after setup.
  *
  * @returns `true` if user wants to start services, `false` otherwise
- *
- * @example
- * ```ts
- * if (await promptStartServices()) {
- *   await startInfraServices(targetDir);
- * }
- * ```
  */
 export async function promptStartServices(): Promise<boolean> {
-    const answer = await inquirer.prompt<{ start: boolean }>([
-        {
-            type: 'confirm',
-            name: 'start',
-            message: 'Start services now after setup?',
-            default: true,
-        },
-    ]);
+    const shouldStart = await confirm({
+        message: 'Start services now after setup?',
+        initialValue: true,
+        withGuide: true,
+    });
 
-    return answer.start;
+    handleCancel(shouldStart);
+    return shouldStart as boolean;
 }
 
 /**
@@ -36,16 +27,12 @@ export async function promptStartServices(): Promise<boolean> {
  *
  * @param targetDir - Directory containing docker-compose.infra.yaml
  * @throws Error if docker-compose command fails
- *
- * @example
- * ```ts
- * await startInfraServices('/opt/simplens');
- * ```
  */
 export async function startInfraServices(targetDir: string): Promise<void> {
     logInfo('Starting infrastructure services...');
 
-    const spinner = ora('Starting docker-compose.infra.yaml...').start();
+    const s = spinner();
+    s.start('Starting docker-compose.infra.yaml...');
 
     try {
         await execa(
@@ -53,9 +40,9 @@ export async function startInfraServices(targetDir: string): Promise<void> {
             ['-f', 'docker-compose.infra.yaml', 'up', '-d'],
             { cwd: targetDir }
         );
-        spinner.succeed('Infrastructure services started');
-    } catch (error: any) {
-        spinner.fail('Failed to start infrastructure services');
+        s.stop('Infrastructure services started');
+    } catch (error: unknown) {
+        s.error('Failed to start infrastructure services');
         throw error;
     }
 }
@@ -65,21 +52,12 @@ export async function startInfraServices(targetDir: string): Promise<void> {
  * Polls Docker health checks for up to 60 seconds (30 retries x 2s).
  *
  * @param targetDir - Directory where services are running
- *
- * @remarks
- * Checks for healthy containers running MongoDB or Redis.
- * Configuration: 30 max retries, 2000ms delay between retries.
- *
- * @example
- * ```ts
- * await startInfraServices(targetDir);
- * await waitForInfraHealth(targetDir); // Wait for services to be ready
- * ```
  */
 export async function waitForInfraHealth(targetDir: string): Promise<void> {
     logInfo('Waiting for infrastructure services to be healthy...');
 
-    const spinner = ora('Checking service health...').start();
+    const s = spinner();
+    s.start('Checking service health...');
 
     // Wait for mongo, redis health checks
     const maxRetries = HEALTH_CHECK.MAX_RETRIES;
@@ -97,19 +75,19 @@ export async function waitForInfraHealth(targetDir: string): Promise<void> {
             );
 
             if (hasMongoOrRedis) {
-                spinner.succeed('Infrastructure services are healthy');
+                s.stop('Infrastructure services are healthy');
                 return;
             }
 
-            spinner.text = `Waiting for services... (${i + 1}/${maxRetries})`;
+            s.message(`Waiting for services... (${i + 1}/${maxRetries})`);
             await sleep(retryDelay);
         } catch (error) {
-            spinner.text = `Checking health... (${i + 1}/${maxRetries})`;
+            s.message(`Checking health... (${i + 1}/${maxRetries})`);
             await sleep(retryDelay);
         }
     }
 
-    spinner.warn('Health check timed out, but services may still be starting');
+    s.stop('Health check timed out, but services may still be starting');
     logWarning('You may need to wait a bit longer for all services to be ready.');
 }
 
@@ -119,7 +97,8 @@ export async function waitForInfraHealth(targetDir: string): Promise<void> {
 export async function startAppServices(targetDir: string): Promise<void> {
     logInfo('Starting application services...');
 
-    const spinner = ora('Starting docker-compose.yaml...').start();
+    const s = spinner();
+    s.start('Starting docker-compose.yaml...');
 
     try {
         await execa(
@@ -127,9 +106,9 @@ export async function startAppServices(targetDir: string): Promise<void> {
             ['up', '-d'],
             { cwd: targetDir }
         );
-        spinner.succeed('Application services started');
-    } catch (error: any) {
-        spinner.fail('Failed to start application services');
+        s.stop('Application services started');
+    } catch (error: unknown) {
+        s.error('Failed to start application services');
         throw error;
     }
 }

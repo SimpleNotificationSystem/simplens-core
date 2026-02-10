@@ -26,7 +26,6 @@
   "description": "CLI tool to setup SimpleNS instance on any AMD64 machine",
   "devDependencies": {
     "@types/figlet": "^1.7.0",
-    "@types/inquirer": "^9.0.7",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.19.30",
     "@vitest/ui": "^4.0.18",
@@ -34,12 +33,11 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
+    "@clack/prompts": "^1.0.0",
     "chalk": "^5.3.0",
     "commander": "^14.0.2",
     "execa": "^8.0.1",
     "figlet": "^1.10.0",
-    "inquirer": "^9.2.12",
-    "js-yaml": "^4.1.0",
-    "ora": "^7.0.1"
+    "js-yaml": "^4.1.0"
   }
 }

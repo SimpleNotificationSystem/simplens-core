@@ -2,7 +2,6 @@
 
 import { Command } from 'commander';
 import path from 'path';
-import inquirer from 'inquirer';
 import {
     displayBanner,
     logSuccess,
@@ -13,6 +12,8 @@ import {
     printSummaryCard,
     printCommandHints,
 } from './utils.js';
+import { text, confirm, select, log, note } from '@clack/prompts';
+import { intro, outro, handleCancel } from './ui.js';
 import { validatePrerequisites } from './validators.js';
 import {
     promptInfraServicesWithBasePath,
@@ -76,16 +77,15 @@ function shouldAutoEnableNginx(basePath: string): boolean {
 function showSetupSummary(setupOptions: OnboardSetupOptions, targetDir: string, autoNginx: boolean): void {
     const basePathLabel = setupOptions.basePath || '(root)';
 
-    printSummaryCard('Setup Summary', [
-        { label: 'Target directory', value: targetDir },
-        { label: 'Infrastructure setup', value: setupOptions.infra ? 'enabled' : 'disabled' },
-        { label: 'Environment mode', value: setupOptions.envMode },
-        { label: 'BASE_PATH', value: basePathLabel },
-        {
-            label: 'Nginx auto-inclusion',
-            value: autoNginx ? 'enabled (BASE_PATH is non-default)' : 'disabled',
-        },
-    ]);
+    const summaryLines = [
+        `Target directory   : ${targetDir}`,
+        `Infrastructure     : ${setupOptions.infra ? 'enabled' : 'disabled'}`,
+        `Environment mode   : ${setupOptions.envMode}`,
+        `BASE_PATH          : ${basePathLabel}`,
+        `Nginx auto-include : ${autoNginx ? 'enabled (BASE_PATH is non-default)' : 'disabled'}`,
+    ].join('\n');
+
+    note(summaryLines, 'Setup Summary');
 }
 
 /**
@@ -103,55 +103,57 @@ async function promptSetupOptions(): Promise<OnboardSetupOptions> {
         }
     }
 
-    const answers = await inquirer.prompt([
-        {
-            type: 'input',
-            name: 'basePath',
-            message: 'BASE_PATH for dashboard (leave empty for root, example: /dashboard):',
-            default: DEFAULT_BASE_PATH,
-            when: () => cliBasePath === undefined,
-            validate: validateBasePath,
-        },
-        {
-            type: 'confirm',
-            name: 'infra',
-            message: 'Do you want to setup infrastructure services (MongoDB, Kafka, Redis, etc.)?',
-            default: true,
-            when: () => options.infra === undefined,
-        },
-        {
-            type: 'list',
-            name: 'envMode',
-            message: 'Select environment configuration mode:',
-            choices: [
-                { name: 'Default (use preset values, prompt only for critical)', value: 'default' },
-                { name: 'Interactive (prompt for all variables)', value: 'interactive' },
-            ],
-            default: 'default',
-            when: () => !options.env,
-        },
-        {
-            type: 'input',
-            name: 'targetDir',
-            message: 'Target directory for setup:',
-            default: process.cwd(),
-            when: () => !options.dir,
-        },
-    ]);
-
+    // --- BASE_PATH ---
     let basePathValue = cliBasePath;
     if (basePathValue === undefined) {
-        if (typeof answers.basePath === 'string') {
-            basePathValue = normalizeBasePath(answers.basePath);
-        } else {
-            basePathValue = await promptBasePath(DEFAULT_BASE_PATH);
-        }
+        basePathValue = await promptBasePath(DEFAULT_BASE_PATH);
+    }
+
+    // --- Infra flag ---
+    let infraValue = options.infra;
+    if (infraValue === undefined) {
+        const result = await confirm({
+            message: 'Do you want to setup infrastructure services (MongoDB, Kafka, Redis, etc.)?',
+            initialValue: true,
+            withGuide: true,
+        });
+        handleCancel(result);
+        infraValue = result as boolean;
+    }
+
+    // --- Env mode ---
+    let envModeValue = options.env;
+    if (!envModeValue) {
+        const result = await select({
+            message: 'Select environment configuration mode:',
+            options: [
+                { value: 'default', label: 'Default', hint: 'use preset values, prompt only for critical' },
+                { value: 'interactive', label: 'Interactive', hint: 'prompt for all variables' },
+            ],
+            initialValue: 'default',
+            withGuide: true,
+        });
+        handleCancel(result);
+        envModeValue = result as string;
+    }
+
+    // --- Target directory ---
+    let targetDirValue = options.dir;
+    if (!targetDirValue) {
+        const result = await text({
+            message: 'Target directory for setup:',
+            defaultValue: process.cwd(),
+            initialValue: process.cwd(),
+            withGuide: true,
+        });
+        handleCancel(result);
+        targetDirValue = result as string;
     }
 
     return {
-        infra: options.infra !== undefined ? options.infra : answers.infra,
-        envMode: options.env || answers.envMode || 'default',
-        targetDir: options.dir || answers.targetDir || process.cwd(),
+        infra: infraValue,
+        envMode: envModeValue || 'default',
+        targetDir: targetDirValue || process.cwd(),
         basePath: basePathValue,
     };
 }
@@ -165,6 +167,9 @@ async function main() {
 
         // Display banner
         displayBanner();
+
+        // Clack intro
+        intro('SimpleNS Onboard');
 
         // Initialize logger based on CLI flags
         const opts = program.opts();
@@ -184,21 +189,20 @@ async function main() {
         const targetDir = path.resolve(setupOptions.targetDir);
         const autoEnableNginx = shouldAutoEnableNginx(setupOptions.basePath);
 
-        logInfo(`Target directory: ${targetDir}`);
         logDebug(`Resolved target directory: ${targetDir}`);
         showSetupSummary(setupOptions, targetDir, autoEnableNginx);
 
         // Step 1: Validate prerequisites
-        printStep(1, totalSteps, 'Prerequisites Validation');
+        log.step('Step 1/6 — Prerequisites Validation');
         await validatePrerequisites();
 
         // Step 2: Infrastructure setup (if --infra flag is provided)
-        printStep(2, totalSteps, 'Infrastructure Setup');
+        log.step('Step 2/6 — Infrastructure Setup');
         let selectedInfraServices: string[] = [];
 
         if (setupOptions.infra) {
             if (!autoEnableNginx) {
-                logInfo('BASE_PATH is empty, nginx reverse proxy is disabled.');
+                log.info('BASE_PATH is empty, nginx reverse proxy is disabled.');
                 selectedInfraServices = await promptInfraServicesWithBasePath({ allowNginx: false });
             } else {
                 selectedInfraServices = await promptInfraServicesWithBasePath({ allowNginx: true });
@@ -206,24 +210,24 @@ async function main() {
 
             if (autoEnableNginx && !selectedInfraServices.includes('nginx')) {
                 selectedInfraServices.push('nginx');
-                logInfo('BASE_PATH is non-default, so nginx was added automatically.');
+                log.info('BASE_PATH is non-default, so nginx was added automatically.');
             }
 
             await generateInfraCompose(targetDir, selectedInfraServices);
         } else {
-            logInfo('Skipping infrastructure setup (use --infra to enable).');
+            log.info('Skipping infrastructure setup (use --infra to enable).');
         }
 
         // Step 3: Always write app docker-compose
-        printStep(3, totalSteps, 'Application Compose Setup');
+        log.step('Step 3/6 — Application Compose Setup');
         const includeNginxInAppCompose = autoEnableNginx && !selectedInfraServices.includes('nginx');
         if (includeNginxInAppCompose) {
-            logInfo('Including nginx in docker-compose.yaml because BASE_PATH is non-default.');
+            log.info('Including nginx in docker-compose.yaml because BASE_PATH is non-default.');
         }
         await writeAppCompose(targetDir, { includeNginx: includeNginxInAppCompose });
 
         // Step 4: Environment configuration
-        printStep(4, totalSteps, 'Environment Configuration');
+        log.step('Step 4/6 — Environment Configuration');
         const envMode = setupOptions.envMode;
         const envVars = await promptEnvVariables(envMode, selectedInfraServices, setupOptions.basePath);
         await generateEnvFile(targetDir, envVars);
@@ -235,7 +239,7 @@ async function main() {
         }
 
         // Step 5: Plugin installation
-        printStep(5, totalSteps, 'Plugin Installation');
+        log.step('Step 5/6 — Plugin Installation');
         const availablePlugins = await fetchAvailablePlugins();
         const selectedPlugins = await promptPluginSelection(availablePlugins);
 
@@ -253,7 +257,7 @@ async function main() {
         }
 
         // Step 6: Service orchestration
-        printStep(6, totalSteps, 'Service Orchestration');
+        log.step('Step 6/6 — Service Orchestration');
         const shouldStart = await promptStartServices();
 
         if (shouldStart) {
@@ -269,7 +273,7 @@ async function main() {
             // Display service status
             await displayServiceStatus();
         } else {
-            logInfo('Services not started. You can start them later with:');
+            log.info('Services not started. You can start them later with:');
             const commands: string[] = [];
             if (setupOptions.infra) {
                 commands.push('docker-compose -f docker-compose.infra.yaml up -d');
@@ -284,28 +288,31 @@ async function main() {
         // Display access information
         if (nginxEnabled) {
             if (setupOptions.basePath) {
-                printSummaryCard('Service Access', [
-                    { label: 'Dashboard', value: `http://localhost${setupOptions.basePath}` },
-                    { label: 'API', value: 'http://localhost/api/notification/' },
-                ]);
+                note(
+                    `Dashboard : http://localhost${setupOptions.basePath}\nAPI       : http://localhost/api/notification/`,
+                    'Service Access'
+                );
             } else {
-                printSummaryCard('Service Access', [
-                    { label: 'Dashboard', value: 'http://localhost' },
-                    { label: 'API', value: 'http://localhost/api/notification/' },
-                ]);
+                note(
+                    'Dashboard : http://localhost\nAPI       : http://localhost/api/notification/',
+                    'Service Access'
+                );
             }
         } else {
-            printSummaryCard('Service Access', [
-                { label: 'Dashboard', value: 'http://localhost:3002' },
-                { label: 'API', value: 'http://localhost:3000' },
-            ]);
+            note(
+                'Dashboard : http://localhost:3002\nAPI       : http://localhost:3000',
+                'Service Access'
+            );
         }
 
-    } catch (error: any) {
+        // Clack outro
+        outro('Setup complete — happy notifying! 🚀');
+
+    } catch (error: unknown) {
         // Import at top of file
         const { formatErrorForUser } = await import('./types/errors.js');
 
-        console.log('\n' + formatErrorForUser(error));
+        console.log('\n' + formatErrorForUser(error as Error));
 
         // Log full error to stderr for debugging
         if (process.env.DEBUG) {

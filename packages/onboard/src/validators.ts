@@ -1,6 +1,6 @@
 import { execa } from 'execa';
-import ora from 'ora';
 import { logSuccess, logWarning } from './utils.js';
+import { spinner } from '@clack/prompts';
 import {
     DockerNotInstalledError,
     DockerNotRunningError,
@@ -14,21 +14,11 @@ export type OSType = 'windows' | 'linux' | 'darwin';
  * Checks if Docker is installed on the system by running `docker --version`.
  *
  * @throws {DockerNotInstalledError} When Docker is not found in PATH or not installed
- *
- * @example
- * ```ts
- * try {
- *   await checkDockerInstalled();
- *   console.log('Docker is available');
- * } catch (error) {
- *   // Handle DockerNotInstalledError
- * }
- * ```
  */
 export async function checkDockerInstalled(): Promise<void> {
     try {
         await execa('docker', ['--version']);
-    } catch (error: any) {
+    } catch (error: unknown) {
         throw new DockerNotInstalledError();
     }
 }
@@ -39,23 +29,12 @@ export async function checkDockerInstalled(): Promise<void> {
  *
  * @throws {DockerPermissionError} When user lacks permissions to access Docker socket
  * @throws {DockerNotRunningError} When Docker daemon is not running or unreachable
- *
- * @example
- * ```ts
- * try {
- *   await checkDockerRunning();
- * } catch (error) {
- *   if (error instanceof DockerPermissionError) {
- *     // Guide user to add sudo or docker group
- *   }
- * }
- * ```
  */
 export async function checkDockerRunning(): Promise<void> {
     try {
         await execa('docker', ['ps']);
-    } catch (error: any) {
-        const errorMessage = error.message?.toLowerCase() || '';
+    } catch (error: unknown) {
+        const errorMessage = (error as Error).message?.toLowerCase() || '';
 
         if (errorMessage.includes('permission denied') || errorMessage.includes('eacces')) {
             throw new DockerPermissionError();
@@ -75,14 +54,6 @@ export async function checkDockerRunning(): Promise<void> {
  *
  * @returns OS type: 'windows', 'darwin' (macOS), or 'linux'
  * @note Defaults to 'linux' for unknown platforms
- *
- * @example
- * ```ts
- * const os = detectOS();
- * if (os === 'linux') {
- *   // Linux-specific configuration
- * }
- * ```
  */
 export function detectOS(): OSType {
     const platform = process.platform;
@@ -95,43 +66,33 @@ export function detectOS(): OSType {
 /**
  * Validates all system prerequisites before starting the onboarding process.
  * Checks Docker installation, daemon status, and detects the operating system.
+ * Uses clack spinners for visual feedback.
  *
  * @throws {DockerNotInstalledError} If Docker is not installed
  * @throws {DockerNotRunningError} If Docker daemon is not running
  * @throws {DockerPermissionError} If user lacks Docker permissions
- *
- * @example
- * ```ts
- * try {
- *   await validatePrerequisites();
- *   // Proceed with setup
- * } catch (error) {
- *   // Handle prerequisite errors
- * }
- * ```
  */
 export async function validatePrerequisites(): Promise<void> {
     logSuccess('Running prerequisite checks...');
 
     // Check Docker installation
-    const dockerInstalledSpinner = ora('Checking Docker installation...').start();
+    const s = spinner();
+    s.start('Checking Docker installation...');
     try {
         await checkDockerInstalled();
-        dockerInstalledSpinner.succeed('Docker installation detected');
+        s.stop('Docker installation detected');
     } catch (error) {
-        dockerInstalledSpinner.fail('Docker installation check failed');
-        // Error will be caught by main() and displayed with troubleshooting
+        s.error('Docker installation check failed');
         throw error;
     }
 
     // Check Docker daemon
-    const dockerRunningSpinner = ora('Checking Docker daemon status...').start();
+    s.start('Checking Docker daemon status...');
     try {
         await checkDockerRunning();
-        dockerRunningSpinner.succeed('Docker daemon is running');
+        s.stop('Docker daemon is running');
     } catch (error) {
-        dockerRunningSpinner.fail('Docker daemon check failed');
-        // Error will be caught by main() and displayed with troubleshooting
+        s.error('Docker daemon check failed');
         throw error;
     }
 
@@ -151,19 +112,6 @@ export async function validatePrerequisites(): Promise<void> {
  * @param key - Environment variable name (e.g., 'MONGO_URI', 'PORT', 'API_KEY')
  * @param value - Value to validate
  * @returns `true` if valid, `false` otherwise
- *
- * @remarks
- * Validation rules:
- * - URLs: Must contain protocol (mongodb://, redis://)
- * - Ports: Must be 1-65535
- * - Secrets/Keys/Passwords: Must be at least 8 characters
- *
- * @example
- * ```ts
- * validateEnvValue('MONGO_URI', 'mongodb://localhost:27017'); // true
- * validateEnvValue('PORT', '3000'); // true
- * validateEnvValue('API_KEY', 'short'); // false (too short)
- * ```
  */
 export function validateEnvValue(key: string, value: string): boolean {
     // URL validation

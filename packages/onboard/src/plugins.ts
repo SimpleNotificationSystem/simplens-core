@@ -1,28 +1,20 @@
-import inquirer from 'inquirer';
 import { execa } from 'execa';
 import yaml from 'js-yaml';
 import { readFile, logInfo, logSuccess, logError, logWarning } from './utils.js';
+import { multiselect, text, password, spinner } from '@clack/prompts';
+import { handleCancel } from './ui.js';
 import path from 'path';
 import type { PluginInfo, SimplensConfig } from './types/domain.js';
 
 /**
  * Fetches available SimpleNS plugins using the config-gen CLI tool.
  * Falls back to default plugins if fetching fails.
- * 
+ *
  * @returns Array of available plugin information
- * 
- * @remarks
- * Uses `npx @simplens/config-gen list --official` to fetch plugins.
- * Default fallback plugins: mock, nodemailer-gmail, resend
- * 
- * @example
- * ```ts
- * const plugins = await fetchAvailablePlugins();
- * // Returns: [{ package: '@simplens/mock', name: 'Mock Provider', ... }, ...]
- * ```
  */
 export async function fetchAvailablePlugins(): Promise<PluginInfo[]> {
-    logInfo('Fetching available plugins...');
+    const s = spinner();
+    s.start('Fetching available plugins...');
 
     try {
         // Execute config-gen list command
@@ -50,10 +42,11 @@ export async function fetchAvailablePlugins(): Promise<PluginInfo[]> {
             }
         }
 
-        logSuccess(`Found ${plugins.length} available plugins`);
+        s.stop(`Found ${plugins.length} available plugins`);
         return plugins;
-    } catch (error: any) {
-        logWarning('Could not fetch plugins list. Using defaults.');
+    } catch (error: unknown) {
+        s.stop('Could not fetch plugins list. Using defaults.');
+        logWarning('Falling back to default plugin list.');
         // Return default plugins as fallback
         return [
             { package: '@simplens/mock', name: 'Mock Provider', description: 'Mock notification provider for testing' },
@@ -72,20 +65,21 @@ export async function promptPluginSelection(availablePlugins: PluginInfo[]): Pro
         return [];
     }
 
-    const answer = await inquirer.prompt<{ plugins: string[] }>([
-        {
-            type: 'checkbox',
-            name: 'plugins',
-            message: 'Select plugins to install (Space to toggle, Enter to confirm):',
-            choices: availablePlugins.map(p => ({
-                name: `${p.name} (${p.package}) - ${p.description}`,
-                value: p.package,
-                checked: p.package === '@simplens/mock', // Mock checked by default
-            })),
-        },
-    ]);
+    const selected = await multiselect({
+        message: 'Select plugins to install:',
+        options: availablePlugins.map(p => ({
+            value: p.package,
+            label: `${p.name} (${p.package})`,
+            hint: p.description,
+        })),
+        initialValues: availablePlugins
+            .filter(p => p.package === '@simplens/mock')
+            .map(p => p.package),
+        withGuide: true,
+    });
 
-    return answer.plugins;
+    handleCancel(selected);
+    return selected as string[];
 }
 
 /**
@@ -100,22 +94,21 @@ export async function generatePluginConfig(
         return;
     }
 
-    logInfo(`Generating configuration for ${selectedPlugins.length} plugin(s)...`);
+    const s = spinner();
+    s.start(`Generating configuration for ${selectedPlugins.length} plugin(s)...`);
 
     try {
-        const configPath = path.join(targetDir, 'simplens.config.yaml');
-        
         // Execute config-gen for all selected plugins
         // Use relative path to avoid WSL path issues when npx runs Windows binaries
         await execa(
             'npx',
             ['@simplens/config-gen', 'gen', ...selectedPlugins, '-o', 'simplens.config.yaml'],
-            { cwd: targetDir, stdio: 'inherit' }
+            { cwd: targetDir, stdio: 'pipe' }
         );
 
-        logSuccess('Generated simplens.config.yaml');
-    } catch (error: any) {
-        logError('Failed to generate plugin configuration');
+        s.stop('Generated simplens.config.yaml');
+    } catch (error: unknown) {
+        s.error('Failed to generate plugin configuration');
         throw error;
     }
 }
@@ -167,22 +160,33 @@ export async function promptPluginCredentials(credentialKeys: string[]): Promise
     const result = new Map<string, string>();
 
     for (const key of credentialKeys) {
-        const answer = await inquirer.prompt<{ value: string }>([
-            {
-                type: key.toLowerCase().includes('password') || key.toLowerCase().includes('key') 
-                    ? 'password' 
-                    : 'input',
-                name: 'value',
+        const isSecret = key.toLowerCase().includes('password') || key.toLowerCase().includes('key');
+
+        let answer: string | symbol;
+        if (isSecret) {
+            answer = await password({
                 message: `${key}:`,
-                validate: (input: string) => {
+                validate: (input: string | undefined) => {
                     if (!input || input.trim().length === 0) {
                         return `${key} is required`;
                     }
-                    return true;
+                    return undefined;
                 },
-            },
-        ]);
-        result.set(key, answer.value);
+            });
+        } else {
+            answer = await text({
+                message: `${key}:`,
+                validate: (input: string | undefined) => {
+                    if (!input || input.trim().length === 0) {
+                        return `${key} is required`;
+                    }
+                    return undefined;
+                },
+            });
+        }
+
+        handleCancel(answer);
+        result.set(key, answer as string);
     }
 
     logSuccess('Plugin credentials configured');

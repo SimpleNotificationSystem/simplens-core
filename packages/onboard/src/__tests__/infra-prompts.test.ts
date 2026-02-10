@@ -1,42 +1,54 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('inquirer', () => ({
-    default: {
-        prompt: vi.fn(),
-    },
+// Mock @clack/prompts
+vi.mock('@clack/prompts', () => ({
+    multiselect: vi.fn(),
+    spinner: vi.fn(() => ({
+        start: vi.fn(),
+        stop: vi.fn(),
+        error: vi.fn(),
+        message: vi.fn(),
+    })),
 }));
 
-import inquirer from 'inquirer';
+// Mock the ui.js module
+vi.mock('../ui.js', () => ({
+    handleCancel: vi.fn(),
+}));
+
+import { multiselect } from '@clack/prompts';
 import { promptInfraServicesWithBasePath } from '../infra.js';
 
-describe('infra service prompt behavior', () => {
+describe('promptInfraServicesWithBasePath', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
 
-    it('hides and strips nginx when allowNginx is false', async () => {
-        vi.mocked(inquirer.prompt).mockResolvedValueOnce({
-            services: ['mongo', 'nginx', 'redis'],
-        } as never);
+    it('includes nginx when allowNginx is true', async () => {
+        const mockMultiselect = vi.mocked(multiselect);
+        mockMultiselect.mockResolvedValue(['mongo', 'redis', 'nginx']);
 
-        const selected = await promptInfraServicesWithBasePath({ allowNginx: false });
-        const prompts = vi.mocked(inquirer.prompt).mock.calls[0]?.[0] as any[];
-        const choices = prompts[0].choices as Array<{ value: string }>;
+        const result = await promptInfraServicesWithBasePath({ allowNginx: true });
 
-        expect(choices.some(choice => choice.value === 'nginx')).toBe(false);
-        expect(selected).not.toContain('nginx');
+        // Should include nginx in options
+        const callArgs = mockMultiselect.mock.calls[0][0] as any;
+        const values = callArgs.options.map((o: any) => o.value);
+        expect(values).toContain('nginx');
+
+        expect(result).toContain('nginx');
     });
 
-    it('keeps nginx available when allowNginx is true', async () => {
-        vi.mocked(inquirer.prompt).mockResolvedValueOnce({
-            services: ['mongo', 'nginx'],
-        } as never);
+    it('excludes nginx when allowNginx is false', async () => {
+        const mockMultiselect = vi.mocked(multiselect);
+        mockMultiselect.mockResolvedValue(['mongo', 'redis']);
 
-        const selected = await promptInfraServicesWithBasePath({ allowNginx: true });
-        const prompts = vi.mocked(inquirer.prompt).mock.calls[0]?.[0] as any[];
-        const choices = prompts[0].choices as Array<{ value: string }>;
+        const result = await promptInfraServicesWithBasePath({ allowNginx: false });
 
-        expect(choices.some(choice => choice.value === 'nginx')).toBe(true);
-        expect(selected).toContain('nginx');
+        // Should NOT include nginx in options
+        const callArgs = mockMultiselect.mock.calls[0][0] as any;
+        const values = callArgs.options.map((o: any) => o.value);
+        expect(values).not.toContain('nginx');
+
+        expect(result).not.toContain('nginx');
     });
 });

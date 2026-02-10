@@ -1,5 +1,6 @@
-import inquirer from 'inquirer';
 import { writeFile, appendFile, logInfo, logSuccess } from './utils.js';
+import { text, password } from '@clack/prompts';
+import { handleCancel } from './ui.js';
 import path from 'path';
 import { CRITICAL_ENV_KEYS } from './config/constants.js';
 import type { EnvVariable } from './types/domain.js';
@@ -45,17 +46,19 @@ export function normalizeBasePath(input: string): string {
  * Prompt BASE_PATH once at the beginning of onboarding.
  */
 export async function promptBasePath(defaultValue: string = DEFAULT_BASE_PATH): Promise<string> {
-    const answer = await inquirer.prompt<{ basePath: string }>([
-        {
-            type: 'input',
-            name: 'basePath',
-            message: 'BASE_PATH for dashboard (leave empty for root, example: /dashboard):',
-            default: defaultValue,
-            validate: validateBasePath,
+    const result = await text({
+        message: 'BASE_PATH for dashboard (leave empty for root, example: /dashboard):',
+        placeholder: defaultValue || 'leave empty for root',
+        defaultValue,
+        validate: (value: string | undefined) => {
+            const v = validateBasePath(value ?? '');
+            return v === true ? undefined : v;
         },
-    ]);
+        withGuide: true,
+    });
 
-    return normalizeBasePath(answer.basePath);
+    handleCancel(result);
+    return normalizeBasePath(result as string);
 }
 
 /**
@@ -201,21 +204,11 @@ function parseEnvContent(content: string): EnvVariable[] {
 
 /**
  * Prompts user for environment variable values based on the selected mode.
- * 
+ *
  * @param mode - 'default' prompts only for critical vars, 'interactive' prompts for all
  * @param infraServices - List of selected infrastructure service IDs
- * @param infraHost - Host for infrastructure services
+ * @param basePath - BASE_PATH value already collected
  * @returns Map of environment variable keys to values
- * 
- * @remarks
- * Critical variables (always prompted): NS_API_KEY, MONGO_URI, BROKERS, etc.
- * Interactive mode prompts for all variables including optional ones.
- * 
- * @example
- * ```ts
- * const envVars = await promptEnvVariables('default', ['mongo', 'kafka'], 'localhost');
- * // Prompts only for critical variables
- * ```
  */
 export async function promptEnvVariables(
     mode: 'default' | 'interactive',
@@ -269,21 +262,36 @@ export async function promptEnvVariables(
 
             // Prompt for critical values (only if not auto-filled)
             if (CRITICAL_ENV_KEYS.includes(envVar.key)) {
-                const answer = await inquirer.prompt<{ value: string }>([
-                    {
-                        type: envVar.key.includes('PASSWORD') ? 'password' : 'input',
-                        name: 'value',
-                        message: `${envVar.key}${envVar.description ? ` (${envVar.description})` : ''}:`,
-                        default: getSuggestedValue(envVar.key),
-                        validate: (input: string) => {
+                const promptMessage = `${envVar.key}${envVar.description ? ` (${envVar.description})` : ''}:`;
+                const isPasswordField = envVar.key.includes('PASSWORD');
+
+                let answer: string | symbol;
+                if (isPasswordField) {
+                    answer = await password({
+                        message: promptMessage,
+                        validate: (input: string | undefined) => {
                             if (!input && envVar.required) {
                                 return `${envVar.key} is required`;
                             }
-                            return true;
+                            return undefined;
                         },
-                    },
-                ]);
-                result.set(envVar.key, answer.value);
+                    });
+                } else {
+                    answer = await text({
+                        message: promptMessage,
+                        placeholder: getSuggestedValue(envVar.key) || undefined,
+                        defaultValue: getSuggestedValue(envVar.key) || undefined,
+                        validate: (input: string | undefined) => {
+                            if (!input && envVar.required) {
+                                return `${envVar.key} is required`;
+                            }
+                            return undefined;
+                        },
+                    });
+                }
+
+                handleCancel(answer);
+                result.set(envVar.key, answer as string);
             }
         }
     } else {
@@ -299,21 +307,36 @@ export async function promptEnvVariables(
                 continue;
             }
             
-            const answer = await inquirer.prompt<{ value: string }>([
-                {
-                    type: envVar.key.includes('PASSWORD') ? 'password' : 'input',
-                    name: 'value',
-                    message: `${envVar.key}${envVar.description ? ` (${envVar.description})` : ''}:`,
-                    default: defaultValue,
-                    validate: (input: string) => {
+            const promptMessage = `${envVar.key}${envVar.description ? ` (${envVar.description})` : ''}:`;
+            const isPasswordField = envVar.key.includes('PASSWORD');
+
+            let answer: string | symbol;
+            if (isPasswordField) {
+                answer = await password({
+                    message: promptMessage,
+                    validate: (input: string | undefined) => {
                         if (!input && envVar.required) {
                             return `${envVar.key} is required`;
                         }
-                        return true;
+                        return undefined;
                     },
-                },
-            ]);
-            result.set(envVar.key, answer.value);
+                });
+            } else {
+                answer = await text({
+                    message: promptMessage,
+                    placeholder: defaultValue || undefined,
+                    defaultValue: defaultValue || undefined,
+                    validate: (input: string | undefined) => {
+                        if (!input && envVar.required) {
+                            return `${envVar.key} is required`;
+                        }
+                        return undefined;
+                    },
+                });
+            }
+
+            handleCancel(answer);
+            result.set(envVar.key, answer as string);
         }
     }
 
