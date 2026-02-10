@@ -59,9 +59,8 @@ async function createHttpSession(req: Request): Promise<StreamableHTTPServerTran
             sessions.delete(sessionId);
             console.log('Session closed:', sessionId);
         }
-        void server.close().catch((error) => {
-            console.error('Error closing session server:', error);
-        });
+        // Avoid recursive close loops: transport.close() triggers onclose,
+        // and server.close() closes the transport again.
     };
 
     await server.connect(transport);
@@ -90,6 +89,7 @@ async function main() {
     } else {
         const app = express();
 
+        app.disable('x-powered-by');
         app.use(express.json({ limit: '1mb' }));
         app.use(cors({
             origin: serverConfig.ALLOWED_ORIGINS,

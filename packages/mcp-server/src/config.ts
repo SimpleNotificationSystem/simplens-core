@@ -11,7 +11,9 @@ dotenv.config();
 
 export const serverConfig = {
     PORT: parseInt(process.env.PORT || '3001', 10),
-    ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS?.split(',') || ['*'],
+    ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS
+        ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
+        : ['*'],
 
     // Stdio-mode credentials (only used with --stdio flag)
     SIMPLENS_API_KEY: process.env.NS_API_KEY || '',

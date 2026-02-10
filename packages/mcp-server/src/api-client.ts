@@ -7,10 +7,18 @@
 
 import type { UserCredentials } from './auth.js';
 
-interface ApiResponse<T = unknown> {
+export interface ApiResponse<T = unknown> {
     ok: boolean;
     status: number;
     data: T;
+}
+
+function isLikelyJson(contentType: string | null, bodyText: string): boolean {
+    if (contentType && contentType.toLowerCase().includes('application/json')) {
+        return true;
+    }
+    const trimmed = bodyText.trim();
+    return trimmed.startsWith('{') || trimmed.startsWith('[');
 }
 
 async function request<T = unknown>(
@@ -37,17 +45,30 @@ async function request<T = unknown>(
         method: options.method || 'GET',
         headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
             ...options.headers,
         },
         body: options.body ? JSON.stringify(options.body) : undefined,
     });
 
-    const data = await response.json() as T;
+    const text = await response.text();
+    let data: T | string | null;
+    if (!text) {
+        data = null;
+    } else if (isLikelyJson(response.headers.get('content-type'), text)) {
+        try {
+            data = JSON.parse(text) as T;
+        } catch {
+            data = text;
+        }
+    } else {
+        data = text;
+    }
 
     return {
         ok: response.ok,
         status: response.status,
-        data,
+        data: data as T,
     };
 }
 
@@ -94,9 +115,11 @@ export class CoreApiClient {
 
 export class DashboardApiClient {
     private baseUrl: string;
+    private authHeader: Record<string, string>;
 
     constructor(credentials: UserCredentials) {
         this.baseUrl = credentials.dashboardUrl;
+        this.authHeader = { Authorization: `Bearer ${credentials.apiKey}` };
     }
 
     /** GET /api/notifications?status=failed - Find failed notifications */
@@ -109,6 +132,7 @@ export class DashboardApiClient {
         to?: string;
     } = {}): Promise<ApiResponse> {
         return request(this.baseUrl, '/api/notifications', {
+            headers: this.authHeader,
             params: {
                 status: 'failed',
                 page: params.page || '1',
@@ -125,6 +149,7 @@ export class DashboardApiClient {
     async retryFailure(notificationId: string): Promise<ApiResponse> {
         return request(this.baseUrl, `/api/notifications/${notificationId}/retry`, {
             method: 'POST',
+            headers: this.authHeader,
         });
     }
 
@@ -135,6 +160,7 @@ export class DashboardApiClient {
         type?: string;
     } = {}): Promise<ApiResponse> {
         return request(this.baseUrl, '/api/alerts', {
+            headers: this.authHeader,
             params: {
                 page: params.page || '1',
                 limit: params.limit || '50',
@@ -147,6 +173,7 @@ export class DashboardApiClient {
     async resolveAlert(alertId: string): Promise<ApiResponse> {
         return request(this.baseUrl, `/api/alerts/${alertId}`, {
             method: 'DELETE',
+            headers: this.authHeader,
         });
     }
 }
