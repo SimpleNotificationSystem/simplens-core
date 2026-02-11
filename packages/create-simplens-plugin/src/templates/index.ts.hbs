@@ -1,0 +1,90 @@
+import {
+    z,
+    type SimpleNSProvider,
+    type ProviderManifest,
+    type ProviderConfig,
+    type DeliveryResult,
+    type RateLimitConfig,
+    baseNotificationSchema,
+} from '@simplens/sdk';
+
+// Define your schemas
+const recipientSchema = z.object({
+{{#each recipientFields}}
+    {{this}}: z.string(),
+{{/each}}
+});
+
+const contentSchema = z.object({
+{{#each contentFields}}
+    {{this}}: z.string(),
+{{/each}}
+});
+
+const notificationSchema = baseNotificationSchema.extend({
+    channel: z.literal('{{channel}}'),
+    recipient: recipientSchema,
+    content: contentSchema,
+    created_at: z.coerce.date(),
+});
+
+type Notification = z.infer<typeof notificationSchema>;
+
+class {{pascalCase name}}Provider implements SimpleNSProvider<Notification> {
+    private config: ProviderConfig | null = null;
+
+    readonly manifest: ProviderManifest = {
+        name: 'simplens-plugin-{{name}}',
+        version: '1.0.0',
+        channel: '{{channel}}',
+        displayName: '{{displayName}}',
+        description: '{{description}}',
+        author: '{{author}}',
+        homepage: '',
+        requiredCredentials: [{{#each credentials}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}],
+    };
+
+    getNotificationSchema() {
+        return notificationSchema;
+    }
+
+    getRecipientSchema() {
+        return recipientSchema;
+    }
+
+    getContentSchema() {
+        return contentSchema;
+    }
+
+    getRateLimitConfig(): RateLimitConfig {
+        return { maxTokens: 100, refillRate: 10 };
+    }
+
+    async initialize(config: ProviderConfig): Promise<void> {
+        this.config = config;
+    }
+
+    async healthCheck(): Promise<boolean> {
+        return this.config !== null;
+    }
+
+    async send(notification: Notification): Promise<DeliveryResult> {
+        if (!this.config) {
+            return {
+                success: false,
+                error: { code: 'NOT_INITIALIZED', message: 'Provider not initialized', retryable: false },
+            };
+        }
+
+        // TODO: Implement your delivery logic here
+        console.log(`[{{displayName}}] Sending:`, notification);
+
+        return { success: true };
+    }
+
+    async shutdown(): Promise<void> {
+        this.config = null;
+    }
+}
+
+export default {{pascalCase name}}Provider;

@@ -1,0 +1,160 @@
+# @simplens/plugin-{{name}}
+
+{{description}}
+
+## Installation
+
+```bash
+npm install @simplens/plugin-{{name}}
+```
+
+## Configuration
+
+Add the {{displayName}} provider to your `simplens.config.yaml`:
+
+```yaml
+providers:
+- name: {{name}}
+package: '@simplens/plugin-{{name}}'
+credentials:
+{{#each credentials}}
+{{this}}: ${{screamingSnakeCase this}}
+{{/each}}
+{{#unless credentials.length}}
+# Add your credentials here
+{{/unless}}
+options:
+rateLimit:
+maxTokens: 100
+refillRate: 10
+```
+
+## Usage
+
+### Sending Notifications
+
+```typescript
+import { SimpleNS } from '@simplens/core';
+
+const simplens = new SimpleNS();
+
+await simplens.send({
+channel: '{{channel}}',
+recipient: {
+{{#each recipientFields}}
+{{this}}: 'your-{{this}}-value',
+{{/each}}
+{{#unless recipientFields.length}}
+// Add recipient fields
+{{/unless}}
+},
+content: {
+{{#each contentFields}}
+{{this}}: 'your-{{this}}-value',
+{{/each}}
+{{#unless contentFields.length}}
+// Add content fields
+{{/unless}}
+},
+});
+```
+
+### Notification Schema
+
+The {{displayName}} provider accepts notifications with the following structure:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `channel` | `'{{channel}}'` | Must be `'{{channel}}'` |
+{{#each recipientFields}}
+| `recipient.{{this}}` | `string` | TODO: Add description |
+{{/each}}
+{{#each contentFields}}
+| `content.{{this}}` | `string` | TODO: Add description |
+{{/each}}
+
+## Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `rateLimit.maxTokens` | `number` | `100` | Maximum tokens in rate limit bucket |
+| `rateLimit.refillRate` | `number` | `10` | Tokens refilled per second |
+
+{{#if credentials.length}}
+## Required Credentials
+
+| Credential | Environment Variable | Description |
+|------------|---------------------|-------------|
+{{#each credentials}}
+| `{{this}}` | `{{screamingSnakeCase this}}` | TODO: Add description |
+{{/each}}
+{{/if}}
+
+## Development
+
+### Prerequisites
+
+- Node.js 18+
+- npm or pnpm
+
+### Setup
+
+```bash
+# Install dependencies
+npm install
+
+# Build the plugin
+npm run build
+
+# Run tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+```
+
+### Project Structure
+
+```
+plugin-{{name}}/
+├── src/
+│ ├── index.ts # Main provider implementation
+│ └── index.test.ts # Test suite
+├── dist/ # Compiled output (generated)
+├── package.json
+├── tsconfig.json
+└── README.md
+```
+
+### Implementing Your Provider
+
+1. **Define your schemas** in `src/index.ts`:
+- `recipientSchema`: Who receives notifications
+- `contentSchema`: What data the notification contains
+
+2. **Implement the `send()` method**:
+- Add your API client initialization in `initialize()`
+- Implement the delivery logic in `send()`
+- Handle errors appropriately
+
+3. **Add tests** for your implementation in `src/index.test.ts`
+
+4. **Update this README** with accurate documentation
+
+## Publishing
+
+```bash
+# Build the plugin
+npm run build
+
+# Publish to npm
+npm publish --access public
+```
+
+## License
+
+MIT
+
+## Author
+
+{{author}}{{#if email}} <{{email}}>{{/if}}

@@ -1,0 +1,40 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import {{pascalCase name}}Provider from './index.js';
+
+describe('{{pascalCase name}}Provider', () => {
+let provider: {{pascalCase name}}Provider;
+
+beforeEach(() => {
+provider = new {{pascalCase name}}Provider();
+});
+
+it('should have correct manifest', () => {
+expect(provider.manifest.channel).toBe('{{channel}}');
+expect(provider.manifest.name).toBe('simplens-plugin-{{name}}');
+});
+
+it('should return schemas', () => {
+expect(provider.getNotificationSchema()).toBeDefined();
+expect(provider.getRecipientSchema()).toBeDefined();
+expect(provider.getContentSchema()).toBeDefined();
+});
+
+it('should initialize and pass health check', async () => {
+await provider.initialize({ id: 'test', credentials: {}, options: {} });
+expect(await provider.healthCheck()).toBe(true);
+});
+
+it('should send notification', async () => {
+await provider.initialize({ id: 'test', credentials: {}, options: {} });
+
+const result = await provider.send({
+id: 'test-1',
+channel: '{{channel}}' as const,
+recipient: { {{#each recipientFields}}{{this}}: 'test'{{#unless @last}}, {{/unless}}{{/each}} },
+content: { {{#each contentFields}}{{this}}: 'test'{{#unless @last}}, {{/unless}}{{/each}} },
+created_at: new Date(),
+});
+
+expect(result.success).toBe(true);
+});
+});

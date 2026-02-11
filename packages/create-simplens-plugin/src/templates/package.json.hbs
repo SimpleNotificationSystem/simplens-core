@@ -1,0 +1,45 @@
+{
+    "name": "@simplens/plugin-{{name}}",
+    "version": "1.0.0",
+    "description": "{{description}}",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "default": "./dist/index.js"
+        }
+    },
+    "type": "module",
+    "scripts": {
+        "build": "tsc",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "prepublishOnly": "npm run build"
+    },
+    "keywords": [
+        "simplens",
+        "plugin",
+        "{{channel}}",
+        "notification"
+    ],
+    "author": "{{author}}{{#if email}} <{{email}}>{{/if}}",
+    "license": "MIT",
+    "dependencies": {
+        "@simplens/sdk": "^1.0.3"
+    },
+    "devDependencies": {
+        "@types/node": "^22.0.0",
+        "typescript": "^5.0.0",
+        "vitest": "^2.0.0"
+    },
+    "files": [
+        "dist",
+        "README.md"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/SimpleNotificationSystem/plugin-{{name}}"
+    }
+}
