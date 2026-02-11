@@ -170,6 +170,12 @@ LOG_LEVEL=info
 LOG_TO_FILE=true
 
 # ============================================
+# DOCKER IMAGE VERSIONS
+# ============================================
+CORE_VERSION=latest
+DASHBOARD_VERSION=latest
+
+# ============================================
 # ADMIN DASHBOARD
 # ============================================
 AUTH_SECRET=
@@ -295,6 +301,11 @@ export async function promptEnvVariables(
                         result.set(envVar.key, defaultValue);
                     }
                 } else {
+                    // Show changelog info for version variables
+                    if (envVar.key === 'CORE_VERSION' || envVar.key === 'DASHBOARD_VERSION') {
+                        logInfo('ℹ️  Visit https://simplens.in/changelog for version information');
+                    }
+
                     const promptMessage = `${envVar.key}${envVar.description ? ` (${envVar.description})` : ''}:`;
                     const isPasswordField = envVar.key.includes('PASSWORD');
 
@@ -341,6 +352,11 @@ export async function promptEnvVariables(
                 continue;
             }
             
+            // Show changelog info for version variables
+            if (envVar.key === 'CORE_VERSION' || envVar.key === 'DASHBOARD_VERSION') {
+                logInfo('ℹ️  Visit https://simplens.in/changelog for version information');
+            }
+
             const promptMessage = `${envVar.key}${envVar.description ? ` (${envVar.description})` : ''}:`;
             const isPasswordField = envVar.key.includes('PASSWORD');
 

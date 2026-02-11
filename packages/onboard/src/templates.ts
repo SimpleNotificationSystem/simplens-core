@@ -121,7 +121,7 @@ volumes:
 
 export const APP_COMPOSE_TEMPLATE = `services:
   api:
-    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    image: ghcr.io/simplenotificationsystem/simplens-core:\${CORE_VERSION:-latest}
     container_name: api
     ports:
       - 3000:3000
@@ -140,14 +140,14 @@ export const APP_COMPOSE_TEMPLATE = `services:
       start_period: 10s
 
   worker:
-    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    image: ghcr.io/simplenotificationsystem/simplens-core:\${CORE_VERSION:-latest}
     env_file:
       - .env
     command: [ "node", "dist/workers/worker.js" ]
     restart: unless-stopped
 
   notification_processor:
-    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    image: ghcr.io/simplenotificationsystem/simplens-core:\${CORE_VERSION:-latest}
     env_file:
       - .env
     volumes:
@@ -160,21 +160,21 @@ export const APP_COMPOSE_TEMPLATE = `services:
     restart: unless-stopped
 
   delayed_processor:
-    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    image: ghcr.io/simplenotificationsystem/simplens-core:\${CORE_VERSION:-latest}
     env_file:
       - .env
     command: [ "node", "dist/processors/delayed/delayed.processor.js" ]
     restart: unless-stopped
 
   recovery:
-    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    image: ghcr.io/simplenotificationsystem/simplens-core:\${CORE_VERSION:-latest}
     env_file:
       - .env
     command: [ "node", "dist/workers/recovery/recovery.service.js" ]
     restart: unless-stopped
 
   dashboard:
-    image: ghcr.io/simplenotificationsystem/simplens-dashboard:latest
+    image: ghcr.io/simplenotificationsystem/simplens-dashboard:\${DASHBOARD_VERSION:-latest}
     ports:
       - 3002:3002
     container_name: dashboard
