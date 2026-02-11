@@ -37,8 +37,8 @@ export async function promptInfraServicesWithBasePath(options: {
         : INFRA_SERVICES.filter(service => service.value !== 'nginx');
 
     const message = options.allowNginx
-        ? 'Select infrastructure services to run:'
-        : 'Select infrastructure services to run (nginx disabled — BASE_PATH is empty):';
+        ? 'Select infrastructure services to run (Space to select, Enter to confirm):'
+        : 'Select infrastructure services to run (Space to select, Enter to confirm) — nginx disabled:';
 
     const selected = await multiselect({
         message,

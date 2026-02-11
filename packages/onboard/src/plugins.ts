@@ -67,7 +67,7 @@ export async function promptPluginSelection(availablePlugins: PluginInfo[]): Pro
     }
 
     const selected = await multiselect({
-        message: 'Select plugins to install:',
+        message: 'Select plugins to install (Space to select, Enter to confirm):',
         options: availablePlugins.map(p => ({
             value: p.package,
             label: `${p.name} (${p.package})`,
