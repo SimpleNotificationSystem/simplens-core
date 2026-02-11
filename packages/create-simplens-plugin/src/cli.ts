@@ -1,4 +1,6 @@
 import { Command } from 'commander';
+import { intro, outro } from './ui.js';
+import { displayBanner, logError } from './utils.js';
 import { runInteractivePrompts, getDefaultConfig } from './prompts.js';
 import { generatePlugin } from './generator.js';
 import type { CliOptions } from './types.js';
@@ -22,27 +24,33 @@ export function createProgram(): Command {
         .option('--no-install', 'Skip npm install')
         .action(async (options: CliOptions) => {
             try {
+                // Display banner
+                displayBanner();
+
                 let config;
 
                 if (options.yes) {
                     // Use defaults when --yes flag is provided
                     if (!options.name) {
-                        console.error('Error: Plugin name is required when using --yes flag');
-                        console.error('Usage: create-simplens-plugin --yes --name <plugin-name>');
+                        logError('Plugin name is required when using --yes flag');
+                        logError('Usage: create-simplens-plugin --yes --name <plugin-name>');
                         process.exit(1);
                     }
                     config = getDefaultConfig(options);
                 } else {
                     // Run interactive prompts
+                    intro('Create a new SimpleNS notification plugin');
                     config = await runInteractivePrompts(options);
                 }
 
                 await generatePlugin(config);
+
+                outro('All done! Your plugin is ready to use.');
             } catch (error) {
                 if (error instanceof Error) {
-                    console.error(`\nError: ${error.message}`);
+                    logError(error.message);
                 } else {
-                    console.error('\nAn unexpected error occurred');
+                    logError('An unexpected error occurred');
                 }
                 process.exit(1);
             }

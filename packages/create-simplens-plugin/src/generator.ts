@@ -3,8 +3,8 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import Handlebars from 'handlebars';
-import chalk from 'chalk';
-import ora from 'ora';
+import { spinner } from './ui.js';
+import { logSuccess, logWarning, logInfo, logError, printCommandHints } from './utils.js';
 import { pascalCase, camelCase, snakeCase, screamingSnakeCase } from './utils/case.js';
 import { initGitRepository, isGitAvailable, isGitRepository } from './utils/git.js';
 import type { PluginConfig, TemplateFile } from './types.js';
@@ -66,11 +66,11 @@ export async function generatePlugin(config: PluginConfig): Promise<void> {
 
     const outputDir = config.directory;
 
-    console.log('');
-    const spinner = ora('Creating plugin files...').start();
+    const s = spinner();
 
     try {
         // Create directory structure
+        s.start('Creating plugin files...');
         await mkdir(join(outputDir, 'src'), { recursive: true });
 
         // Generate files from templates
@@ -84,35 +84,34 @@ export async function generatePlugin(config: PluginConfig): Promise<void> {
             await writeFile(outputPath, content, 'utf-8');
         }
 
-        spinner.succeed('Plugin files created');
+        s.stop('Plugin files created');
 
         // Git initialization
         if (config.initGit) {
-            const gitSpinner = ora('Initializing git repository...').start();
-
             if (!isGitAvailable()) {
-                gitSpinner.warn('Git not found, skipping repository initialization');
+                logWarning('Git not found, skipping repository initialization');
             } else if (await isGitRepository(outputDir)) {
-                gitSpinner.info('Git repository already exists');
+                logInfo('Git repository already exists');
             } else {
+                s.start('Initializing git repository...');
                 initGitRepository(outputDir);
-                gitSpinner.succeed('Git repository initialized');
+                s.stop('Git repository initialized');
             }
         }
 
         // Install dependencies
         if (config.installDeps) {
-            const npmSpinner = ora('Installing dependencies...').start();
+            s.start('Installing dependencies...');
 
             try {
                 execSync('npm install', {
                     cwd: outputDir,
                     stdio: 'pipe',
                 });
-                npmSpinner.succeed('Dependencies installed');
+                s.stop('Dependencies installed');
             } catch (error) {
-                npmSpinner.fail('Failed to install dependencies');
-                console.log(chalk.yellow('  Run `npm install` manually in the plugin directory'));
+                s.stop('Failed to install dependencies');
+                logWarning('Run `npm install` manually in the plugin directory');
             }
         }
 
@@ -120,7 +119,7 @@ export async function generatePlugin(config: PluginConfig): Promise<void> {
         printSuccessMessage(config);
 
     } catch (error) {
-        spinner.fail('Failed to create plugin');
+        s.stop('Failed to create plugin');
         throw error;
     }
 }
@@ -131,9 +130,10 @@ export async function generatePlugin(config: PluginConfig): Promise<void> {
  */
 function printSuccessMessage(config: PluginConfig): void {
     console.log('');
-    console.log(chalk.green('✅ Plugin created successfully!'));
+    logSuccess('Plugin created successfully!');
+    
     console.log('');
-    console.log(chalk.bold('📁 Created ' + config.directory + '/'));
+    logInfo(`📁 Created ${config.directory}/`);
     console.log('   ├── package.json');
     console.log('   ├── tsconfig.json');
     console.log('   ├── src/');
@@ -142,20 +142,23 @@ function printSuccessMessage(config: PluginConfig): void {
     console.log('   ├── README.md');
     console.log('   └── .gitignore');
     console.log('');
-    console.log(chalk.bold('🚀 Next steps:'));
-    console.log(`   1. ${chalk.cyan('cd ' + config.directory)}`);
 
-    if (!config.installDeps) {
-        console.log(`   2. ${chalk.cyan('npm install')}              # Install dependencies`);
-        console.log(`   3. ${chalk.cyan('Edit src/index.ts')}        # Add your delivery logic`);
-        console.log(`   4. ${chalk.cyan('npm test')}                 # Run tests`);
-        console.log(`   5. ${chalk.cyan('npm run build')}            # Build for publishing`);
-        console.log(`   6. ${chalk.cyan('npm publish --access public')} # Publish to npm`);
-    } else {
-        console.log(`   2. ${chalk.cyan('Edit src/index.ts')}        # Add your delivery logic`);
-        console.log(`   3. ${chalk.cyan('npm test')}                 # Run tests`);
-        console.log(`   4. ${chalk.cyan('npm run build')}            # Build for publishing`);
-        console.log(`   5. ${chalk.cyan('npm publish --access public')} # Publish to npm`);
-    }
-    console.log('');
+    const commands = config.installDeps
+        ? [
+              `cd ${config.directory}`,
+              'Edit src/index.ts         # Add your delivery logic',
+              'npm test                  # Run tests',
+              'npm run build             # Build for publishing',
+              'npm publish --access public # Publish to npm',
+          ]
+        : [
+              `cd ${config.directory}`,
+              'npm install               # Install dependencies',
+              'Edit src/index.ts         # Add your delivery logic',
+              'npm test                  # Run tests',
+              'npm run build             # Build for publishing',
+              'npm publish --access public # Publish to npm',
+          ];
+
+    printCommandHints('🚀 Next steps:', commands);
 }
