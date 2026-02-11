@@ -1,8 +1,8 @@
 import { execa } from 'execa';
 import chalk from 'chalk';
 import { logInfo, logWarning, divider, printSummaryCard, printCommandHints } from './utils.js';
-import { confirm, spinner } from '@clack/prompts';
-import { handleCancel } from './ui.js';
+import { confirm } from '@clack/prompts';
+import { handleCancel, spinner } from './ui.js';
 import { HEALTH_CHECK, getServiceURL } from './config/constants.js';
 
 /**

@@ -1,7 +1,7 @@
 import { APP_COMPOSE_TEMPLATE, APP_NGINX_SERVICE_TEMPLATE } from './templates.js';
 import { writeFile, logInfo, logSuccess } from './utils.js';
-import { multiselect, spinner } from '@clack/prompts';
-import { handleCancel } from './ui.js';
+import { multiselect } from '@clack/prompts';
+import { handleCancel, spinner } from './ui.js';
 import path from 'path';
 import type { InfraService } from './types/domain.js';
 

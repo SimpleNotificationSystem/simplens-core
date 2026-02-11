@@ -12,12 +12,14 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 interface LoggerConfig {
     verbose: boolean;
     debug: boolean;
+    silent: boolean;
     logFile?: string;
 }
 
 let loggerConfig: LoggerConfig = {
     verbose: false,
     debug: false,
+    silent: false,
 };
 
 function formatTag(tag: string, color: (text: string) => string): string {
@@ -25,6 +27,8 @@ function formatTag(tag: string, color: (text: string) => string): string {
 }
 
 function printLogLine(tag: 'debug' | 'info' | 'ok' | 'warn' | 'error', message: string): void {
+    if (loggerConfig.silent) return;
+    
     switch (tag) {
         case 'debug':
             console.log(`${formatTag('debug', chalk.gray)} ${chalk.gray(message)}`);
@@ -87,7 +91,7 @@ export function logDebug(message: string): void {
  * Log verbose message (shown with --verbose or --debug)
  */
 export function logVerbose(message: string): void {
-    if (loggerConfig.verbose || loggerConfig.debug) {
+    if (!loggerConfig.silent && (loggerConfig.verbose || loggerConfig.debug)) {
         console.log(`${formatTag('verbose', chalk.cyanBright)} ${message}`);
     }
     writeToLogFile('info', message);

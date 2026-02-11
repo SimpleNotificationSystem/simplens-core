@@ -1,6 +1,6 @@
 import { execa } from 'execa';
 import { logSuccess, logWarning } from './utils.js';
-import { spinner } from '@clack/prompts';
+import { spinner } from './ui.js';
 import {
     DockerNotInstalledError,
     DockerNotRunningError,

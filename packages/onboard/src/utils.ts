@@ -3,6 +3,7 @@ import { execa } from 'execa';
 import fs from 'fs/promises';
 import path from 'path';
 import figlet from 'figlet';
+import { getLoggerConfig } from './utils/logger.js';
 
 // Re-export logger functions for backward compatibility
 export {
@@ -51,6 +52,8 @@ export function divider(color: AccentColor = 'gray', char: string = '─'): stri
 }
 
 export function printStepHeader(step: number, total: number, title: string): void {
+    if (getLoggerConfig().silent) return;
+    
     const filled = '■'.repeat(Math.max(0, step));
     const empty = '·'.repeat(Math.max(0, total - step));
     const progress = chalk.gray(`${filled}${empty}`);
@@ -64,6 +67,8 @@ export function printSummaryCard(
     title: string,
     rows: Array<{ label: string; value: string }>
 ): void {
+    if (getLoggerConfig().silent) return;
+    
     const labelWidth = Math.max(...rows.map(row => row.label.length), 0);
 
     console.log(`\n${accent(title, 'cyan')}`);
@@ -76,6 +81,8 @@ export function printSummaryCard(
 }
 
 export function printCommandHints(title: string, commands: string[]): void {
+    if (getLoggerConfig().silent) return;
+    
     console.log(accent(title, 'cyan'));
     for (const command of commands) {
         console.log(`  ${accent('›', 'gray')} ${chalk.white(command)}`);
@@ -87,6 +94,8 @@ export function printCommandHints(title: string, commands: string[]): void {
  * Display SimpleNS banner in blue using figlet
  */
 export function displayBanner(): void {
+    if (getLoggerConfig().silent) return;
+    
     const simpleNS = figlet.textSync('SimpleNS', {
         font: 'Standard',
         horizontalLayout: 'default',

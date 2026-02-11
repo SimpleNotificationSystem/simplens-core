@@ -74,14 +74,50 @@ Prompts for every environment variable instead of using defaults.
 npx @simplens/onboard --infra --dir /path/to/setup
 ```
 
+### Non-Interactive Setup (Full Mode)
+
+```bash
+# Complete setup with all options via CLI (no prompts)
+npx @simplens/onboard --full --infra mongo kafka kafka-ui redis nginx --env default --base-path /dashboard --plugin @simplens/mock @simplens/nodemailer-gmail
+```
+
+This mode:
+- Requires `--full` flag to enable non-interactive mode
+- Requires `--env <mode>` to specify environment mode
+- **Auto-generates secure credentials** for NS_API_KEY, AUTH_SECRET, and ADMIN_PASSWORD
+- **Auto-generates placeholder credentials** for plugins
+- All other options are optional with sensible defaults
+- Services are not auto-started (use `docker-compose up -d` manually)
+
+**⚠️ IMPORTANT**: Auto-generated credentials are **NOT secure for production**. After setup completes, you **must** update the following in your `.env` file:
+- `NS_API_KEY` - API authentication key
+- `AUTH_SECRET` - Session secret for dashboard
+- `ADMIN_PASSWORD` - Dashboard admin password
+- Plugin credentials (if any plugins were installed)
+
+The CLI will display a security notice with all credentials that need to be updated.
+
 ## Command Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--infra` | Setup infrastructure services (MongoDB, Kafka, Redis, Loki, Grafana) | `false` |
-| `--env <mode>` | Environment setup mode: `default` or `interactive` | `default` |
+| `--full` | Non-interactive mode - all options via CLI, no prompts | `false` |
+| `--infra [services...]` | Infrastructure services: `mongo`, `kafka`, `kafka-ui`, `redis`, `nginx`, `loki`, `grafana` | `false` |
+| `--env <mode>` | Environment setup mode: `default` or `interactive` | Prompted |
 | `--dir <path>` | Target directory for setup files | Current directory |
 | `--base-path <path>` | Dashboard base path (example: `/dashboard`) | Empty (root) |
+| `--plugin [plugins...]` | Plugins to install (e.g., `@simplens/mock @simplens/nodemailer-gmail`) | Prompted |
+| `--no-output` | Suppress all console output (silent mode) | `false` |
+
+### Valid Infrastructure Services
+
+- `mongo` - MongoDB database
+- `kafka` - Apache Kafka message queue
+- `kafka-ui` - Kafka UI dashboard
+- `redis` - Redis cache
+- `nginx` - Nginx reverse proxy
+- `loki` - Loki log aggregation
+- `grafana` - Grafana observability dashboard
 
 ## Workflow
 
@@ -139,7 +175,7 @@ After successful setup, access these URLs:
 ### Minimal Setup
 
 ```bash
-# Basic setup with defaults
+# Basic setup with defaults (interactive)
 npx @simplens/onboard
 
 # Select plugins when prompted
@@ -168,6 +204,54 @@ npx @simplens/onboard --infra --dir ~/simplens-dev
 # Start services for testing
 ```
 
+### Complete Non-Interactive Setup
+
+```bash
+# Full automated setup with specific services and plugins
+npx @simplens/onboard \
+  --full \
+  --infra mongo kafka kafka-ui redis nginx \
+  --env default \
+  --base-path /dashboard \
+  --plugin @simplens/mock @simplens/nodemailer-gmail \
+  --dir ./my-simplens-setup
+
+# No prompts - everything configured via CLI
+# Services not auto-started in full mode
+# Start manually with: docker-compose up -d
+```
+
+### CI/CD Pipeline Setup
+
+```bash
+# Minimal non-interactive setup for CI/CD
+npx @simplens/onboard \
+  --full \
+  --env default \
+  --dir /app/simplens
+
+# Then start services in CI:
+cd /app/simplens
+docker-compose up -d
+```
+
+### Silent Mode (No Console Output)
+
+```bash
+# Complete setup with no console output (useful for scripting/automation)
+npx @simplens/onboard \
+  --full \
+  --no-output \
+  --infra mongo kafka redis \
+  --env default \
+  --dir /app/simplens
+
+# Exit code indicates success (0) or failure (non-zero)
+# All setup is performed silently in background
+```
+
+**Note**: `--no-output` suppresses all console output including banners, progress steps, and warnings. Use with `--full` mode for completely automated setup. Errors are still logged to stderr.
+
 ## Troubleshooting
 
 ### Docker Not Running
@@ -178,6 +262,35 @@ Please start Docker Desktop or Docker daemon.
 ```
 
 **Solution**: Start Docker Desktop (Windows/Mac) or `sudo systemctl start docker` (Linux)
+
+### Updating Auto-Generated Credentials (Full Mode)
+
+When using `--full` mode, credentials are auto-generated. To update them:
+
+1. Open the `.env` file in your setup directory
+2. Replace the auto-generated values:
+   ```bash
+   # Before (auto-generated)
+   NS_API_KEY=sk_AbCdEf123456...
+   AUTH_SECRET=XyZ789...
+   ADMIN_PASSWORD=AdminRaNdOm123...
+   
+   # After (secure values)
+   NS_API_KEY=your_secure_api_key_here
+   AUTH_SECRET=your_secure_session_secret_here
+   ADMIN_PASSWORD=YourSecurePassword123!
+   ```
+3. For plugin credentials, update the values at the end of the `.env` file
+4. Restart services: `docker-compose restart`
+
+**Tip**: Generate secure random values with:
+```bash
+# Linux/Mac
+openssl rand -base64 32
+
+# PowerShell (Windows)
+[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))
+```
 
 ### Plugin Installation Failed
 

@@ -11,9 +11,10 @@ import {
     printStepHeader,
     printSummaryCard,
     printCommandHints,
+    logWarning,
 } from './utils.js';
-import { text, confirm, select, log, note } from '@clack/prompts';
-import { intro, outro, handleCancel } from './ui.js';
+import { text, confirm, select } from '@clack/prompts';
+import { intro, outro, handleCancel, log, note } from './ui.js';
 import { validatePrerequisites } from './validators.js';
 import {
     promptInfraServicesWithBasePath,
@@ -36,6 +37,7 @@ import {
     generatePluginConfig,
     parseConfigCredentials,
     promptPluginCredentials,
+    generateDefaultPluginCredentials,
 } from './plugins.js';
 import {
     promptStartServices,
@@ -51,19 +53,21 @@ program
     .name('@simplens/onboard')
     .description('A CLI tool to setup a SimpleNS instance on your machine/server')
     .version('1.0.0')
-    .option('--infra', 'Setup infrastructure services (MongoDB, Kafka, Redis, etc.)')
+    .option('--full', 'Non-interactive mode - all options must be provided via CLI')
+    .option('--infra [services...]', 'Infrastructure services (mongo, kafka, kafka-ui, redis, nginx, loki, grafana)')
     .option('--env <mode>', 'Environment setup mode: "default" or "interactive"')
     .option('--dir <path>', 'Target directory for setup')
     .option('--base-path <path>', 'Dashboard BASE_PATH (example: /dashboard, default: root)')
-    .parse(process.argv);
-
-const options = program.opts();
+    .option('--plugin [plugins...]', 'Plugins to install (e.g., @simplens/mock @simplens/nodemailer-gmail)')
+    .option('--no-output', 'Suppress all console output (silent mode)');
 
 interface OnboardSetupOptions {
     infra: boolean;
+    infraServices: string[];
     envMode: 'default' | 'interactive';
     targetDir: string;
     basePath: string;
+    plugins: string[];
 }
 
 function printStep(step: number, total: number, title: string): void {
@@ -74,14 +78,45 @@ function shouldAutoEnableNginx(basePath: string): boolean {
     return normalizeBasePath(basePath) !== DEFAULT_BASE_PATH;
 }
 
+/**
+ * Valid infrastructure services
+ */
+const VALID_INFRA_SERVICES = ['mongo', 'kafka', 'kafka-ui', 'redis', 'nginx', 'loki', 'grafana'];
+
+/**
+ * Validate infrastructure service names
+ */
+function validateInfraServices(services: string[]): { valid: boolean; invalid: string[] } {
+    const invalid = services.filter(s => !VALID_INFRA_SERVICES.includes(s));
+    return { valid: invalid.length === 0, invalid };
+}
+
+/**
+ * Validate plugin names (must start with @simplens/ or be a valid npm package)
+ */
+function validatePlugins(plugins: string[]): { valid: boolean; invalid: string[] } {
+    const invalid = plugins.filter(p => {
+        // Must start with @ or be a valid npm package name
+        return !p.match(/^(@[\w-]+\/[\w-]+|[\w-]+)$/);
+    });
+    return { valid: invalid.length === 0, invalid };
+}
+
 function showSetupSummary(setupOptions: OnboardSetupOptions, targetDir: string, autoNginx: boolean): void {
     const basePathLabel = setupOptions.basePath || '(root)';
+    const infraLabel = setupOptions.infra 
+        ? `enabled (${setupOptions.infraServices.join(', ')})` 
+        : 'disabled';
+    const pluginsLabel = setupOptions.plugins.length > 0 
+        ? setupOptions.plugins.join(', ') 
+        : 'none';
 
     const summaryLines = [
         `Target directory   : ${targetDir}`,
-        `Infrastructure     : ${setupOptions.infra ? 'enabled' : 'disabled'}`,
+        `Infrastructure     : ${infraLabel}`,
         `Environment mode   : ${setupOptions.envMode}`,
         `BASE_PATH          : ${basePathLabel}`,
+        `Plugins            : ${pluginsLabel}`,
         `Nginx auto-include : ${autoNginx ? 'enabled (BASE_PATH is non-default)' : 'disabled'}`,
     ].join('\n');
 
@@ -90,8 +125,59 @@ function showSetupSummary(setupOptions: OnboardSetupOptions, targetDir: string, 
 
 /**
  * Prompt for setup options if not provided via CLI args
+ * In --full mode, all required options must be provided via CLI
  */
-async function promptSetupOptions(): Promise<OnboardSetupOptions> {
+async function promptSetupOptions(options: any): Promise<OnboardSetupOptions> {
+    const isFullMode = options.full === true;
+
+    // --- Validate --full mode requirements ---
+    if (isFullMode) {
+        const errors: string[] = [];
+
+        // --env is required in full mode
+        if (!options.env) {
+            errors.push('--env <mode> is required in --full mode (use \"default\" or \"interactive\")');
+        } else if (options.env !== 'default' && options.env !== 'interactive') {
+            errors.push('--env must be either \"default\" or \"interactive\"');
+        }
+
+        // Validate --base-path if provided
+        if (options.basePath) {
+            const validation = validateBasePath(normalizeBasePath(options.basePath));
+            if (validation !== true) {
+                errors.push(`Invalid --base-path: ${validation}`);
+            }
+        }
+
+        // Validate --infra services if provided
+        if (options.infra && Array.isArray(options.infra)) {
+            const { valid, invalid } = validateInfraServices(options.infra);
+            if (!valid) {
+                errors.push(
+                    `Invalid infrastructure services: ${invalid.join(', ')}. ` +
+                    `Valid options: ${VALID_INFRA_SERVICES.join(', ')}`
+                );
+            }
+        }
+
+        // Validate --plugin if provided
+        if (options.plugin && Array.isArray(options.plugin)) {
+            const { valid, invalid } = validatePlugins(options.plugin);
+            if (!valid) {
+                errors.push(`Invalid plugin names: ${invalid.join(', ')}`);
+            }
+        }
+
+        if (errors.length > 0) {
+            console.error('\\n❌ Validation errors in --full mode:\\n');
+            errors.forEach(err => console.error(`  • ${err}`));
+            console.error('\\nRun with --help to see usage examples.\\n');
+            process.exit(1);
+        }
+    }
+
+    // --- BASE_PATH ---
+    let basePathValue: string;
     const cliBasePath = typeof options.basePath === 'string'
         ? normalizeBasePath(options.basePath)
         : undefined;
@@ -101,29 +187,54 @@ async function promptSetupOptions(): Promise<OnboardSetupOptions> {
         if (validation !== true) {
             throw new Error(`Invalid --base-path value: ${validation}`);
         }
-    }
-
-    // --- BASE_PATH ---
-    let basePathValue = cliBasePath;
-    if (basePathValue === undefined) {
+        basePathValue = cliBasePath;
+    } else if (isFullMode) {
+        basePathValue = DEFAULT_BASE_PATH; // Default to root in full mode
+    } else {
         basePathValue = await promptBasePath(DEFAULT_BASE_PATH);
     }
 
-    // --- Infra flag ---
-    let infraValue = options.infra;
-    if (infraValue === undefined) {
-        const result = await confirm({
-            message: 'Do you want to setup infrastructure services (MongoDB, Kafka, Redis, etc.)?',
-            initialValue: true,
-            withGuide: true,
-        });
-        handleCancel(result);
-        infraValue = result as boolean;
+    // --- Infra flag and services ---
+    let infraValue: boolean;
+    let infraServices: string[] = [];
+
+    if (Array.isArray(options.infra) && options.infra.length > 0) {
+        // --infra with services provided
+        infraValue = true;
+        infraServices = options.infra;
+    } else if (options.infra === true) {
+        // --infra flag without services (backward compatibility - prompt for services)
+        infraValue = true;
+        if (isFullMode) {
+            // In full mode, empty --infra means no services selected (error)
+            console.error('\\n❌ In --full mode, --infra requires service names.\\n');
+            console.error('Example: --infra mongo kafka redis\\n');
+            process.exit(1);
+        }
+        // Not in full mode, will prompt later
+    } else {
+        // No --infra flag provided
+        if (isFullMode) {
+            infraValue = false; // Default to no infrastructure in full mode
+        } else {
+            const result = await confirm({
+                message: 'Do you want to setup infrastructure services (MongoDB, Kafka, Redis, etc.)?',
+                initialValue: true,
+                withGuide: true,
+            });
+            handleCancel(result);
+            infraValue = result as boolean;
+        }
     }
 
     // --- Env mode ---
-    let envModeValue = options.env;
-    if (!envModeValue) {
+    let envModeValue: 'default' | 'interactive';
+    if (options.env) {
+        envModeValue = options.env;
+    } else if (isFullMode) {
+        // Already validated above, this shouldn't happen
+        envModeValue = 'default';
+    } else {
         const result = await select({
             message: 'Select environment configuration mode:',
             options: [
@@ -134,12 +245,16 @@ async function promptSetupOptions(): Promise<OnboardSetupOptions> {
             withGuide: true,
         });
         handleCancel(result);
-        envModeValue = result as string;
+        envModeValue = result as 'default' | 'interactive';
     }
 
     // --- Target directory ---
-    let targetDirValue = options.dir;
-    if (!targetDirValue) {
+    let targetDirValue: string;
+    if (options.dir) {
+        targetDirValue = options.dir;
+    } else if (isFullMode) {
+        targetDirValue = process.cwd(); // Default to current directory in full mode
+    } else {
         const result = await text({
             message: 'Target directory for setup:',
             defaultValue: process.cwd(),
@@ -150,11 +265,20 @@ async function promptSetupOptions(): Promise<OnboardSetupOptions> {
         targetDirValue = result as string;
     }
 
+    // --- Plugins ---
+    let pluginsValue: string[] = [];
+    if (Array.isArray(options.plugin) && options.plugin.length > 0) {
+        pluginsValue = options.plugin;
+    }
+    // If not provided and not in full mode, will prompt later in the main workflow
+
     return {
         infra: infraValue,
+        infraServices: infraServices,
         envMode: envModeValue || 'default',
         targetDir: targetDirValue || process.cwd(),
         basePath: basePathValue,
+        plugins: pluginsValue,
     };
 }
 
@@ -165,25 +289,29 @@ async function main() {
     try {
         const totalSteps = 6;
 
-        // Display banner
+        // Parse command line arguments FIRST
+        program.parse(process.argv);
+        const options = program.opts();
+
+        // Initialize logger based on CLI flags (before any output)
+        initLogger({
+            verbose: options.verbose || false,
+            debug: options.debug || false,
+            silent: !options.output, // --no-output sets options.output to false
+            logFile: options.debug ? path.join(process.cwd(), 'onboard-debug.log') : undefined,
+        });
+
+        // Display banner (after logger is initialized)
         displayBanner();
 
         // Clack intro
         intro('SimpleNS Onboard');
 
-        // Initialize logger based on CLI flags
-        const opts = program.opts();
-        initLogger({
-            verbose: opts.verbose || false,
-            debug: opts.debug || false,
-            logFile: opts.debug ? path.join(process.cwd(), 'onboard-debug.log') : undefined,
-        });
-
         logDebug('Logger initialized');
-        logDebug(`CLI options: ${JSON.stringify(opts)}`);
+        logDebug(`CLI options: ${JSON.stringify(options)}`);
 
         // Prompt for setup options if not provided
-        const setupOptions = await promptSetupOptions();
+        const setupOptions = await promptSetupOptions(options);
 
         // Get target directory
         const targetDir = path.resolve(setupOptions.targetDir);
@@ -201,11 +329,18 @@ async function main() {
         let selectedInfraServices: string[] = [];
 
         if (setupOptions.infra) {
-            if (!autoEnableNginx) {
-                log.info('BASE_PATH is empty, nginx reverse proxy is disabled.');
-                selectedInfraServices = await promptInfraServicesWithBasePath({ allowNginx: false });
+            // Use pre-provided services from CLI, or prompt for them
+            if (setupOptions.infraServices.length > 0) {
+                selectedInfraServices = setupOptions.infraServices;
+                log.info(`Using infrastructure services: ${selectedInfraServices.join(', ')}`);
             } else {
-                selectedInfraServices = await promptInfraServicesWithBasePath({ allowNginx: true });
+                // Prompt for services (interactive mode)
+                if (!autoEnableNginx) {
+                    log.info('BASE_PATH is empty, nginx reverse proxy is disabled.');
+                    selectedInfraServices = await promptInfraServicesWithBasePath({ allowNginx: false });
+                } else {
+                    selectedInfraServices = await promptInfraServicesWithBasePath({ allowNginx: true });
+                }
             }
 
             if (autoEnableNginx && !selectedInfraServices.includes('nginx')) {
@@ -229,8 +364,21 @@ async function main() {
         // Step 4: Environment configuration
         log.step('Step 4/6 — Environment Configuration');
         const envMode = setupOptions.envMode;
-        const envVars = await promptEnvVariables(envMode, selectedInfraServices, setupOptions.basePath);
+        const envVars = await promptEnvVariables(
+            envMode,
+            selectedInfraServices,
+            setupOptions.basePath,
+            options.full || false
+        );
         await generateEnvFile(targetDir, envVars);
+
+        // In full mode, notify user about auto-generated credentials
+        if (options.full) {
+            logWarning(
+                '⚠️  Auto-generated credentials in .env file. ' +
+                'Please update NS_API_KEY, AUTH_SECRET, and ADMIN_PASSWORD before deploying to production!'
+            );
+        }
 
         // Generate nginx.conf whenever nginx is active in either compose file
         const nginxEnabled = selectedInfraServices.includes('nginx') || includeNginxInAppCompose;
@@ -240,8 +388,18 @@ async function main() {
 
         // Step 5: Plugin installation
         log.step('Step 5/6 — Plugin Installation');
-        const availablePlugins = await fetchAvailablePlugins();
-        const selectedPlugins = await promptPluginSelection(availablePlugins);
+        let selectedPlugins: string[] = [];
+        let pluginCredentialKeys: string[] = [];
+
+        // Use pre-provided plugins from CLI, or prompt for them
+        if (setupOptions.plugins.length > 0) {
+            selectedPlugins = setupOptions.plugins;
+            log.info(`Using plugins: ${selectedPlugins.join(', ')}`);
+        } else if (!options.full) {
+            // Only prompt in interactive mode
+            const availablePlugins = await fetchAvailablePlugins();
+            selectedPlugins = await promptPluginSelection(availablePlugins);
+        }
 
         if (selectedPlugins.length > 0) {
             await generatePluginConfig(targetDir, selectedPlugins);
@@ -249,16 +407,34 @@ async function main() {
             // Extract and prompt for plugin credentials
             const configPath = path.join(targetDir, 'simplens.config.yaml');
             const credentialKeys = await parseConfigCredentials(configPath);
+            pluginCredentialKeys = credentialKeys; // Store for later use
 
             if (credentialKeys.length > 0) {
-                const pluginCreds = await promptPluginCredentials(credentialKeys);
-                await appendPluginEnv(targetDir, pluginCreds);
+                if (options.full) {
+                    // In full mode, auto-generate placeholder credentials
+                    const pluginCreds = generateDefaultPluginCredentials(credentialKeys);
+                    await appendPluginEnv(targetDir, pluginCreds);
+                    logWarning(
+                        `⚠️  Auto-generated placeholder plugin credentials. ` +
+                        `Please update these in .env file: ${credentialKeys.join(', ')}`
+                    );
+                } else {
+                    const pluginCreds = await promptPluginCredentials(credentialKeys);
+                    await appendPluginEnv(targetDir, pluginCreds);
+                }
             }
         }
 
         // Step 6: Service orchestration
         log.step('Step 6/6 — Service Orchestration');
-        const shouldStart = await promptStartServices();
+        
+        let shouldStart = false;
+        if (options.full) {
+            // In full mode, don't auto-start services, just show commands
+            log.info('In --full mode, services are not auto-started.');
+        } else {
+            shouldStart = await promptStartServices();
+        }
 
         if (shouldStart) {
             // Start infra services first (if --infra was used)
@@ -284,6 +460,29 @@ async function main() {
 
         // Final success message
         logSuccess('SimpleNS onboarding completed successfully.');
+
+        // In full mode, show a comprehensive security warning
+        if (options.full) {
+            const credentialWarnings = [
+                '  • NS_API_KEY - API authentication key',
+                '  • AUTH_SECRET - Session secret for dashboard',
+                '  • ADMIN_PASSWORD - Dashboard admin password',
+            ];
+
+            if (pluginCredentialKeys.length > 0) {
+                credentialWarnings.push(`  • Plugin credentials: ${pluginCredentialKeys.join(', ')}`);
+            }
+
+            note(
+                '⚠️  IMPORTANT: Auto-generated credentials were used for non-interactive setup.\n' +
+                '\n' +
+                'Please update the following in your .env file before production use:\n' +
+                credentialWarnings.join('\n') +
+                '\n\n' +
+                'Default credentials are NOT secure for production environments.',
+                'Security Notice'
+            );
+        }
 
         // Display access information
         if (nginxEnabled) {
@@ -311,8 +510,15 @@ async function main() {
     } catch (error: unknown) {
         // Import at top of file
         const { formatErrorForUser } = await import('./types/errors.js');
+        const { getLoggerConfig } = await import('./utils/logger.js');
 
-        console.log('\n' + formatErrorForUser(error as Error));
+        // Always log errors to stderr, even in silent mode
+        if (!getLoggerConfig().silent) {
+            console.log('\n' + formatErrorForUser(error as Error));
+        } else {
+            // In silent mode, write to stderr
+            console.error(formatErrorForUser(error as Error));
+        }
 
         // Log full error to stderr for debugging
         if (process.env.DEBUG) {

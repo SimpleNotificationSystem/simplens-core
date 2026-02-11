@@ -1,8 +1,9 @@
 import { execa } from 'execa';
 import yaml from 'js-yaml';
+import crypto from 'crypto';
 import { readFile, logInfo, logSuccess, logError, logWarning } from './utils.js';
-import { multiselect, text, password, spinner } from '@clack/prompts';
-import { handleCancel } from './ui.js';
+import { multiselect, text, password } from '@clack/prompts';
+import { handleCancel, spinner } from './ui.js';
 import path from 'path';
 import type { PluginInfo, SimplensConfig } from './types/domain.js';
 
@@ -144,6 +145,32 @@ export async function parseConfigCredentials(configPath: string): Promise<string
         logWarning('Could not parse config file for credentials');
         return [];
     }
+}
+
+/**
+ * Generate default placeholder values for plugin credentials
+ * Used in --full mode for non-interactive setup
+ */
+export function generateDefaultPluginCredentials(credentialKeys: string[]): Map<string, string> {
+    const result = new Map<string, string>();
+
+    for (const key of credentialKeys) {
+        // Generate placeholder values based on key name patterns
+        if (key.toLowerCase().includes('password') || key.toLowerCase().includes('secret')) {
+            result.set(key, crypto.randomBytes(16).toString('base64'));
+        } else if (key.toLowerCase().includes('apikey') || key.toLowerCase().includes('api_key')) {
+            result.set(key, `sk_${crypto.randomBytes(24).toString('base64').slice(0, 32)}`);
+        } else if (key.toLowerCase().includes('token')) {
+            result.set(key, crypto.randomBytes(32).toString('hex'));
+        } else if (key.toLowerCase().includes('email') || key.toLowerCase().includes('user')) {
+            result.set(key, 'CHANGE_ME@example.com');
+        } else {
+            // Generic placeholder
+            result.set(key, 'CHANGE_ME');
+        }
+    }
+
+    return result;
 }
 
 /**

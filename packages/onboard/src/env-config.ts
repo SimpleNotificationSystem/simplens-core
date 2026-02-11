@@ -1,11 +1,35 @@
-import { writeFile, appendFile, logInfo, logSuccess } from './utils.js';
+import { writeFile, appendFile, logInfo, logSuccess, logWarning } from './utils.js';
 import { text, password } from '@clack/prompts';
 import { handleCancel } from './ui.js';
 import path from 'path';
+import crypto from 'crypto';
 import { CRITICAL_ENV_KEYS } from './config/constants.js';
 import type { EnvVariable } from './types/domain.js';
 
 export const DEFAULT_BASE_PATH = '';
+
+/**
+ * Generate a secure random string for credentials
+ */
+export function generateSecureRandom(length: number = 32): string {
+    return crypto.randomBytes(length).toString('base64').slice(0, length);
+}
+
+/**
+ * Generate default value for a critical environment variable
+ */
+export function generateDefaultValue(key: string): string {
+    if (key === 'NS_API_KEY') {
+        return `sk_${generateSecureRandom(48)}`;
+    }
+    if (key === 'AUTH_SECRET') {
+        return generateSecureRandom(64);
+    }
+    if (key === 'ADMIN_PASSWORD') {
+        return `Admin${generateSecureRandom(16)}`;
+    }
+    return '';
+}
 
 /**
  * Validate BASE_PATH value.
@@ -208,12 +232,14 @@ function parseEnvContent(content: string): EnvVariable[] {
  * @param mode - 'default' prompts only for critical vars, 'interactive' prompts for all
  * @param infraServices - List of selected infrastructure service IDs
  * @param basePath - BASE_PATH value already collected
+ * @param fullMode - If true, auto-generate critical values without prompting
  * @returns Map of environment variable keys to values
  */
 export async function promptEnvVariables(
     mode: 'default' | 'interactive',
     infraServices: string[],
-    basePath: string = DEFAULT_BASE_PATH
+    basePath: string = DEFAULT_BASE_PATH,
+    fullMode: boolean = false
 ): Promise<Map<string, string>> {
     logInfo('Configuring environment variables...');
 
@@ -262,36 +288,44 @@ export async function promptEnvVariables(
 
             // Prompt for critical values (only if not auto-filled)
             if (CRITICAL_ENV_KEYS.includes(envVar.key)) {
-                const promptMessage = `${envVar.key}${envVar.description ? ` (${envVar.description})` : ''}:`;
-                const isPasswordField = envVar.key.includes('PASSWORD');
-
-                let answer: string | symbol;
-                if (isPasswordField) {
-                    answer = await password({
-                        message: promptMessage,
-                        validate: (input: string | undefined) => {
-                            if (!input && envVar.required) {
-                                return `${envVar.key} is required`;
-                            }
-                            return undefined;
-                        },
-                    });
+                if (fullMode) {
+                    // In full mode, auto-generate critical values
+                    const defaultValue = generateDefaultValue(envVar.key);
+                    if (defaultValue) {
+                        result.set(envVar.key, defaultValue);
+                    }
                 } else {
-                    answer = await text({
-                        message: promptMessage,
-                        placeholder: getSuggestedValue(envVar.key) || undefined,
-                        defaultValue: getSuggestedValue(envVar.key) || undefined,
-                        validate: (input: string | undefined) => {
-                            if (!input && envVar.required) {
-                                return `${envVar.key} is required`;
-                            }
-                            return undefined;
-                        },
-                    });
-                }
+                    const promptMessage = `${envVar.key}${envVar.description ? ` (${envVar.description})` : ''}:`;
+                    const isPasswordField = envVar.key.includes('PASSWORD');
 
-                handleCancel(answer);
-                result.set(envVar.key, answer as string);
+                    let answer: string | symbol;
+                    if (isPasswordField) {
+                        answer = await password({
+                            message: promptMessage,
+                            validate: (input: string | undefined) => {
+                                if (!input && envVar.required) {
+                                    return `${envVar.key} is required`;
+                                }
+                                return undefined;
+                            },
+                        });
+                    } else {
+                        answer = await text({
+                            message: promptMessage,
+                            placeholder: getSuggestedValue(envVar.key) || undefined,
+                            defaultValue: getSuggestedValue(envVar.key) || undefined,
+                            validate: (input: string | undefined) => {
+                                if (!input && envVar.required) {
+                                    return `${envVar.key} is required`;
+                                }
+                                return undefined;
+                            },
+                        });
+                    }
+
+                    handleCancel(answer);
+                    result.set(envVar.key, answer as string);
+                }
             }
         }
     } else {
