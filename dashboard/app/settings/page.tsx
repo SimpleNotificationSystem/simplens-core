@@ -30,9 +30,6 @@ export default function SettingsPage() {
                                 </p>
                             </div>
                             <div className="flex items-center gap-3">
-                                <Badge variant={enabled ? "default" : "secondary"}>
-                                    {enabled ? "Enabled" : "Disabled"}
-                                </Badge>
                                 <Switch
                                     checked={enabled}
                                     onCheckedChange={setEnabled}

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/components/auth-provider";
 import { GlassmorphismProvider } from "@/components/glassmorphism-provider";
+import { SidebarPinProvider } from "@/components/sidebar-pin-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -43,10 +44,12 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            <GlassmorphismProvider>
-              {children}
-              <Toaster richColors position="top-right" />
-            </GlassmorphismProvider>
+            <SidebarPinProvider>
+              <GlassmorphismProvider>
+                {children}
+                <Toaster richColors position="top-right" />
+              </GlassmorphismProvider>
+            </SidebarPinProvider>
           </ThemeProvider>
         </AuthProvider>
       </body>
