@@ -129,3 +129,156 @@
 .scrollbar-none::-webkit-scrollbar {
   display: none;  /* Chrome, Safari, Opera */
 }
+
+/* Global glassmorphism mode for dashboard UI primitives */
+html[data-glassmorphism="on"] body {
+  background-image:
+    radial-gradient(circle at 10% 10%, rgba(56, 189, 248, 0.18), transparent 36%),
+    radial-gradient(circle at 85% 20%, rgba(168, 85, 247, 0.14), transparent 30%),
+    radial-gradient(circle at 50% 100%, rgba(20, 184, 166, 0.12), transparent 42%);
+  background-attachment: fixed;
+}
+
+html.dark[data-glassmorphism="on"] body {
+  background-image:
+    radial-gradient(circle at 10% 10%, rgba(56, 189, 248, 0.12), transparent 34%),
+    radial-gradient(circle at 85% 20%, rgba(168, 85, 247, 0.1), transparent 28%),
+    radial-gradient(circle at 50% 100%, rgba(20, 184, 166, 0.08), transparent 40%);
+}
+
+html[data-glassmorphism="on"] .glassmorphism-layer {
+  opacity: 1;
+  background:
+    linear-gradient(140deg, rgba(255, 255, 255, 0.08), transparent 50%),
+    radial-gradient(circle at 75% 0%, rgba(255, 255, 255, 0.12), transparent 32%);
+}
+
+html.dark[data-glassmorphism="on"] .glassmorphism-layer {
+  background:
+    linear-gradient(140deg, rgba(255, 255, 255, 0.05), transparent 50%),
+    radial-gradient(circle at 75% 0%, rgba(255, 255, 255, 0.08), transparent 32%);
+}
+
+html[data-glassmorphism="on"] :is(
+  [data-slot="card"],
+  [data-slot="alert"],
+  [data-slot="table-container"],
+  [data-slot="tabs-list"],
+  [data-slot="dropdown-menu-content"],
+  [data-slot="select-content"],
+  [data-slot="popover-content"],
+  [data-slot="dialog-content"],
+  [data-slot="alert-dialog-content"],
+  [data-slot="sheet-content"],
+  [data-slot="tooltip-content"]
+) {
+  border-color: rgba(255, 255, 255, 0.34);
+  background-color: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.14);
+}
+
+html.dark[data-glassmorphism="on"] :is(
+  [data-slot="card"],
+  [data-slot="alert"],
+  [data-slot="table-container"],
+  [data-slot="tabs-list"],
+  [data-slot="dropdown-menu-content"],
+  [data-slot="select-content"],
+  [data-slot="popover-content"],
+  [data-slot="dialog-content"],
+  [data-slot="alert-dialog-content"],
+  [data-slot="sheet-content"],
+  [data-slot="tooltip-content"]
+) {
+  border-color: rgba(255, 255, 255, 0.2);
+  background-color: rgba(24, 24, 27, 0.55);
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.4);
+}
+
+html[data-glassmorphism="on"] [data-slot="sidebar-inner"] {
+  border-color: rgba(255, 255, 255, 0.28);
+  background:
+    linear-gradient(180deg, rgba(235, 238, 245, 0.72), rgba(220, 226, 236, 0.6));
+  backdrop-filter: blur(14px) saturate(130%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 10px 30px rgba(15, 23, 42, 0.14);
+}
+
+html.dark[data-glassmorphism="on"] [data-slot="sidebar-inner"] {
+  border-color: rgba(255, 255, 255, 0.16);
+  background:
+    linear-gradient(180deg, rgba(32, 32, 36, 0.86), rgba(18, 18, 22, 0.74));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 14px 34px rgba(0, 0, 0, 0.34);
+}
+
+html[data-glassmorphism="on"] [data-slot="sidebar-menu-button"][data-active="true"] {
+  background-color: rgba(255, 255, 255, 0.34);
+}
+
+html.dark[data-glassmorphism="on"] [data-slot="sidebar-menu-button"][data-active="true"] {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+html[data-glassmorphism="on"] [data-slot="page-toolbar"] {
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 0.85rem;
+  padding: 0.75rem;
+  margin-bottom: 1.5rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.4));
+  backdrop-filter: blur(14px) saturate(130%);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.1);
+}
+
+html.dark[data-glassmorphism="on"] [data-slot="page-toolbar"] {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: linear-gradient(180deg, rgba(39, 39, 42, 0.74), rgba(24, 24, 27, 0.56));
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+}
+
+html[data-glassmorphism="on"] :is(
+  [data-slot="button"],
+  [data-slot="input"],
+  [data-slot="textarea"],
+  [data-slot="select-trigger"],
+  [data-slot="checkbox"],
+  [data-slot="switch"],
+  [data-slot="tabs-trigger"],
+  [data-slot="pagination-link"]
+) {
+  backdrop-filter: blur(10px) saturate(130%);
+  border-color: rgba(255, 255, 255, 0.26);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.1);
+}
+
+html.dark[data-glassmorphism="on"] :is(
+  [data-slot="button"],
+  [data-slot="input"],
+  [data-slot="textarea"],
+  [data-slot="select-trigger"],
+  [data-slot="checkbox"],
+  [data-slot="switch"],
+  [data-slot="tabs-trigger"],
+  [data-slot="pagination-link"]
+) {
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+}
+
+html[data-glassmorphism="on"] [data-slot="sidebar-menu-button"] {
+  background-color: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+html[data-glassmorphism="on"] [data-slot="sidebar-menu-button"]:hover {
+  background-color: rgba(255, 255, 255, 0.24);
+}
+
+html.dark[data-glassmorphism="on"] [data-slot="sidebar-menu-button"]:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}

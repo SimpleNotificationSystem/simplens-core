@@ -15,6 +15,7 @@ interface PageToolbarProps {
 export function PageToolbar({ children, className }: PageToolbarProps) {
     return (
         <div
+            data-slot="page-toolbar"
             className={cn(
                 "flex flex-wrap items-center gap-2 pb-4 border-b mb-6",
                 className

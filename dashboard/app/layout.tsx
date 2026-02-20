@@ -4,6 +4,7 @@ import Script from "next/script";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/components/auth-provider";
+import { GlassmorphismProvider } from "@/components/glassmorphism-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -42,8 +43,10 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            {children}
-            <Toaster richColors position="top-right" />
+            <GlassmorphismProvider>
+              {children}
+              <Toaster richColors position="top-right" />
+            </GlassmorphismProvider>
           </ThemeProvider>
         </AuthProvider>
       </body>

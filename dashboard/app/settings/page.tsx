@@ -4,14 +4,45 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { useGlassmorphism } from "@/components/glassmorphism-provider";
 
 export default function SettingsPage() {
+    const { enabled, setEnabled } = useGlassmorphism();
+
     return (
         <DashboardLayout
             title="Settings"
             description="System configuration and information"
         >
-            <div className="space-y-6 max-w-4xl">
+            <div className="mx-auto w-full max-w-4xl space-y-6">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Appearance</CardTitle>
+                        <CardDescription>Visual effects and UI rendering</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="space-y-1">
+                                <p className="text-sm font-medium">Glassmorphism Layer</p>
+                                <p className="text-xs text-muted-foreground">
+                                    Applies frosted-glass styling to dashboard UI components.
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <Badge variant={enabled ? "default" : "secondary"}>
+                                    {enabled ? "Enabled" : "Disabled"}
+                                </Badge>
+                                <Switch
+                                    checked={enabled}
+                                    onCheckedChange={setEnabled}
+                                    aria-label="Toggle glassmorphism layer"
+                                />
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
                 {/* System Info */}
                 <Card>
                     <CardHeader>
