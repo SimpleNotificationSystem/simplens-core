@@ -37,13 +37,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  CalendarDays,
-  FileText,
-  Pencil,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { CalendarDays, FileText, Pencil, Plus, Trash2 } from "lucide-react";
 import { withBasePath } from "@/lib/utils";
 import type {
   FieldDefinition,
@@ -839,137 +833,137 @@ export default function TemplatesPage() {
 
             <ScrollArea className="flex-1 overflow-y-auto">
               <div className="space-y-4 px-1 pb-2">
-              {createError && (
-                <Alert variant="destructive">
-                  <AlertTitle>Create failed</AlertTitle>
-                  <AlertDescription>{createError}</AlertDescription>
-                </Alert>
-              )}
+                {createError && (
+                  <Alert variant="destructive">
+                    <AlertTitle>Create failed</AlertTitle>
+                    <AlertDescription>{createError}</AlertDescription>
+                  </Alert>
+                )}
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Package</Label>
-                  <Select
-                    value={createForm.package}
-                    onValueChange={(value) =>
-                      setCreateForm((prev) => ({
-                        ...prev,
-                        package: value,
-                        content: ensureContentShape(value, prev.content),
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose package" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {packageOptions.map((pkg) => (
-                        <SelectItem key={pkg} value={pkg}>
-                          {pkg}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Package</Label>
+                    <Select
+                      value={createForm.package}
+                      onValueChange={(value) =>
+                        setCreateForm((prev) => ({
+                          ...prev,
+                          package: value,
+                          content: ensureContentShape(value, prev.content),
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose package" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {packageOptions.map((pkg) => (
+                          <SelectItem key={pkg} value={pkg}>
+                            {pkg}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Template ID</Label>
+                    <Input
+                      value={createForm.template_id}
+                      onChange={(event) =>
+                        setCreateForm((prev) => ({
+                          ...prev,
+                          template_id: event.target.value,
+                        }))
+                      }
+                      placeholder="welcome_template"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Template ID</Label>
-                  <Input
-                    value={createForm.template_id}
-                    onChange={(event) =>
-                      setCreateForm((prev) => ({
-                        ...prev,
-                        template_id: event.target.value,
-                      }))
-                    }
-                    placeholder="welcome_template"
-                  />
-                </div>
-              </div>
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Name</Label>
-                  <Input
-                    value={createForm.name}
-                    onChange={(event) =>
-                      setCreateForm((prev) => ({
-                        ...prev,
-                        name: event.target.value,
-                      }))
-                    }
-                    placeholder="Welcome Message"
-                  />
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Name</Label>
+                    <Input
+                      value={createForm.name}
+                      onChange={(event) =>
+                        setCreateForm((prev) => ({
+                          ...prev,
+                          name: event.target.value,
+                        }))
+                      }
+                      placeholder="Welcome Message"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Description</Label>
+                    <Input
+                      value={createForm.description}
+                      onChange={(event) =>
+                        setCreateForm((prev) => ({
+                          ...prev,
+                          description: event.target.value,
+                        }))
+                      }
+                      placeholder="Optional"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Description</Label>
-                  <Input
-                    value={createForm.description}
-                    onChange={(event) =>
-                      setCreateForm((prev) => ({
-                        ...prev,
-                        description: event.target.value,
-                      }))
-                    }
-                    placeholder="Optional"
-                  />
-                </div>
-              </div>
 
-              <div className="space-y-3">
-                <Label>Content Fields</Label>
-                {getCreateFields.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No content schema found for this package.
-                  </p>
-                ) : (
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {getCreateFields.map((field) => (
-                      <div
-                        key={`create-wrap-${field.name}`}
-                        className={
-                          field.type === "text" || field.type === "boolean"
-                            ? "col-span-full"
-                            : ""
-                        }
-                      >
-                        <DynamicField
-                          field={field}
-                          value={createForm.content[field.name]}
-                          onChange={(value) =>
-                            setCreateForm((prev) => ({
-                              ...prev,
-                              content: {
-                                ...prev.content,
-                                [field.name]: value,
-                              },
-                            }))
+                <div className="space-y-3">
+                  <Label>Content Fields</Label>
+                  {getCreateFields.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No content schema found for this package.
+                    </p>
+                  ) : (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {getCreateFields.map((field) => (
+                        <div
+                          key={`create-wrap-${field.name}`}
+                          className={
+                            field.type === "text" || field.type === "boolean"
+                              ? "col-span-full"
+                              : ""
                           }
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                        >
+                          <DynamicField
+                            field={field}
+                            value={createForm.content[field.name]}
+                            onChange={(value) =>
+                              setCreateForm((prev) => ({
+                                ...prev,
+                                content: {
+                                  ...prev.content,
+                                  [field.name]: value,
+                                },
+                              }))
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
-              <div className="space-y-2 rounded-md border p-3">
-                <Label className="text-xs text-muted-foreground">
-                  Detected Variables
-                </Label>
-                {createVariableNames.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    No template variables found yet.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {createVariableNames.map((name) => (
-                      <Badge key={`create-var-${name}`} variant="outline">
-                        {`{{${name}}}`}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
+                <div className="space-y-2 rounded-md border p-3">
+                  <Label className="text-xs text-muted-foreground">
+                    Detected Variables
+                  </Label>
+                  {createVariableNames.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No template variables found yet.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {createVariableNames.map((name) => (
+                        <Badge key={`create-var-${name}`} variant="outline">
+                          {`{{${name}}}`}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
             </ScrollArea>
 
             <DialogFooter className="shrink-0 flex-row justify-end gap-2 border-t pt-4">
@@ -994,126 +988,126 @@ export default function TemplatesPage() {
 
             <ScrollArea className="flex-1 overflow-y-auto">
               <div className="space-y-4 px-1 pb-2">
-              {editError && (
-                <Alert variant="destructive">
-                  <AlertTitle>Update failed</AlertTitle>
-                  <AlertDescription>{editError}</AlertDescription>
-                </Alert>
-              )}
+                {editError && (
+                  <Alert variant="destructive">
+                    <AlertTitle>Update failed</AlertTitle>
+                    <AlertDescription>{editError}</AlertDescription>
+                  </Alert>
+                )}
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Package</Label>
-                  <Select
-                    value={editForm.package}
-                    onValueChange={(value) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        package: value,
-                        content: ensureContentShape(value, prev.content),
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose package" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {packageOptions.map((pkg) => (
-                        <SelectItem key={pkg} value={pkg}>
-                          {pkg}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Package</Label>
+                    <Select
+                      value={editForm.package}
+                      onValueChange={(value) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          package: value,
+                          content: ensureContentShape(value, prev.content),
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose package" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {packageOptions.map((pkg) => (
+                          <SelectItem key={pkg} value={pkg}>
+                            {pkg}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Template ID</Label>
+                    <Input value={editingTemplateId ?? ""} disabled />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Template ID</Label>
-                  <Input value={editingTemplateId ?? ""} disabled />
-                </div>
-              </div>
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Name</Label>
-                  <Input
-                    value={editForm.name}
-                    onChange={(event) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        name: event.target.value,
-                      }))
-                    }
-                  />
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Name</Label>
+                    <Input
+                      value={editForm.name}
+                      onChange={(event) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          name: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Description</Label>
+                    <Input
+                      value={editForm.description}
+                      onChange={(event) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          description: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Description</Label>
-                  <Input
-                    value={editForm.description}
-                    onChange={(event) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        description: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-              </div>
 
-              <div className="space-y-3">
-                <Label>Content Fields</Label>
-                {getEditFields.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No content schema found for this package.
-                  </p>
-                ) : (
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {getEditFields.map((field) => (
-                      <div
-                        key={`edit-wrap-${field.name}`}
-                        className={
-                          field.type === "text" || field.type === "boolean"
-                            ? "col-span-full"
-                            : ""
-                        }
-                      >
-                        <DynamicField
-                          field={field}
-                          value={editForm.content[field.name]}
-                          onChange={(value) =>
-                            setEditForm((prev) => ({
-                              ...prev,
-                              content: {
-                                ...prev.content,
-                                [field.name]: value,
-                              },
-                            }))
+                <div className="space-y-3">
+                  <Label>Content Fields</Label>
+                  {getEditFields.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No content schema found for this package.
+                    </p>
+                  ) : (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {getEditFields.map((field) => (
+                        <div
+                          key={`edit-wrap-${field.name}`}
+                          className={
+                            field.type === "text" || field.type === "boolean"
+                              ? "col-span-full"
+                              : ""
                           }
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                        >
+                          <DynamicField
+                            field={field}
+                            value={editForm.content[field.name]}
+                            onChange={(value) =>
+                              setEditForm((prev) => ({
+                                ...prev,
+                                content: {
+                                  ...prev.content,
+                                  [field.name]: value,
+                                },
+                              }))
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
-              <div className="space-y-2 rounded-md border p-3">
-                <Label className="text-xs text-muted-foreground">
-                  Detected Variables
-                </Label>
-                {editVariableNames.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    No template variables found yet.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {editVariableNames.map((name) => (
-                      <Badge key={`edit-var-${name}`} variant="outline">
-                        {`{{${name}}}`}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
+                <div className="space-y-2 rounded-md border p-3">
+                  <Label className="text-xs text-muted-foreground">
+                    Detected Variables
+                  </Label>
+                  {editVariableNames.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No template variables found yet.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {editVariableNames.map((name) => (
+                        <Badge key={`edit-var-${name}`} variant="outline">
+                          {`{{${name}}}`}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
             </ScrollArea>
 
             <DialogFooter className="shrink-0 flex-row justify-end gap-2 border-t pt-4">
