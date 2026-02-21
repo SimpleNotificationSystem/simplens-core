@@ -11,7 +11,7 @@ import { HtmlPreview } from "./html-preview";
 import { toast } from "sonner";
 import { Loader2, Send, RefreshCw, AlertCircle } from "lucide-react";
 import { DynamicField } from "./dynamic-field";
-import { PluginMetadata, ProviderMetadata, FieldDefinition } from "@/lib/types";
+import { PluginMetadata, ProviderMetadata, NotificationTemplateDetail, NotificationTemplateListItem } from "@/lib/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { withBasePath } from "@/lib/utils";
@@ -40,6 +40,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
     // Selection
     const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
     const [selectedProviders, setSelectedProviders] = useState<Record<string, string>>({}); // channel -> providerId
+    const [inputMode, setInputMode] = useState<"content" | "template">("content");
 
     // Form Data
     const [requestId, setRequestId] = useState(generateUUID());
@@ -49,6 +50,59 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
     // Dynamic Form Data
     const [recipientData, setRecipientData] = useState<Record<string, any>>({});
     const [contentData, setContentData] = useState<Record<string, Record<string, any>>>({}); // channel -> { field: value }
+    const [templatesByChannel, setTemplatesByChannel] = useState<Record<string, NotificationTemplateListItem[]>>({});
+    const [templatesLoadingByChannel, setTemplatesLoadingByChannel] = useState<Record<string, boolean>>({});
+    const [selectedTemplatesByChannel, setSelectedTemplatesByChannel] = useState<Record<string, string>>({});
+    const [templateDetailsByChannel, setTemplateDetailsByChannel] = useState<Record<string, NotificationTemplateDetail | null>>({});
+    const [templateVariablesByChannel, setTemplateVariablesByChannel] = useState<Record<string, Record<string, string>>>({});
+    const [templateVariableNamesByChannel, setTemplateVariableNamesByChannel] = useState<Record<string, string[]>>({});
+
+    const extractTemplateVariables = (input: unknown): string[] => {
+        const variables = new Set<string>();
+        const regex = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
+
+        const visit = (value: unknown) => {
+            if (typeof value === "string") {
+                for (const match of value.matchAll(regex)) {
+                    if (match[1]) {
+                        variables.add(match[1]);
+                    }
+                }
+                return;
+            }
+
+            if (Array.isArray(value)) {
+                value.forEach(visit);
+                return;
+            }
+
+            if (value && typeof value === "object") {
+                Object.values(value).forEach(visit);
+            }
+        };
+
+        visit(input);
+        return Array.from(variables).sort((left, right) => left.localeCompare(right));
+    };
+
+    const getTemplatePreviewHtml = (content: Record<string, unknown> | undefined): string => {
+        if (!content) return "";
+
+        const preferredFields = ["body", "message", "html", "text"];
+        for (const field of preferredFields) {
+            const value = content[field];
+            if (typeof value === "string") {
+                return value;
+            }
+        }
+
+        const firstString = Object.values(content).find((value) => typeof value === "string");
+        if (typeof firstString === "string") {
+            return firstString;
+        }
+
+        return JSON.stringify(content, null, 2);
+    };
 
     // Fetch plugins on mount
     useEffect(() => {
@@ -135,6 +189,127 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
         return channelConfig.providers.find(p => p.id === providerId);
     };
 
+    useEffect(() => {
+        if (!plugins || selectedChannels.length === 0) {
+            return;
+        }
+
+        let cancelled = false;
+
+        const fetchTemplates = async () => {
+            await Promise.all(
+                selectedChannels.map(async (channel) => {
+                    const provider = getActiveProvider(channel);
+                    const packageName = provider?.name;
+
+                    if (!packageName) {
+                        if (!cancelled) {
+                            setTemplatesByChannel((prev) => ({ ...prev, [channel]: [] }));
+                            setTemplatesLoadingByChannel((prev) => ({ ...prev, [channel]: false }));
+                        }
+                        return;
+                    }
+
+                    setTemplatesLoadingByChannel((prev) => ({ ...prev, [channel]: true }));
+                    try {
+                        const response = await fetch(
+                            withBasePath(`/api/templates?package_name=${encodeURIComponent(packageName)}`)
+                        );
+
+                        if (!response.ok) {
+                            throw new Error(`Failed to fetch templates for ${channel}`);
+                        }
+
+                        const data = await response.json();
+                        if (!cancelled) {
+                            const templates = Array.isArray(data) ? data : [];
+                            setTemplatesByChannel((prev) => ({ ...prev, [channel]: templates }));
+                            setSelectedTemplatesByChannel((prev) => {
+                                const selected = prev[channel];
+                                if (selected && templates.some((template) => template.template_id === selected)) {
+                                    return prev;
+                                }
+                                return { ...prev, [channel]: "" };
+                            });
+                        }
+                    } catch {
+                        if (!cancelled) {
+                            setTemplatesByChannel((prev) => ({ ...prev, [channel]: [] }));
+                        }
+                    } finally {
+                        if (!cancelled) {
+                            setTemplatesLoadingByChannel((prev) => ({ ...prev, [channel]: false }));
+                        }
+                    }
+                })
+            );
+        };
+
+        fetchTemplates();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [plugins, selectedChannels, selectedProviders]);
+
+    useEffect(() => {
+        if (inputMode !== "template") {
+            return;
+        }
+
+        let cancelled = false;
+
+        const fetchTemplateDetails = async () => {
+            await Promise.all(
+                selectedChannels.map(async (channel) => {
+                    const templateId = selectedTemplatesByChannel[channel];
+                    if (!templateId) {
+                        if (!cancelled) {
+                            setTemplateDetailsByChannel((prev) => ({ ...prev, [channel]: null }));
+                            setTemplateVariableNamesByChannel((prev) => ({ ...prev, [channel]: [] }));
+                        }
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(withBasePath(`/api/templates/${encodeURIComponent(templateId)}`));
+                        const data = await response.json().catch(() => ({}));
+                        if (!response.ok) {
+                            throw new Error(data.message || data.error || "Failed to load template detail");
+                        }
+
+                        const template = data as NotificationTemplateDetail;
+                        const variableNames = extractTemplateVariables(template.content);
+
+                        if (!cancelled) {
+                            setTemplateDetailsByChannel((prev) => ({ ...prev, [channel]: template }));
+                            setTemplateVariableNamesByChannel((prev) => ({ ...prev, [channel]: variableNames }));
+                            setTemplateVariablesByChannel((prev) => {
+                                const existing = prev[channel] || {};
+                                const nextValues: Record<string, string> = {};
+                                variableNames.forEach((name) => {
+                                    nextValues[name] = existing[name] ?? "";
+                                });
+                                return { ...prev, [channel]: nextValues };
+                            });
+                        }
+                    } catch {
+                        if (!cancelled) {
+                            setTemplateDetailsByChannel((prev) => ({ ...prev, [channel]: null }));
+                            setTemplateVariableNamesByChannel((prev) => ({ ...prev, [channel]: [] }));
+                        }
+                    }
+                })
+            );
+        };
+
+        fetchTemplateDetails();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [inputMode, selectedChannels, selectedTemplatesByChannel]);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -156,18 +331,38 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                 client_id: clientId,
                 channel: selectedChannels,
                 recipient: { ...recipientData },
-                content: {},
             };
 
-            // Add content for each channel. 
-            // The to_channel_notification utility in backend will handle extraction
-            // Backend expects: content: { email: { subject, ... }, whatsapp: { message, ... } }
-            // or flat content if single channel (legacy support), but we prefer structured
+            if (inputMode === "template") {
+                const missingTemplate = selectedChannels.find((channel) => !selectedTemplatesByChannel[channel]);
+                if (missingTemplate) {
+                    toast.error(`Select a template for ${missingTemplate}`);
+                    setIsLoading(false);
+                    return;
+                }
 
-            selectedChannels.forEach(channel => {
-                const channelContent = contentData[channel] || {};
-                payload.content[channel] = channelContent;
-            });
+                payload.template_id = selectedChannels.map((channel) => selectedTemplatesByChannel[channel]);
+
+                const mergedVariables: Record<string, string> = {};
+                selectedChannels.forEach((channel) => {
+                    const channelVariables = templateVariablesByChannel[channel] || {};
+                    Object.entries(channelVariables).forEach(([key, value]) => {
+                        if (typeof value === "string" && value.trim().length > 0) {
+                            mergedVariables[key] = value;
+                        }
+                    });
+                });
+
+                if (Object.keys(mergedVariables).length > 0) {
+                    payload.variables = mergedVariables;
+                }
+            } else {
+                payload.content = {};
+                selectedChannels.forEach(channel => {
+                    const channelContent = contentData[channel] || {};
+                    payload.content[channel] = channelContent;
+                });
+            }
 
             if (scheduledDate) {
                 payload.scheduled_at = scheduledDate.toISOString();
@@ -205,6 +400,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
             setRecipientData({});
             setContentData({});
             setScheduledDate(undefined);
+            setSelectedTemplatesByChannel({});
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to send notification");
         } finally {
@@ -299,6 +495,24 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                     </CardContent>
                 </Card>
 
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium">Content Input Mode</CardTitle>
+                        <CardDescription>Choose manual content or provider template.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Select value={inputMode} onValueChange={(value) => setInputMode(value as "content" | "template")}>
+                            <SelectTrigger className="max-w-sm">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="content">Write content manually</SelectItem>
+                                <SelectItem value="template">Choose template</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </CardContent>
+                </Card>
+
                 {/* Recipient */}
                 <Card>
                     <CardHeader className="pb-3">
@@ -360,42 +574,121 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                     </CardContent>
                 </Card>
 
-                {/* Content Fields - Per Channel */}
-                {selectedChannels.map(channel => {
-                    const provider = getActiveProvider(channel);
-                    if (!provider) return null;
+                {inputMode === "template" ? (
+                    selectedChannels.map((channel) => {
+                        const provider = getActiveProvider(channel);
+                        const templates = templatesByChannel[channel] ?? [];
+                        const isLoadingTemplates = templatesLoadingByChannel[channel];
+                        const variableNames = templateVariableNamesByChannel[channel] ?? [];
+                        const templateDetail = templateDetailsByChannel[channel];
+                        const previewHtml = getTemplatePreviewHtml(templateDetail?.content);
 
-                    return (
-                        <Card key={channel}>
-                            <CardHeader className="pb-3">
-                                <CardTitle className="text-sm font-medium capitalize">{channel} Content</CardTitle>
-                                <CardDescription>
-                                    Provider: {provider.displayName} ({selectedProviders[channel]})
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {provider.contentFields.map(field => (
-                                    <div key={field.name} className="space-y-2">
-                                        <DynamicField
-                                            field={field}
-                                            value={contentData[channel]?.[field.name]}
-                                            onChange={(val) => updateContentData(channel, field.name, val)}
-                                        />
+                        return (
+                            <Card key={channel}>
+                                <CardHeader className="pb-3">
+                                    <CardTitle className="text-sm font-medium capitalize">{channel} Template</CardTitle>
+                                    <CardDescription>
+                                        Provider: {provider?.displayName ?? "-"} ({provider?.name ?? "package unavailable"})
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-2">
+                                    <Label>Template</Label>
+                                    <Select
+                                        value={selectedTemplatesByChannel[channel] || ""}
+                                        onValueChange={(value) =>
+                                            setSelectedTemplatesByChannel((prev) => ({ ...prev, [channel]: value }))
+                                        }
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder={isLoadingTemplates ? "Loading templates..." : "Select template"} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {templates.map((template) => (
+                                                <SelectItem key={template.template_id} value={template.template_id}>
+                                                    {template.name} ({template.template_id})
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
 
-                                        {/* Show HTML preview for message/body fields */}
-                                        {(field.name === 'message' || field.name === 'body') &&
-                                            contentData[channel]?.[field.name] && (
-                                                <div className="mt-2">
-                                                    <Label className="text-xs text-muted-foreground mb-1 block">Preview</Label>
-                                                    <HtmlPreview html={contentData[channel]?.[field.name]} />
+                                    {selectedTemplatesByChannel[channel] && (
+                                        <div className="space-y-3 rounded-md border p-3">
+                                            <Label className="text-xs text-muted-foreground">Template Variables</Label>
+
+                                            {variableNames.length === 0 ? (
+                                                <p className="text-xs text-muted-foreground">No variables found in this template.</p>
+                                            ) : (
+                                                <div className="grid gap-2 md:grid-cols-2">
+                                                    {variableNames.map((variableName) => (
+                                                        <div key={variableName} className="space-y-1">
+                                                            <Label className="text-xs">{`{{${variableName}}}`}</Label>
+                                                            <Input
+                                                                value={templateVariablesByChannel[channel]?.[variableName] ?? ""}
+                                                                onChange={(event) => {
+                                                                    const value = event.target.value;
+                                                                    setTemplateVariablesByChannel((prev) => ({
+                                                                        ...prev,
+                                                                        [channel]: {
+                                                                            ...(prev[channel] || {}),
+                                                                            [variableName]: value,
+                                                                        },
+                                                                    }));
+                                                                }}
+                                                                placeholder={`Value for ${variableName}`}
+                                                            />
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             )}
-                                    </div>
-                                ))}
-                            </CardContent>
-                        </Card>
-                    );
-                })}
+
+                                            {previewHtml && (
+                                                <div className="space-y-1">
+                                                    <Label className="text-xs text-muted-foreground">Preview</Label>
+                                                    <HtmlPreview html={previewHtml} variables={templateVariablesByChannel[channel] || {}} />
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        );
+                    })
+                ) : (
+                    selectedChannels.map(channel => {
+                        const provider = getActiveProvider(channel);
+                        if (!provider) return null;
+
+                        return (
+                            <Card key={channel}>
+                                <CardHeader className="pb-3">
+                                    <CardTitle className="text-sm font-medium capitalize">{channel} Content</CardTitle>
+                                    <CardDescription>
+                                        Provider: {provider.displayName} ({selectedProviders[channel]})
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    {provider.contentFields.map(field => (
+                                        <div key={field.name} className="space-y-2">
+                                            <DynamicField
+                                                field={field}
+                                                value={contentData[channel]?.[field.name]}
+                                                onChange={(val) => updateContentData(channel, field.name, val)}
+                                            />
+
+                                            {(field.name === 'message' || field.name === 'body') &&
+                                                contentData[channel]?.[field.name] && (
+                                                    <div className="mt-2">
+                                                        <Label className="text-xs text-muted-foreground mb-1 block">Preview</Label>
+                                                        <HtmlPreview html={contentData[channel]?.[field.name]} />
+                                                    </div>
+                                                )}
+                                        </div>
+                                    ))}
+                                </CardContent>
+                            </Card>
+                        );
+                    })
+                )}
 
                 {/* Schedule */}
                 <Card>

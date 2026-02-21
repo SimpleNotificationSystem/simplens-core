@@ -14,6 +14,7 @@ import {
     Settings,
     Send,
     Puzzle,
+    FileText,
     Code,
     BellRing,
 } from "lucide-react";
@@ -84,6 +85,11 @@ const navItems: NavItem[] = [
         title: "Plugins",
         href: "/plugins",
         icon: Puzzle,
+    },
+    {
+        title: "Templates",
+        href: "/templates",
+        icon: FileText,
     },
     {
         title: "Payload Studio",
@@ -225,7 +231,7 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
                 </header>
                 <motion.main
                     key={pathname}
-                    className="flex-1 overflow-y-auto p-4 [will-change:transform,opacity,filter]"
+                    className="flex-1 overflow-y-auto p-4 will-change-[transform,opacity,filter]"
                     initial={{ opacity: 0, y: 18, scale: 0.985, filter: "blur(8px)" }}
                     animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
                     transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
