@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { motion } from "motion/react";
 import useSWR from "swr";
 import {
     LayoutDashboard,
@@ -206,6 +207,8 @@ interface DashboardLayoutProps {
 }
 
 export function DashboardLayout({ children, title, description }: DashboardLayoutProps) {
+    const pathname = usePathname();
+
     return (
         <SidebarProvider>
             <AppSidebar />
@@ -220,9 +223,15 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
                         )}
                     </div>
                 </header>
-                <main className="flex-1 overflow-y-auto p-4">
+                <motion.main
+                    key={pathname}
+                    className="flex-1 overflow-y-auto p-4 [will-change:transform,opacity,filter]"
+                    initial={{ opacity: 0, y: 18, scale: 0.985, filter: "blur(8px)" }}
+                    animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+                    transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+                >
                     {children}
-                </main>
+                </motion.main>
             </SidebarInset>
         </SidebarProvider>
     );
