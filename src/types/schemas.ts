@@ -353,6 +353,13 @@ export const notificationTemplateRequestSchema = z.object({
   package: z.string(),
 });
 
+export const notificationTemplateUpdateRequestSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  content: z.record(z.string(), z.unknown()),
+  package: z.string(),
+});
+
 // ============================================================================
 // VALIDATION FUNCTIONS
 // ============================================================================
@@ -374,6 +381,8 @@ export const validateNotificationTemplate = (data: unknown) =>
   notificationTemplateSchema.parse(data);
 export const validateNotificationTemplateRequestSchema = (data: unknown) =>
   notificationTemplateRequestSchema.parse(data);
+export const validateNotificationTemplateUpdateRequestSchema = (data: unknown) =>
+  notificationTemplateUpdateRequestSchema.parse(data);
 
 export const safeValidateBaseNotification = (data: unknown) =>
   baseNotificationSchema.safeParse(data);
@@ -393,3 +402,5 @@ export const safeValidateNotificationTemplate = (data: unknown) =>
   notificationTemplateSchema.safeParse(data);
 export const safeValidateNotificationTemplateRequestSchema = (data: unknown) =>
   notificationTemplateRequestSchema.safeParse(data);
+export const safeValidateNotificationTemplateUpdateRequestSchema = (data: unknown) =>
+  notificationTemplateUpdateRequestSchema.safeParse(data);

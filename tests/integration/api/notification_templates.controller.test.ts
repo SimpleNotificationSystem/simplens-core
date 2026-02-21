@@ -28,12 +28,14 @@ const createTestApp = async () => {
   });
 
   // Import controllers
-  const { createTemplate, getTemplates, getTemplateById } =
+  const { createTemplate, getTemplates, getTemplateById, updateTemplate, deleteTemplate } =
     await import("../../../src/api/controllers/notification_templates.controller.js");
 
   app.post("/api/templates", createTemplate);
   app.get("/api/templates", getTemplates);
   app.get("/api/templates/:template_id", getTemplateById);
+  app.put("/api/templates/:template_id", updateTemplate);
+  app.delete("/api/templates/:template_id", deleteTemplate);
 
   return app;
 };
@@ -44,6 +46,8 @@ vi.mock("../../../src/database/models/notification-template.models.js", () => ({
     insertOne: vi.fn(),
     find: vi.fn(),
     findOne: vi.fn(),
+    updateOne: vi.fn(),
+    findOneAndDelete: vi.fn(),
   },
 }));
 
@@ -143,6 +147,48 @@ describe("Notification Templates Controller", () => {
           template_id: "email-template-1",
           name: "Welcome Email",
           package: "gmail",
+        }),
+      );
+    });
+
+    it("should normalize variable formats before storing template content", async () => {
+      const { PluginRegistry } = await import("../../../src/plugins/index.js");
+      (PluginRegistry.get as ReturnType<typeof vi.fn>).mockReturnValue({
+        getContentSchema: vi.fn().mockReturnValue({
+          safeParse: vi.fn().mockReturnValue({ success: true }),
+        }),
+      });
+
+      const notification_template_model = (
+        await import("../../../src/database/models/notification-template.models.js")
+      ).default;
+      (
+        notification_template_model.insertOne as ReturnType<typeof vi.fn>
+      ).mockResolvedValue({ _id: "template-id-2" });
+
+      const templateRequest = {
+        template_id: "email-template-normalized",
+        name: "Normalized Email",
+        description: "Template with mixed variable syntax",
+        package: "gmail",
+        content: {
+          subject: "Welcome ${name}",
+          message: "Hi {name}, your code is {{code}}",
+        },
+      };
+
+      const response = await request(app)
+        .post("/api/templates")
+        .set("Authorization", "Bearer test-api-key")
+        .send(templateRequest);
+
+      expect(response.status).toBe(201);
+      expect(notification_template_model.insertOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: {
+            subject: "Welcome {{name}}",
+            message: "Hi {{name}}, your code is {{code}}",
+          },
         }),
       );
     });
@@ -541,6 +587,122 @@ describe("Notification Templates Controller", () => {
           content: templateData.content,
         }),
       );
+    });
+  });
+
+  describe("PUT /api/templates/:template_id - updateTemplate", () => {
+    it("should update a template successfully", async () => {
+      const { PluginRegistry } = await import("../../../src/plugins/index.js");
+      (PluginRegistry.get as ReturnType<typeof vi.fn>).mockReturnValue({
+        getContentSchema: vi.fn().mockReturnValue({
+          safeParse: vi.fn().mockReturnValue({ success: true }),
+        }),
+      });
+
+      const notification_template_model = (
+        await import("../../../src/database/models/notification-template.models.js")
+      ).default;
+
+      (notification_template_model.findOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+        template_id: "email-template-1",
+      });
+      (notification_template_model.updateOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+        acknowledged: true,
+        modifiedCount: 1,
+      });
+
+      const response = await request(app)
+        .put("/api/templates/email-template-1")
+        .set("Authorization", "Bearer test-api-key")
+        .send({
+          name: "Welcome Email Updated",
+          description: "Updated template",
+          package: "gmail",
+          content: {
+            subject: "Welcome ${name}",
+            message: "Hi {name}",
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.message).toBe("Template updated successfully");
+      expect(notification_template_model.updateOne).toHaveBeenCalledWith(
+        { template_id: "email-template-1" },
+        {
+          $set: expect.objectContaining({
+            name: "Welcome Email Updated",
+            content: {
+              subject: "Welcome {{name}}",
+              message: "Hi {{name}}",
+            },
+          }),
+        },
+      );
+    });
+
+    it("should return 404 when template is not found", async () => {
+      const notification_template_model = (
+        await import("../../../src/database/models/notification-template.models.js")
+      ).default;
+      (notification_template_model.findOne as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+      const response = await request(app)
+        .put("/api/templates/non-existent")
+        .set("Authorization", "Bearer test-api-key")
+        .send({
+          name: "Name",
+          package: "gmail",
+          content: { message: "Hello" },
+        });
+
+      expect(response.status).toBe(404);
+      expect(response.body.message).toBe("No template found for the given id");
+    });
+
+    it("should return 400 for invalid update payload", async () => {
+      const response = await request(app)
+        .put("/api/templates/email-template-1")
+        .set("Authorization", "Bearer test-api-key")
+        .send({
+          package: "gmail",
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.errors).toBeDefined();
+    });
+  });
+
+  describe("DELETE /api/templates/:template_id - deleteTemplate", () => {
+    it("should delete template by id", async () => {
+      const notification_template_model = (
+        await import("../../../src/database/models/notification-template.models.js")
+      ).default;
+
+      (notification_template_model.findOneAndDelete as ReturnType<typeof vi.fn>).mockResolvedValue({
+        template_id: "email-template-1",
+      });
+
+      const response = await request(app)
+        .delete("/api/templates/email-template-1")
+        .set("Authorization", "Bearer test-api-key");
+
+      expect(response.status).toBe(200);
+      expect(response.body.message).toBe("Template deleted successfully");
+    });
+
+    it("should return 404 when deleting non-existing template", async () => {
+      const notification_template_model = (
+        await import("../../../src/database/models/notification-template.models.js")
+      ).default;
+
+      (notification_template_model.findOneAndDelete as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+      const response = await request(app)
+        .delete("/api/templates/non-existent")
+        .set("Authorization", "Bearer test-api-key");
+
+      expect(response.status).toBe(404);
+      expect(response.body.message).toBe("No template found for the given id");
     });
   });
 });
