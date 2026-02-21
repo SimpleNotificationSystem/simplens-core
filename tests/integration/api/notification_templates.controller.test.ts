@@ -432,13 +432,44 @@ describe("Notification Templates Controller", () => {
       );
     });
 
-    it("should return 400 when package_name is missing", async () => {
+    it("should return all templates when package_name is omitted", async () => {
+      const notification_template_model = (
+        await import("../../../src/database/models/notification-template.models.js")
+      ).default;
+      const { apiLogger } = await import("../../../src/workers/utils/logger.js");
+
+      (
+        notification_template_model.find as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([
+        {
+          template_id: "email-template-1",
+          name: "Welcome Email",
+          description: "Welcome template",
+          package: "gmail",
+        },
+        {
+          template_id: "sms-template-1",
+          name: "OTP SMS",
+          description: "One-time password template",
+          package: "twilio",
+        },
+      ]);
+
       const response = await request(app)
         .get("/api/templates")
         .set("Authorization", "Bearer test-api-key");
 
-      expect(response.status).toBe(400);
-      expect(response.body.message).toBe("Package name required");
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveLength(2);
+      expect(response.body[0]).toEqual(
+        expect.objectContaining({ template_id: "email-template-1" }),
+      );
+      expect(response.body[1]).toEqual(
+        expect.objectContaining({ template_id: "sms-template-1" }),
+      );
+      expect(apiLogger.info).toHaveBeenCalledWith(
+        "Found 2 templates",
+      );
     });
 
     it("should return 500 for unexpected errors", async () => {
