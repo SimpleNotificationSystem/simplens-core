@@ -5,15 +5,9 @@ meta {
 }
 
 get {
-  url: {{BASE_URL}}/api/templates
-  body: json
+  url: {{process.env.BASE_URL}}/api/templates?package_name=simplens-plugin-mock
+  body: none
   auth: inherit
-}
-
-body:json {
-  {
-    "package_name": "simplens-plugin-mock"
-  }
 }
 
 settings {

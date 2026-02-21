@@ -24,6 +24,37 @@ import notification_template_model from "@src/database/models/notification-templ
 import { SimpleNSProvider } from "@src/plugins/interfaces/provider.types.js";
 import { ZodError } from "zod";
 
+const preloadTemplatesByIds = async (
+  templateIds?: string[],
+): Promise<Map<string, Record<string, unknown>>> => {
+  const templateMap = new Map<string, Record<string, unknown>>();
+
+  if (!templateIds || templateIds.length === 0) {
+    return templateMap;
+  }
+
+  const uniqueTemplateIds = Array.from(
+    new Set(templateIds.filter((id): id is string => Boolean(id))),
+  );
+
+  if (uniqueTemplateIds.length === 0) {
+    return templateMap;
+  }
+
+  const templates = await notification_template_model.find({
+    template_id: { $in: uniqueTemplateIds },
+  });
+
+  for (const template of templates) {
+    templateMap.set(
+      template.template_id,
+      template.content as Record<string, unknown>,
+    );
+  }
+
+  return templateMap;
+};
+
 /**
  * Convert notification request to notification schema objects
  */
@@ -38,6 +69,9 @@ export const convert_notification_request_to_notification_schema = async (
   if (data.template_id && data.template_id.length > 0) {
     isTemplate = true;
   }
+  const templateContentById = isTemplate
+    ? await preloadTemplatesByIds(data.template_id)
+    : new Map<string, Record<string, unknown>>();
 
   for (let index = 0; index < data.channel.length; index++) {
     const channel = data.channel[index];
@@ -55,17 +89,15 @@ export const convert_notification_request_to_notification_schema = async (
         const template_id = data.template_id![index];
 
         if(template_id){
-            const template = await notification_template_model.findOne({
-                template_id: data.template_id![index],
-            });
-    
-            if (!template) {
+            const templateContent = templateContentById.get(template_id);
+
+            if (!templateContent) {
                 throw new Error(
                     `Template not found for the given template_id: ${data.template_id![index]}`,
                 );
             }
     
-            content = template.content;
+            content = templateContent;
         }
         else{
             content = data.content![channel];
@@ -119,6 +151,9 @@ export const convert_batch_notification_schema_to_notification_schema = async (
   if (data.template_id && data.template_id.length > 0) {
     isTemplate = true;
   }
+  const templateContentById = isTemplate
+    ? await preloadTemplatesByIds(data.template_id)
+    : new Map<string, Record<string, unknown>>();
 
   for (const recipient of data.recipients) {
     let content: Record<string, unknown>;
@@ -137,17 +172,15 @@ export const convert_batch_notification_schema_to_notification_schema = async (
             const template_id = data.template_id![index];
 
             if(template_id){
-                const template = await notification_template_model.findOne({
-                    template_id: data.template_id![index],
-                });
-        
-                if (!template) {
+                const templateContent = templateContentById.get(template_id);
+
+                if (!templateContent) {
                     throw new Error(
                         `Template not found for the given template_id: ${data.template_id![index]}`,
                     );
                 }
         
-                content = template.content;
+                content = templateContent;
             }
             else{
                 content = data.content![channel];

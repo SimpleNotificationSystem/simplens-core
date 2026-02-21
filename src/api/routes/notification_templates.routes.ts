@@ -7,6 +7,6 @@ notification_templates_router.post('/create', createTemplate);
 
 notification_templates_router.get('/', getTemplates);
 
-notification_templates_router.get('/id', getTemplateById);
+notification_templates_router.get('/:template_id', getTemplateById);
 
 export default notification_templates_router;

@@ -90,7 +90,10 @@ export const createTemplate = async (req: Request, res: Response): Promise<void>
 
 export const getTemplates = async (req: Request, res: Response) : Promise<void> =>{
     try{
-        const {package_name} = req.body;
+        const package_name =
+            typeof req.query.package_name === "string"
+                ? req.query.package_name.trim()
+                : "";
         if(!package_name){
             res.status(400).json({
                 message: "Package name required"
@@ -100,19 +103,16 @@ export const getTemplates = async (req: Request, res: Response) : Promise<void> 
         const templates = await notification_template_model.find({
             package: package_name
         });
-        let response: Object[] = [];
+        const response = templates.map(template => ({
+            name: template.name,
+            description: template.description ?? "",
+            template_id: template.template_id
+        }));
         if(templates.length > 0){
-            templates.forEach(template=>{
-                response.push({
-                    name: template.name,
-                    description: template.description ?? "",
-                    template_id: template.template_id    
-                });
-            });
-            logger.info(`No templates found for the given package name ${package_name}`);
+            logger.info(`Found ${templates.length} templates for the given package: ${package_name}`);
         }
         else{
-            logger.info(`Found ${templates.length} templates for the given package: ${package_name}`);
+            logger.info(`No templates found for the given package name ${package_name}`);
         }
         res.status(200).json(response);
         return;
@@ -131,7 +131,10 @@ export const getTemplates = async (req: Request, res: Response) : Promise<void> 
 
 export const getTemplateById = async (req: Request, res: Response): Promise<void> =>{
     try{
-        const {template_id} = req.body;
+        const template_id =
+            typeof req.params.template_id === "string"
+                ? req.params.template_id.trim()
+                : "";
         if(!template_id){
             res.status(400).json({
                 message: "Template-Id required"
@@ -142,7 +145,7 @@ export const getTemplateById = async (req: Request, res: Response): Promise<void
             template_id: template_id
         });
         if(!template){
-            res.status(200).json({
+            res.status(404).json({
                 message: "No template found for the given id"
             });
             logger.info("No template found for the given id")
@@ -164,5 +167,4 @@ export const getTemplateById = async (req: Request, res: Response): Promise<void
         logger.error(`Internal Server Error: ${err}`);
     }
 }
-
 

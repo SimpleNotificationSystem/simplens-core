@@ -32,8 +32,8 @@ const createTestApp = async () => {
     await import("../../../src/api/controllers/notification_templates.controller.js");
 
   app.post("/api/templates", createTemplate);
-  app.post("/api/templates/get", getTemplates);
-  app.post("/api/templates/get-by-id", getTemplateById);
+  app.get("/api/templates", getTemplates);
+  app.get("/api/templates/:template_id", getTemplateById);
 
   return app;
 };
@@ -322,11 +322,12 @@ describe("Notification Templates Controller", () => {
     });
   });
 
-  describe("POST /api/templates/get - getTemplates", () => {
+  describe("GET /api/templates - getTemplates", () => {
     it("should retrieve templates by package name", async () => {
       const notification_template_model = (
         await import("../../../src/database/models/notification-template.models.js")
       ).default;
+      const { apiLogger } = await import("../../../src/workers/utils/logger.js");
 
       (
         notification_template_model.find as ReturnType<typeof vi.fn>
@@ -346,9 +347,9 @@ describe("Notification Templates Controller", () => {
       ]);
 
       const response = await request(app)
-        .post("/api/templates/get")
+        .get("/api/templates")
         .set("Authorization", "Bearer test-api-key")
-        .send({ package_name: "gmail" });
+        .query({ package_name: "gmail" });
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(2);
@@ -358,31 +359,37 @@ describe("Notification Templates Controller", () => {
           name: "Welcome Email",
         }),
       );
+      expect(apiLogger.info).toHaveBeenCalledWith(
+        "Found 2 templates for the given package: gmail",
+      );
     });
 
     it("should return empty array when no templates found", async () => {
       const notification_template_model = (
         await import("../../../src/database/models/notification-template.models.js")
       ).default;
+      const { apiLogger } = await import("../../../src/workers/utils/logger.js");
 
       (
         notification_template_model.find as ReturnType<typeof vi.fn>
       ).mockResolvedValue([]);
 
       const response = await request(app)
-        .post("/api/templates/get")
+        .get("/api/templates")
         .set("Authorization", "Bearer test-api-key")
-        .send({ package_name: "non-existent-provider" });
+        .query({ package_name: "non-existent-provider" });
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual([]);
+      expect(apiLogger.info).toHaveBeenCalledWith(
+        "No templates found for the given package name non-existent-provider",
+      );
     });
 
     it("should return 400 when package_name is missing", async () => {
       const response = await request(app)
-        .post("/api/templates/get")
-        .set("Authorization", "Bearer test-api-key")
-        .send({});
+        .get("/api/templates")
+        .set("Authorization", "Bearer test-api-key");
 
       expect(response.status).toBe(400);
       expect(response.body.message).toBe("Package name required");
@@ -398,9 +405,9 @@ describe("Notification Templates Controller", () => {
       ).mockRejectedValue(new Error("Database error"));
 
       const response = await request(app)
-        .post("/api/templates/get")
+        .get("/api/templates")
         .set("Authorization", "Bearer test-api-key")
-        .send({ package_name: "gmail" });
+        .query({ package_name: "gmail" });
 
       expect(response.status).toBe(500);
       expect(response.body.message).toBe("Internal Server Error");
@@ -408,14 +415,14 @@ describe("Notification Templates Controller", () => {
 
     it("should return 401 for missing authorization", async () => {
       const response = await request(app)
-        .post("/api/templates/get")
-        .send({ package_name: "gmail" });
+        .get("/api/templates")
+        .query({ package_name: "gmail" });
 
       expect(response.status).toBe(401);
     });
   });
 
-  describe("POST /api/templates/get-by-id - getTemplateById", () => {
+  describe("GET /api/templates/:template_id - getTemplateById", () => {
     it("should retrieve template by id", async () => {
       const notification_template_model = (
         await import("../../../src/database/models/notification-template.models.js")
@@ -436,9 +443,8 @@ describe("Notification Templates Controller", () => {
       });
 
       const response = await request(app)
-        .post("/api/templates/get-by-id")
-        .set("Authorization", "Bearer test-api-key")
-        .send({ template_id: "email-template-1" });
+        .get("/api/templates/email-template-1")
+        .set("Authorization", "Bearer test-api-key");
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual(
@@ -451,7 +457,7 @@ describe("Notification Templates Controller", () => {
       expect(response.body.content).toBeDefined();
     });
 
-    it("should return 200 with message when template not found", async () => {
+    it("should return 404 with message when template not found", async () => {
       const notification_template_model = (
         await import("../../../src/database/models/notification-template.models.js")
       ).default;
@@ -461,19 +467,17 @@ describe("Notification Templates Controller", () => {
       ).mockResolvedValue(null);
 
       const response = await request(app)
-        .post("/api/templates/get-by-id")
-        .set("Authorization", "Bearer test-api-key")
-        .send({ template_id: "non-existent-id" });
+        .get("/api/templates/non-existent-id")
+        .set("Authorization", "Bearer test-api-key");
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(404);
       expect(response.body.message).toBe("No template found for the given id");
     });
 
     it("should return 400 when template_id is missing", async () => {
       const response = await request(app)
-        .post("/api/templates/get-by-id")
-        .set("Authorization", "Bearer test-api-key")
-        .send({});
+        .get("/api/templates/%20")
+        .set("Authorization", "Bearer test-api-key");
 
       expect(response.status).toBe(400);
       expect(response.body.message).toBe("Template-Id required");
@@ -489,9 +493,8 @@ describe("Notification Templates Controller", () => {
       ).mockRejectedValue(new Error("Database error"));
 
       const response = await request(app)
-        .post("/api/templates/get-by-id")
-        .set("Authorization", "Bearer test-api-key")
-        .send({ template_id: "email-template-1" });
+        .get("/api/templates/email-template-1")
+        .set("Authorization", "Bearer test-api-key");
 
       expect(response.status).toBe(500);
       expect(response.body.message).toBe("Internal Server Error");
@@ -499,8 +502,7 @@ describe("Notification Templates Controller", () => {
 
     it("should return 401 for missing authorization", async () => {
       const response = await request(app)
-        .post("/api/templates/get-by-id")
-        .send({ template_id: "email-template-1" });
+        .get("/api/templates/email-template-1");
 
       expect(response.status).toBe(401);
     });
@@ -526,9 +528,8 @@ describe("Notification Templates Controller", () => {
       ).mockResolvedValue(templateData);
 
       const response = await request(app)
-        .post("/api/templates/get-by-id")
-        .set("Authorization", "Bearer test-api-key")
-        .send({ template_id: "sms-template-1" });
+        .get("/api/templates/sms-template-1")
+        .set("Authorization", "Bearer test-api-key");
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual(

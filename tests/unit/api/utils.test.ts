@@ -33,6 +33,7 @@ vi.mock("../../../src/database/models/outbox.models.js", () => ({
 
 vi.mock("../../../src/database/models/notification-template.models.js", () => ({
   default: {
+    find: vi.fn(),
     findOne: vi.fn(),
   },
 }));
@@ -332,14 +333,16 @@ describe("API Utility Functions", () => {
         await import("../../../src/database/models/notification-template.models.js")
       ).default;
       (
-        notification_template_model.findOne as ReturnType<typeof vi.fn>
-      ).mockResolvedValue({
-        template_id: "email-template-1",
-        content: {
-          subject: "Welcome {{name}}",
-          message: "Welcome to SimpleNS",
+        notification_template_model.find as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([
+        {
+          template_id: "email-template-1",
+          content: {
+            subject: "Welcome {{name}}",
+            message: "Welcome to SimpleNS",
+          },
         },
-      });
+      ]);
 
       const { convert_notification_request_to_notification_schema } =
         await import("../../../src/api/utils/utils.js");
@@ -373,10 +376,18 @@ describe("API Utility Functions", () => {
       const notification_template_model = (
         await import("../../../src/database/models/notification-template.models.js")
       ).default;
-      // No template lookup should happen
+      // Preloaded template should cover email, SMS should fall back to request content
       (
-        notification_template_model.findOne as ReturnType<typeof vi.fn>
-      ).mockClear();
+        notification_template_model.find as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([
+        {
+          template_id: "email-template-1",
+          content: {
+            subject: "Email from template",
+            message: "This came from template",
+          },
+        },
+      ]);
 
       const { convert_notification_request_to_notification_schema } =
         await import("../../../src/api/utils/utils.js");
@@ -414,6 +425,7 @@ describe("API Utility Functions", () => {
       expect(smsNotif?.content).toEqual({
         message: "SMS content from request",
       });
+      expect(notification_template_model.find).toHaveBeenCalledTimes(1);
     });
 
     it("should handle batch request with partial template_id array", async () => {
@@ -421,14 +433,16 @@ describe("API Utility Functions", () => {
         await import("../../../src/database/models/notification-template.models.js")
       ).default;
       (
-        notification_template_model.findOne as ReturnType<typeof vi.fn>
-      ).mockResolvedValue({
-        template_id: "email-template-1",
-        content: {
-          subject: "Welcome {{name}}",
-          message: "Welcome to SimpleNS",
+        notification_template_model.find as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([
+        {
+          template_id: "email-template-1",
+          content: {
+            subject: "Welcome {{name}}",
+            message: "Welcome to SimpleNS",
+          },
         },
-      });
+      ]);
 
       const { convert_batch_notification_schema_to_notification_schema } =
         await import("../../../src/api/utils/utils.js");
@@ -470,6 +484,7 @@ describe("API Utility Functions", () => {
       expect(smsNotif?.content).toEqual({
         message: "SMS alert: {{alert_type}}",
       });
+      expect(notification_template_model.find).toHaveBeenCalledTimes(1);
     });
 
     it("should throw error when template not found and no content fallback provided", async () => {
@@ -477,8 +492,8 @@ describe("API Utility Functions", () => {
         await import("../../../src/database/models/notification-template.models.js")
       ).default;
       (
-        notification_template_model.findOne as ReturnType<typeof vi.fn>
-      ).mockResolvedValue(null);
+        notification_template_model.find as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([]);
 
       const { convert_notification_request_to_notification_schema } =
         await import("../../../src/api/utils/utils.js");
@@ -508,14 +523,16 @@ describe("API Utility Functions", () => {
       ).default;
       // Mock to return template for email-template-1
       (
-        notification_template_model.findOne as ReturnType<typeof vi.fn>
-      ).mockResolvedValue({
-        template_id: "email-template-1",
-        content: {
-          subject: "Test",
-          message: "Test",
+        notification_template_model.find as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([
+        {
+          template_id: "email-template-1",
+          content: {
+            subject: "Test",
+            message: "Test",
+          },
         },
-      });
+      ]);
 
       const { convert_notification_request_to_notification_schema } =
         await import("../../../src/api/utils/utils.js");
@@ -549,14 +566,16 @@ describe("API Utility Functions", () => {
         await import("../../../src/database/models/notification-template.models.js")
       ).default;
       (
-        notification_template_model.findOne as ReturnType<typeof vi.fn>
-      ).mockResolvedValue({
-        template_id: "email-template-1",
-        content: {
-          subject: "Hello {{name}}",
-          message: "Welcome to SimpleNS",
+        notification_template_model.find as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([
+        {
+          template_id: "email-template-1",
+          content: {
+            subject: "Hello {{name}}",
+            message: "Welcome to SimpleNS",
+          },
         },
-      });
+      ]);
 
       const { convert_batch_notification_schema_to_notification_schema } =
         await import("../../../src/api/utils/utils.js");
@@ -614,6 +633,7 @@ describe("API Utility Functions", () => {
           body: "New message",
         });
       });
+      expect(notification_template_model.find).toHaveBeenCalledTimes(1);
     });
 
     it("should support provider array mapping with template_id", async () => {
@@ -621,14 +641,16 @@ describe("API Utility Functions", () => {
         await import("../../../src/database/models/notification-template.models.js")
       ).default;
       (
-        notification_template_model.findOne as ReturnType<typeof vi.fn>
-      ).mockResolvedValue({
-        template_id: "email-template-1",
-        content: {
-          subject: "Notification",
-          message: "You have a message",
+        notification_template_model.find as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([
+        {
+          template_id: "email-template-1",
+          content: {
+            subject: "Notification",
+            message: "You have a message",
+          },
         },
-      });
+      ]);
 
       const { convert_notification_request_to_notification_schema } =
         await import("../../../src/api/utils/utils.js");
@@ -662,6 +684,96 @@ describe("API Utility Functions", () => {
       const smsNotif = notifications.find((n) => n.channel === "sms");
       expect(emailNotif?.provider).toBe("gmail");
       expect(smsNotif?.provider).toBe("twilio");
+    });
+
+    it("should fetch templates once for batch processing with many recipients", async () => {
+      const notification_template_model = (
+        await import("../../../src/database/models/notification-template.models.js")
+      ).default;
+      (
+        notification_template_model.find as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([
+        {
+          template_id: "email-template-1",
+          content: {
+            subject: "Bulk Subject",
+            message: "Bulk body",
+          },
+        },
+      ]);
+
+      const { convert_batch_notification_schema_to_notification_schema } =
+        await import("../../../src/api/utils/utils.js");
+
+      const request: batch_notification_request = {
+        client_id:
+          randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+        channel: ["email", "sms"],
+        template_id: ["email-template-1"],
+        content: {
+          sms: {
+            message: "SMS content",
+          },
+        },
+        recipients: Array.from({ length: 50 }, (_, idx) => ({
+          request_id: randomUUID(),
+          user_id: `user-${idx}`,
+          email: `user-${idx}@example.com`,
+        })),
+        webhook_url: "https://webhook.example.com/callback",
+      };
+
+      const notifications =
+        await convert_batch_notification_schema_to_notification_schema(request);
+
+      expect(notifications).toHaveLength(100);
+      expect(notification_template_model.find).toHaveBeenCalledTimes(1);
+      expect(notification_template_model.find).toHaveBeenCalledWith({
+        template_id: { $in: ["email-template-1"] },
+      });
+    });
+
+    it("should deduplicate template ids before fetching", async () => {
+      const notification_template_model = (
+        await import("../../../src/database/models/notification-template.models.js")
+      ).default;
+      (
+        notification_template_model.find as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([
+        {
+          template_id: "email-template-1",
+          content: {
+            subject: "Dedup Subject",
+            message: "Dedup body",
+          },
+        },
+      ]);
+
+      const { convert_notification_request_to_notification_schema } =
+        await import("../../../src/api/utils/utils.js");
+
+      const request: notification_request = {
+        request_id:
+          randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+        client_id:
+          randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+        channel: ["email", "email"],
+        template_id: ["email-template-1", "email-template-1"],
+        recipient: {
+          user_id: "user-123",
+          email: "test@example.com",
+        },
+        webhook_url: "https://webhook.example.com/callback",
+      };
+
+      const notifications =
+        await convert_notification_request_to_notification_schema(request);
+
+      expect(notifications).toHaveLength(2);
+      expect(notification_template_model.find).toHaveBeenCalledTimes(1);
+      expect(notification_template_model.find).toHaveBeenCalledWith({
+        template_id: { $in: ["email-template-1"] },
+      });
     });
   });
 

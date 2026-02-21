@@ -5,15 +5,9 @@ meta {
 }
 
 get {
-  url: {{BASE_URL}}/api/templates/id
-  body: json
+  url: {{process.env.BASE_URL}}/api/templates/temp-1
+  body: none
   auth: inherit
-}
-
-body:json {
-  {
-    "template_id": "temp-1"
-  }
 }
 
 settings {
