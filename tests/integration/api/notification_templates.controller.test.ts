@@ -28,7 +28,13 @@ const createTestApp = async () => {
   });
 
   // Import controllers
-  const { createTemplate, getTemplates, getTemplateById, updateTemplate, deleteTemplate } =
+  const {
+    createTemplate,
+    getTemplates,
+    getTemplateById,
+    updateTemplate,
+    deleteTemplate,
+  } =
     await import("../../../src/api/controllers/notification_templates.controller.js");
 
   app.post("/api/templates", createTemplate);
@@ -273,7 +279,9 @@ describe("Notification Templates Controller", () => {
         await import("../../../src/database/models/notification-template.models.js")
       ).default;
 
-      const duplicateError = new MongoServerError({message:"E11000 duplicate key error"});
+      const duplicateError = new MongoServerError({
+        message: "E11000 duplicate key error",
+      });
       (duplicateError as any).code = 11000;
 
       (
@@ -373,7 +381,8 @@ describe("Notification Templates Controller", () => {
       const notification_template_model = (
         await import("../../../src/database/models/notification-template.models.js")
       ).default;
-      const { apiLogger } = await import("../../../src/workers/utils/logger.js");
+      const { apiLogger } =
+        await import("../../../src/workers/utils/logger.js");
 
       (
         notification_template_model.find as ReturnType<typeof vi.fn>
@@ -414,7 +423,8 @@ describe("Notification Templates Controller", () => {
       const notification_template_model = (
         await import("../../../src/database/models/notification-template.models.js")
       ).default;
-      const { apiLogger } = await import("../../../src/workers/utils/logger.js");
+      const { apiLogger } =
+        await import("../../../src/workers/utils/logger.js");
 
       (
         notification_template_model.find as ReturnType<typeof vi.fn>
@@ -436,7 +446,8 @@ describe("Notification Templates Controller", () => {
       const notification_template_model = (
         await import("../../../src/database/models/notification-template.models.js")
       ).default;
-      const { apiLogger } = await import("../../../src/workers/utils/logger.js");
+      const { apiLogger } =
+        await import("../../../src/workers/utils/logger.js");
 
       (
         notification_template_model.find as ReturnType<typeof vi.fn>
@@ -467,9 +478,7 @@ describe("Notification Templates Controller", () => {
       expect(response.body[1]).toEqual(
         expect.objectContaining({ template_id: "sms-template-1" }),
       );
-      expect(apiLogger.info).toHaveBeenCalledWith(
-        "Found 2 templates",
-      );
+      expect(apiLogger.info).toHaveBeenCalledWith("Found 2 templates");
     });
 
     it("should return 500 for unexpected errors", async () => {
@@ -578,8 +587,9 @@ describe("Notification Templates Controller", () => {
     });
 
     it("should return 401 for missing authorization", async () => {
-      const response = await request(app)
-        .get("/api/templates/email-template-1");
+      const response = await request(app).get(
+        "/api/templates/email-template-1",
+      );
 
       expect(response.status).toBe(401);
     });
@@ -634,10 +644,14 @@ describe("Notification Templates Controller", () => {
         await import("../../../src/database/models/notification-template.models.js")
       ).default;
 
-      (notification_template_model.findOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+      (
+        notification_template_model.findOne as ReturnType<typeof vi.fn>
+      ).mockResolvedValue({
         template_id: "email-template-1",
       });
-      (notification_template_model.updateOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+      (
+        notification_template_model.updateOne as ReturnType<typeof vi.fn>
+      ).mockResolvedValue({
         acknowledged: true,
         modifiedCount: 1,
       });
@@ -675,7 +689,9 @@ describe("Notification Templates Controller", () => {
       const notification_template_model = (
         await import("../../../src/database/models/notification-template.models.js")
       ).default;
-      (notification_template_model.findOne as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      (
+        notification_template_model.findOne as ReturnType<typeof vi.fn>
+      ).mockResolvedValue(null);
 
       const response = await request(app)
         .put("/api/templates/non-existent")
@@ -709,7 +725,9 @@ describe("Notification Templates Controller", () => {
         await import("../../../src/database/models/notification-template.models.js")
       ).default;
 
-      (notification_template_model.findOneAndDelete as ReturnType<typeof vi.fn>).mockResolvedValue({
+      (
+        notification_template_model.findOneAndDelete as ReturnType<typeof vi.fn>
+      ).mockResolvedValue({
         template_id: "email-template-1",
       });
 
@@ -726,7 +744,9 @@ describe("Notification Templates Controller", () => {
         await import("../../../src/database/models/notification-template.models.js")
       ).default;
 
-      (notification_template_model.findOneAndDelete as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      (
+        notification_template_model.findOneAndDelete as ReturnType<typeof vi.fn>
+      ).mockResolvedValue(null);
 
       const response = await request(app)
         .delete("/api/templates/non-existent")
