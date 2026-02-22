@@ -21,7 +21,9 @@ export const connectMongoDB = async ()=>{
             `Action: Verify MongoDB is running. Check MONGO_URI env var. Test with mongosh.`,
             { severity: 'critical' });
 
-        throw new Error("Error connecting to mongoDB");
+        const wrappedErr = new Error("Error connecting to mongoDB");
+        (wrappedErr as unknown as Record<string, unknown>).cause = err;
+        throw wrappedErr;
     }
 }
 

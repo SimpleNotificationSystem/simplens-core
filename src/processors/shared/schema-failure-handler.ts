@@ -34,7 +34,7 @@ const formatValidationErrors = (error: ZodError): string => {
 export async function handleSchemaValidationFailure(
     notificationId: string,
     channel: string,
-    rawData: any,
+    rawData: Record<string, unknown>,
     validationError: ZodError,
     context: string = 'provider'
 ): Promise<void> {

@@ -5,7 +5,7 @@
  */
 
 import mongoose from "mongoose";
-import { type outbox, type delayed_notification_topic } from "@src/types/types.js";
+import { type outbox } from "@src/types/types.js";
 import {
     safeValidateOutbox,
     safeValidateBaseNotification,

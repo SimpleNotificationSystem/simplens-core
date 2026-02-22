@@ -10,7 +10,7 @@ import { connectRedis, disconnectRedis } from '@src/config/redis.config.js';
 import { initStatusProducer, disconnectStatusProducer } from '@src/processors/shared/status.producer.js';
 import { initDelayedProducer, disconnectDelayedProducer } from '@src/processors/shared/delayed.producer.js';
 import { loadProvidersFromEnv, PluginRegistry } from '@src/plugins/index.js';
-import { startUnifiedConsumer, stopUnifiedConsumer, stopAllConsumers } from './unified.consumer.js';
+import { startUnifiedConsumer, stopAllConsumers } from './unified.consumer.js';
 import { unifiedProcessorLogger as logger } from './unified.logger.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 
@@ -19,7 +19,7 @@ import "@src/admin-alerts/channels/discord.channel.js";
 import "@src/admin-alerts/channels/telegram.channel.js";
 
 // Track active channels for shutdown
-let activeChannels: string[] = [];
+const activeChannels: string[] = [];
 let isShuttingDown = false;
 
 /**

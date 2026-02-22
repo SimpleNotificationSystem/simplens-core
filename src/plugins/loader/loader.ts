@@ -75,7 +75,9 @@ async function installMissingPlugins(config: SimpleNSConfig): Promise<void> {
             logger.success(`Installed ${pkg}`);
         } catch (err) {
             logger.error(`Failed to install ${pkg}`, err);
-            throw new Error(`Failed to auto-install plugin: ${pkg}`);
+            const wrappedErr = new Error(`Failed to auto-install plugin: ${pkg}`);
+            (wrappedErr as unknown as Record<string, unknown>).cause = err;
+            throw wrappedErr;
         }
     }
 }
@@ -293,13 +295,15 @@ async function importAndInstantiateProvider(packageName: string): Promise<Simple
         // Fall back to core node_modules (for bundled plugins or testing)
         const module = await import(packageName) as Record<string, unknown>;
         return instantiateFromModule(module, packageName);
-    } catch (err) {
+    } catch (_err) {
         // Handle local path imports
         if (packageName.startsWith('./') || packageName.startsWith('../')) {
             const module = await import(packageName) as Record<string, unknown>;
             return instantiateFromModule(module, packageName);
         }
-        throw new Error(`Plugin not found: ${packageName}. Install with: npm run plugin:install ${packageName}`);
+        const wrappedErr = new Error(`Plugin not found: ${packageName}. Install with: npm run plugin:install ${packageName}`);
+        (wrappedErr as unknown as Record<string, unknown>).cause = _err;
+        throw wrappedErr;
     }
 }
 

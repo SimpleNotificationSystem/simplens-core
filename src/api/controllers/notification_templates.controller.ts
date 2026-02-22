@@ -143,7 +143,7 @@ export const createTemplate = async (
       message: "Template created successfully",
     });
     return;
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (
       err instanceof MongoServerError &&
       (err.code === "E11000" || err.code === 11000)
@@ -240,7 +240,7 @@ export const updateTemplate = async (
     });
     logger.success(`Template updated successfully: ${template_id}`);
     return;
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (
       err instanceof MongoServerError &&
       (err.code === "E11000" || err.code === 11000)
@@ -296,7 +296,7 @@ export const deleteTemplate = async (
     });
     logger.success(`Template deleted successfully: ${template_id}`);
     return;
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({
       message: "Internal Server Error",
     });
@@ -330,7 +330,7 @@ export const getTemplates = async (
       description: template.description ?? "",
       template_id: template.template_id,
       package: template.package,
-      created_at: (template as any).created_at,
+      created_at: (template as unknown as Record<string, unknown>).created_at,
     }));
     if (templates.length > 0) {
       logger.info(
@@ -343,7 +343,7 @@ export const getTemplates = async (
     }
     res.status(200).json(response);
     return;
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({
       message: `Internal Server Error`,
     });
@@ -390,7 +390,7 @@ export const getTemplateById = async (
       });
       return;
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({
       message: `Internal Server Error`,
     });

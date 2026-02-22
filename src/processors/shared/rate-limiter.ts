@@ -6,7 +6,6 @@
  */
 
 import { getRedisClient } from '@src/config/redis.config.js';
-import { env } from '@src/config/env.config.js';
 import { getRateLimitConfig as getPluginRateLimitConfig } from '@src/plugins/index.js';
 import { rateLimiterLogger as logger } from '@src/workers/utils/logger.js';
 

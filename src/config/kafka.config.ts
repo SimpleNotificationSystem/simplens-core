@@ -1,4 +1,4 @@
-import { Kafka, Admin, ITopicConfig } from "kafkajs";
+import { Kafka, ITopicConfig } from "kafkajs";
 import { env } from "./env.config.js";
 import { producerLogger as logger } from "@src/workers/utils/logger.js";
 import { getConfiguredChannels } from '@src/plugins/index.js';

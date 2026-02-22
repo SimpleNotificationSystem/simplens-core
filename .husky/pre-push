@@ -1,11 +1,16 @@
 #!/bin/sh
-echo "🧪 Running all tests before push..."
+echo "🔍 Running lint checks before push..."
 
-npm run test
-
+npm run lint:core
 if [ $? -ne 0 ]; then
-  echo "❌ Tests failed. Push aborted."
+  echo "❌ Core lint check failed. Push aborted."
   exit 1
 fi
 
-echo "✅ All tests passed! Proceeding with push..."
+npm run lint:dashboard
+if [ $? -ne 0 ]; then
+  echo "❌ Dashboard lint check failed. Push aborted."
+  exit 1
+fi
+
+echo "✅ All lint checks passed! Proceeding with push..."

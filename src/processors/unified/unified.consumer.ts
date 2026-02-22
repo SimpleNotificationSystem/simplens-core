@@ -121,7 +121,7 @@ const processMessage = async (
         // Debug logging
         logger.debug(`Channel: ${channel}, Raw provider: ${rawData.provider}, Resolved providerId: ${providerId}`);
 
-        let provider = providerId
+        const provider = providerId
             ? PluginRegistry.get(providerId)
             : PluginRegistry.getDefaultProvider(channel);
 
