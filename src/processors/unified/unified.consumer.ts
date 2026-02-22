@@ -374,7 +374,13 @@ export const startUnifiedConsumer = async (channel: string): Promise<void> => {
 
     logger.info(`[${channel}] Creating consumer for topic: ${topic}, group: ${groupId}`);
 
-    const consumer = kafka.consumer({ groupId });
+    const consumer = kafka.consumer({
+        groupId,
+        sessionTimeout: 30000,
+        rebalanceTimeout: 60000,
+        heartbeatInterval: 3000,
+    });
+    
     await consumer.connect();
     await consumer.subscribe({ topic, fromBeginning: false });
 

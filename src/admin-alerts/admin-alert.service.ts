@@ -61,12 +61,15 @@ export class AdminAlertService {
                 enabled: true,
                 [filterField]: true,
             });
-
+            
             // No channels configured - silent no-op (backwards compatible)
             if (channels.length === 0) {
                 return;
             }
-
+            
+            // Update throttle timestamp
+            throttleMap.set(alertType, Date.now());
+            
             // Get encryption key (auto-creates if needed)
             const encryptionKey = await getOrCreateEncryptionKey();
 
@@ -101,8 +104,6 @@ export class AdminAlertService {
                 }
             }
 
-            // Update throttle timestamp
-            throttleMap.set(alertType, Date.now());
         } catch (err) {
             // Never throw - admin alerts are non-critical to core functionality
             logger.error('AdminAlertService.sendAlert failed:', err);
