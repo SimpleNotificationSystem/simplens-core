@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
-import dynamic from "next/dynamic";
 import { useTheme } from "next-themes";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -40,15 +39,7 @@ import type {
 } from "@/lib/types";
 import { Switch } from "@/components/ui/switch";
 
-/* ── Monaco: dynamic import (SSR-off) ── */
-const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-[350px] items-center justify-center rounded-md border bg-muted/30">
-      <span className="text-sm text-muted-foreground">Loading editor…</span>
-    </div>
-  ),
-});
+import { StableMonacoEditor } from "@/components/ui/monaco-wrapper";
 
 const fetcher = (url: string) =>
   fetch(withBasePath(url)).then((res) => {
@@ -427,7 +418,7 @@ export default function TemplateEditorPage() {
 
                   {isLargeField && isMonacoActive ? (
                     <div className="overflow-hidden rounded-md border">
-                      <MonacoEditor
+                      <StableMonacoEditor
                         height="350px"
                         language="html"
                         theme={
