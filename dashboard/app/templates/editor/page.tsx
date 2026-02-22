@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
@@ -47,7 +47,7 @@ const fetcher = (url: string) =>
     return res.json();
   });
 
-export default function TemplateEditorPage() {
+function TemplateEditorContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { resolvedTheme } = useTheme();
@@ -805,5 +805,24 @@ export default function TemplateEditorPage() {
         </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function TemplateEditorPage() {
+  return (
+    <Suspense
+      fallback={
+        <DashboardLayout
+          title="Template Editor"
+          description="Loading template..."
+        >
+          <div className="flex h-[60vh] items-center justify-center">
+            <div className="text-muted-foreground">Loading...</div>
+          </div>
+        </DashboardLayout>
+      }
+    >
+      <TemplateEditorContent />
+    </Suspense>
   );
 }

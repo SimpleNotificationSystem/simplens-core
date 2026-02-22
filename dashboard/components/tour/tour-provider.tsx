@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { driver, type Driver } from "driver.js";
 import "driver.js/dist/driver.css";
 import { tourSteps, TOUR_STORAGE_KEY } from "./tour-config";
+import { withBasePath } from "@/lib/utils";
 
 interface TourContextValue {
     restartTour: () => void;
@@ -108,7 +109,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
             // Navigate to dashboard first, then start tour
             window.localStorage.removeItem(TOUR_STORAGE_KEY);
             hasAutoStarted.current = false;
-            router.push("/dashboard");
+            router.push(withBasePath("/dashboard"));
         } else {
             startTour(true);
         }
