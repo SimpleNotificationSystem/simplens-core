@@ -14,8 +14,8 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { generateConfig } from './generator.js';
 
-const OFFICIAL_PLUGINS_URL = 'https://simplens.vercel.app/plugins/official';
-const COMMUNITY_PLUGINS_URL = 'https://simplens.vercel.app/plugins/community';
+const OFFICIAL_PLUGINS_URL = 'https://www.simplens.in/plugins/official';
+const COMMUNITY_PLUGINS_URL = 'https://www.simplens.in/plugins/community';
 
 interface PluginInfo {
     name: string;
