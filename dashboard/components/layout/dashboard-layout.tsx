@@ -23,6 +23,7 @@ import {
     SidebarContent,
     SidebarGroup,
     SidebarGroupContent,
+    SidebarGroupLabel,
     SidebarHeader,
     SidebarFooter,
     SidebarMenu,
@@ -48,58 +49,40 @@ interface NavItem {
     badgeKey?: "failed" | "alerts";
 }
 
-const navItems: NavItem[] = [
+interface NavCategory {
+    label: string;
+    items: NavItem[];
+}
+
+const navCategories: NavCategory[] = [
     {
-        title: "Dashboard",
-        href: "/dashboard",
-        icon: LayoutDashboard,
+        label: "Notifications",
+        items: [
+            { title: "Send", href: "/send", icon: Send },
+            { title: "Events", href: "/events", icon: Bell },
+            { title: "Failed", href: "/failed", icon: AlertTriangle, badgeKey: "failed" },
+            { title: "Alerts", href: "/alerts", icon: ShieldAlert, badgeKey: "alerts" },
+        ],
     },
     {
-        title: "Send",
-        href: "/send",
-        icon: Send,
+        label: "Insights",
+        items: [
+            { title: "Analytics", href: "/analytics", icon: BarChart3 },
+        ],
     },
     {
-        title: "Events",
-        href: "/events",
-        icon: Bell,
+        label: "Tools",
+        items: [
+            { title: "Plugins", href: "/plugins", icon: Puzzle },
+            { title: "Templates", href: "/templates", icon: FileText },
+            { title: "Payload Studio", href: "/payload-studio", icon: Code },
+        ],
     },
     {
-        title: "Failed",
-        href: "/failed",
-        icon: AlertTriangle,
-        badgeKey: "failed",
-    },
-    {
-        title: "Alerts",
-        href: "/alerts",
-        icon: ShieldAlert,
-        badgeKey: "alerts",
-    },
-    {
-        title: "Analytics",
-        href: "/analytics",
-        icon: BarChart3,
-    },
-    {
-        title: "Plugins",
-        href: "/plugins",
-        icon: Puzzle,
-    },
-    {
-        title: "Templates",
-        href: "/templates",
-        icon: FileText,
-    },
-    {
-        title: "Payload Studio",
-        href: "/payload-studio",
-        icon: Code,
-    },
-    {
-        title: "Admin Alerts",
-        href: "/admin-alerts",
-        icon: BellRing,
+        label: "System",
+        items: [
+            { title: "Admin Alerts", href: "/admin-alerts", icon: BellRing },
+        ],
     },
 ];
 
@@ -147,37 +130,57 @@ function AppSidebar() {
                 </Link>
             </SidebarHeader>
             <SidebarContent>
-                <SidebarGroup>
+                {/* Standalone Dashboard item */}
+                <SidebarGroup className="pb-0">
                     <SidebarGroupContent>
                         <SidebarMenu>
-                            {navItems.map((item) => {
-                                const count = item.badgeKey ? badgeCounts[item.badgeKey] : 0;
-                                const itemHref = withBasePath(item.href);
-                                return (
-                                    <SidebarMenuItem key={item.href}>
-                                        <SidebarMenuButton asChild isActive={pathname === itemHref || (item.href !== "/dashboard" && pathname.startsWith(itemHref))}>
-                                            <Link href={itemHref}>
-                                                <item.icon className="h-4 w-4" />
-                                                <span>{item.title}</span>
-                                            </Link>
-                                        </SidebarMenuButton>
-                                        {item.badgeKey && count > 0 && (
-                                            <SidebarMenuBadge
-                                                className={
-                                                    item.badgeKey === "failed"
-                                                        ? "bg-red-500 text-white"
-                                                        : "bg-yellow-500 text-black"
-                                                }
-                                            >
-                                                {count > 99 ? "99+" : count}
-                                            </SidebarMenuBadge>
-                                        )}
-                                    </SidebarMenuItem>
-                                );
-                            })}
+                            <SidebarMenuItem>
+                                <SidebarMenuButton asChild isActive={pathname === withBasePath("/dashboard")}>
+                                    <Link href={withBasePath("/dashboard")}>
+                                        <LayoutDashboard className="h-4 w-4" />
+                                        <span>Dashboard</span>
+                                    </Link>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
                         </SidebarMenu>
                     </SidebarGroupContent>
                 </SidebarGroup>
+
+                {/* Categories */}
+                {navCategories.map((category) => (
+                    <SidebarGroup key={category.label} className="py-0">
+                        <SidebarGroupLabel>{category.label}</SidebarGroupLabel>
+                        <SidebarGroupContent>
+                            <SidebarMenu>
+                                {category.items.map((item) => {
+                                    const count = item.badgeKey ? badgeCounts[item.badgeKey] : 0;
+                                    const itemHref = withBasePath(item.href);
+                                    return (
+                                        <SidebarMenuItem key={item.href}>
+                                            <SidebarMenuButton asChild isActive={pathname === itemHref || (item.href !== "/dashboard" && pathname.startsWith(itemHref))}>
+                                                <Link href={itemHref}>
+                                                    <item.icon className="h-4 w-4" />
+                                                    <span>{item.title}</span>
+                                                </Link>
+                                            </SidebarMenuButton>
+                                            {item.badgeKey && count > 0 && (
+                                                <SidebarMenuBadge
+                                                    className={
+                                                        item.badgeKey === "failed"
+                                                            ? "bg-red-500 text-white"
+                                                            : "bg-yellow-500 text-black"
+                                                    }
+                                                >
+                                                    {count > 99 ? "99+" : count}
+                                                </SidebarMenuBadge>
+                                            )}
+                                        </SidebarMenuItem>
+                                    );
+                                })}
+                            </SidebarMenu>
+                        </SidebarGroupContent>
+                    </SidebarGroup>
+                ))}
             </SidebarContent>
             <SidebarFooter>
                 <SidebarMenu>
