@@ -34,7 +34,8 @@ const formatValidationErrors = (error: ZodError): string => {
 export async function handleSchemaValidationFailure(
     notificationId: string,
     channel: string,
-    rawData: Record<string, unknown>,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rawData: any,
     validationError: ZodError,
     context: string = 'provider'
 ): Promise<void> {
