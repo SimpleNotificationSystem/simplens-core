@@ -13,8 +13,8 @@
   <a href="#architecture">Architecture</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#admin-dashboard">Dashboard</a> •
-  <a href="https://simplens.vercel.app">Website</a> •
-  <a href="https://simplens.vercel.app/docs/core">Documentation</a>
+  <a href="https://simplens.in">Website</a> •
+  <a href="https://simplens.in/docs/core">Documentation</a>
 </p>
 
 ---
@@ -120,79 +120,100 @@ class MyProvider implements SimpleNSProvider {
 
 ### Prerequisites
 
-- Docker & Docker Compose
+- **Docker** and **Docker Compose**
 
-### 1. Create Project Directory
+### Installation
 
+Get SimpleNS running in under a minute with a single command:
+
+**Linux:**
 ```bash
-mkdir my-simplens && cd my-simplens
+curl -fsSL https://simplens.in/api/install/linux | bash
 ```
 
-### 2. Configure the .env file
-
-- Copy the `.env.example` file into `.env` in your `my-simplens` dir and configure the required fields 
-
-
-### 3. Generate Plugin Configuration
-
-Use the config generator CLI to create `simplens.config.yaml`:
-
-```bash
-# Generate config for the mock plugin (for testing)
-npx @simplens/config-gen generate @simplens/mock
-
-# Or generate config for email
-npx @simplens/config-gen generate @simplens/nodemailer-gmail
-
+**Windows (PowerShell as Administrator):**
+```powershell
+irm https://simplens.in/api/install/windows | iex
 ```
 
-The generated config includes comments explaining each field. Set the corresponding environment variables in `.env`.
-
-### 4. Copy Docker-Compose files
- - Copy `docker-compose.yaml` (for appliciation services) and `docker-compose.infra.yaml` file (for infrastrucutre services if you dont want to use cloud providers for infrastrucutre)
-
-
-> **Note:** You'll also need MongoDB, Redis, and Kafka. See the [full documentation](https://simplens.vercel.app/docs/core/self-hosting) for infrastructure setup.
-
-### 5. Start Services
-
+**npm:**
 ```bash
-docker-compose -f docker-compose.infra.yaml up -d #If you don't want to use cloud providers for infrastructure
-docker-compose up -d
+npx @simplens/onboard
 ```
 
-Plugins listed in `simplens.config.yaml` are automatically installed at container startup.
+The installer will automatically pull Docker images, configure your environment, set up plugin configuration, and start all services.
 
-### 6. Send a Notification
+### Verify Installation
 
-The request schema can be easily obtained from the `Payload Studio` in the admin dashboard.
+```bash
+curl http://localhost:3000/health
+```
+
+Expected response:
+```json
+{
+  "status": "ok",
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+### Send Your First Notification
+
+**Using the Dashboard (recommended):**
+
+1. Open [http://localhost:3002](http://localhost:3002)
+2. Login with your configured credentials (default: `admin` / `<your-password-from-env>`)
+3. Navigate to **Send**, select a channel/provider, fill in the fields, and click **Send Notification**
+
+**Using cURL:**
 
 ```bash
 curl -X POST http://localhost:3000/api/notification \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_NS_API_KEY" \
+  -H "Authorization: Bearer <YOUR-NS-API-KEY>" \
   -d '{
-    "request_id": "<UUIDV4>",
-    "client_id": "<UUIDV4>",
-    "channel": ["email"],
+    "request_id": "550e8400-e29b-41d4-a716-446655440000",
+    "client_id": "55283667-1f58-467d-86a1-47f7f0e059f2",
+    "channel": ["mock"],
     "recipient": {
-      "user_id": "<string>",
-      "email": "<valid email>"
+      "user_id": "user123"
     },
     "content": {
-      "email": {
-        "subject": "Hello from SimpleNS!",
-        "message": "<h1>Welcome!</h1><p>Your notification system is working.</p>"
+      "mock": {
+        "message": "Hello from SimpleNS!"
       }
     }
   }'
 ```
 
-### 7. Check the Dashboard
+> **Tip:** Each provider's recipient and content schemas can vary. Use the **Payload Studio** in the admin dashboard to get the exact schema.
 
-Open [http://localhost:3002](http://localhost:3002) and login with your configured credentials:
-- **Username:** `admin` (default, configurable via `ADMIN_USERNAME`)
-- **Password:** `admin` (default, configurable via `ADMIN_PASSWORD`)
+### Check Notification Status
+
+1. Go to **Events** page in the dashboard
+2. Search for your notification by ID
+3. Check status: `pending` → `processing` → `delivered`
+
+### Accessing Services
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| API Server | [http://localhost:3000](http://localhost:3000) | Notification API |
+| Admin Dashboard | [http://localhost:3002](http://localhost:3002) | Monitoring & management |
+| Grafana | [http://localhost:3001](http://localhost:3001) | Log visualization |
+| Kafka UI | [http://localhost:8080](http://localhost:8080) | Kafka topic monitoring |
+
+### Add More Plugins
+
+```bash
+# Add Gmail email provider
+npx @simplens/config-gen generate @simplens/nodemailer-gmail -c simplens.config.yaml
+
+# List available plugins
+npx @simplens/config-gen list --official
+```
+
+> For production deployments, see the [Self-Hosting Guide](https://simplens.in/docs/core/self-hosting) which covers distributed deployments, cloud infrastructure integration, and security hardening.
 
 ---
 
