@@ -22,7 +22,7 @@ function generateUUID(): string {
         return crypto.randomUUID();
     }
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
     });
 }
@@ -31,6 +31,7 @@ interface BatchRecipient {
     id: string; // Internal UI ID
     request_id: string;
     user_id: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     [key: string]: any; // Dynamic fields + variables
 }
 
@@ -63,6 +64,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
     const [inputMode, setInputMode] = useState<"content" | "template">("content");
 
     // Dynamic Data
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [contentData, setContentData] = useState<Record<string, Record<string, any>>>({});
     const [recipients, setRecipients] = useState<BatchRecipient[]>([createNewRecipient()]);
     const [templatesByChannel, setTemplatesByChannel] = useState<Record<string, NotificationTemplateListItem[]>>({});
@@ -210,6 +212,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
         }
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateRecipient = (id: string, field: string, value: any) => {
         setRecipients(recipients.map(r => r.id === id ? { ...r, [field]: value } : r));
 
@@ -223,6 +226,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
         }
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateContentData = (channel: string, field: string, value: any) => {
         setContentData(prev => ({
             ...prev,
@@ -305,6 +309,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
         return () => {
             cancelled = true;
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [plugins, selectedChannels, selectedProviders]);
 
     useEffect(() => {
@@ -374,12 +379,13 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                 let parsedVariables = {};
                 try {
                     parsedVariables = JSON.parse(r.variables || "{}");
-                } catch (e) {
+                } catch {
                     // Ignore invalid JSON, treat as empty
                 }
 
                 // Construct recipient object with ONLY relevant fields for selected channels
-                const recipientObj: any = {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const recipientObj: Record<string, any> = {
                     request_id: r.request_id,
                     user_id: r.user_id,
                     variables: parsedVariables
@@ -400,7 +406,8 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                 return recipientObj;
             });
 
-            const payload: any = {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const payload: Record<string, any> = {
                 type: "batch",
                 client_id: clientId,
                 channel: selectedChannels,
@@ -500,7 +507,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                         const isSelected = selectedChannels.includes(channel);
                         const channelConfig = plugins?.channels[channel];
                         const providers = channelConfig?.providers || [];
-                        const isMulti = selectedChannels.length > 1;
+
 
                         return (
                             <div key={channel} className={`flex flex-col space-y-3 p-3 border rounded-lg transition-all ${isSelected ? 'bg-secondary/10 border-primary/50' : 'opacity-80'}`}>

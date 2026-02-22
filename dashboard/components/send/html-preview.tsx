@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+// Tabs imports removed - not currently used
 import { Button } from "@/components/ui/button";
 import { Eye, Code } from "lucide-react";
 

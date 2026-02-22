@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
             ];
             // Also search by notification ID if it looks like a valid ObjectId
             if (/^[a-f0-9]{24}$/i.test(search)) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 filter.$or.push({ _id: search } as any);
             }
         }

@@ -65,10 +65,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                 console.log(`[Retry] Notification ${id}: Retrying with original provider=${notification.provider}`);
 
                 // Reset the notification status to pending
-                const updatedNotification = await NotificationModel.findByIdAndUpdate(
+                await NotificationModel.findByIdAndUpdate(
                     id,
                     updateFields,
-                    { session, new: true } // Return the updated document
+                    { session, new: true }
                 );
 
                 // Determine the topic based on channel dynamically

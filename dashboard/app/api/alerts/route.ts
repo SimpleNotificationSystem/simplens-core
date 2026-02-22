@@ -25,9 +25,6 @@ export async function GET(request: NextRequest) {
             baseFilter.alert_type = type;
         }
 
-        // Get total count of unresolved alerts (for badges, stats - always unfiltered)
-        const totalCount = await AlertModel.countDocuments({ resolved: false });
-
         // Get filtered count (for pagination)
         const count = await AlertModel.countDocuments(baseFilter);
 

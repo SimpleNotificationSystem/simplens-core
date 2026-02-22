@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import useSWR from "swr";
 import { BellRing, Plus, Trash2 } from "lucide-react";
-import { ComponentType, useState } from "react";
+import { useState } from "react";
 import { AddChannelDialog } from "@/components/admin-alerts/add-channel-dialog";
 import type { AdminChannel } from "@/lib/types";
 import { CHANNEL_ICONS } from "@/components/admin-alerts/add-channel-dialog";

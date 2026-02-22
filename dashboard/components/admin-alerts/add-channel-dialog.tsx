@@ -116,6 +116,7 @@ export function AddChannelDialog({ open, onOpenChange, onSuccess }: AddChannelDi
         if (open && providers.length === 0) {
             fetchProviders();
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, providers.length]);
 
     const fetchProviders = async () => {

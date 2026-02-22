@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useSWR from "swr";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { Copy, Check, Code, Zap, AlertCircle } from "lucide-react";
 import { withBasePath } from "@/lib/utils";
 
@@ -81,7 +81,7 @@ export default function ApiDesignerPage() {
     const [copied, setCopied] = useState(false);
 
     // Initialize channel selections when data loads
-    useMemo(() => {
+    useEffect(() => {
         if (data?.channels && channelSelections.length === 0) {
             const selections = Object.entries(data.channels).map(([channel, meta]) => ({
                 channel,
@@ -90,7 +90,8 @@ export default function ApiDesignerPage() {
             }));
             setChannelSelections(selections);
         }
-    }, [data, channelSelections.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [data]);
 
     // Get enabled channels
     const enabledChannels = useMemo(() => {

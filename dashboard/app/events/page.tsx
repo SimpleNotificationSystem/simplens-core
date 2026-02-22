@@ -32,9 +32,9 @@ import {
     PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Search, Eye, RefreshCw, ArrowUpDown } from "lucide-react";
-import { PageToolbar, PageToolbarSection, PageToolbarSpacer } from "@/components/ui/page-toolbar";
+import { PageToolbar, PageToolbarSection } from "@/components/ui/page-toolbar";
 import { format } from "date-fns";
-import type { PaginatedResponse, Notification, NOTIFICATION_STATUS, PluginMetadata } from "@/lib/types";
+import type { PaginatedResponse, Notification, PluginMetadata } from "@/lib/types";
 import Link from "next/link";
 import { withBasePath } from "@/lib/utils";
 

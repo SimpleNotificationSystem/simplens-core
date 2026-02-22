@@ -34,6 +34,7 @@ export function DateTimePicker({ value, onChange, placeholder = "Pick a date & t
             newDate.setHours(h, m, s, 0);
             onChange(newDate);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [date, hours, minutes, seconds]);
 
     const handleDateSelect = (selectedDate: Date | undefined) => {

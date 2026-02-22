@@ -22,7 +22,7 @@ function generateUUID(): string {
         return crypto.randomUUID();
     }
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
     });
 }
@@ -44,11 +44,13 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
 
     // Form Data
     const [requestId, setRequestId] = useState(generateUUID());
-    const [clientId, setClientId] = useState(generateUUID());
+    const [clientId] = useState(generateUUID());
     const [scheduledDate, setScheduledDate] = useState<Date | undefined>();
 
     // Dynamic Form Data
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [recipientData, setRecipientData] = useState<Record<string, any>>({});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [contentData, setContentData] = useState<Record<string, Record<string, any>>>({}); // channel -> { field: value }
     const [templatesByChannel, setTemplatesByChannel] = useState<Record<string, NotificationTemplateListItem[]>>({});
     const [templatesLoadingByChannel, setTemplatesLoadingByChannel] = useState<Record<string, boolean>>({});
@@ -166,10 +168,12 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
         setRequestId(generateUUID());
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateRecipientData = (field: string, value: any) => {
         setRecipientData(prev => ({ ...prev, [field]: value }));
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateContentData = (channel: string, field: string, value: any) => {
         setContentData(prev => ({
             ...prev,
@@ -250,6 +254,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
         return () => {
             cancelled = true;
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [plugins, selectedChannels, selectedProviders]);
 
     useEffect(() => {
@@ -325,7 +330,8 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
 
         try {
             // Construct payload dynamically
-            const payload: any = {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const payload: Record<string, any> = {
                 type: "single",
                 request_id: requestId,
                 client_id: clientId,
@@ -454,7 +460,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                             const isSelected = selectedChannels.includes(channel);
                             const channelConfig = plugins?.channels[channel];
                             const providers = channelConfig?.providers || [];
-                            const isMulti = selectedChannels.length > 1;
+
 
                             return (
                                 <div key={channel} className={`flex flex-col space-y-3 p-3 border rounded-lg transition-all ${isSelected ? 'bg-secondary/10 border-primary/50' : 'opacity-80'}`}>
@@ -556,13 +562,13 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                                         channel
                                     };
                                 });
-                            }).reduce((acc: any[], curr) => {
+                            }).reduce((acc: (typeof curr)[], curr) => {
                                 // Dedup by field name
                                 if (!acc.find(f => f.name === curr.name)) {
                                     acc.push(curr);
                                 }
                                 return acc;
-                            }, []).map((field: any) => (
+                            }, []).map((field) => (
                                 <DynamicField
                                     key={field.name}
                                     field={field}

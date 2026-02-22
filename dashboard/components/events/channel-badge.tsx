@@ -2,7 +2,7 @@
 
 import { type Channel } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { Mail, MessageCircle, Bell, Smartphone, Zap } from "lucide-react";
+import { Mail, MessageCircle, Smartphone, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ChannelBadgeProps {

@@ -77,7 +77,8 @@ export async function POST(request: NextRequest) {
         });
 
         // Return channel without encrypted config
-        const { config: _, ...channelData } = channel.toObject();
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { config: _config, ...channelData } = channel.toObject();
         return NextResponse.json(
             { success: true, channel: channelData },
             { status: 201 }

@@ -4,10 +4,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { FieldDefinition } from "@/lib/types"; // We'll need to define this interface in dashboard types
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type FieldValue = any;
+
 interface DynamicFieldProps {
     field: FieldDefinition;
-    value: any;
-    onChange: (value: any) => void;
+    value: FieldValue;
+    onChange: (value: FieldValue) => void;
     error?: string;
 }
 

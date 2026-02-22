@@ -6,10 +6,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import useSWR from "swr";
-import { Puzzle, RefreshCw, ChevronDown, Mail, MessageCircle, TestTube2, Zap, User, FileText } from "lucide-react";
+import { Puzzle, RefreshCw, Mail, MessageCircle, TestTube2, Zap, User, FileText } from "lucide-react";
 import { useMemo, useState } from "react";
 import { withBasePath } from "@/lib/utils";
 

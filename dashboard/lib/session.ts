@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { createHmac, randomBytes } from "crypto";
+import { createHmac } from "crypto";
 
 const SESSION_COOKIE_NAME = "simplens_session";
 const SESSION_EXPIRY_DAYS = 7;

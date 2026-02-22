@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import {
     Bell, CheckCircle, Clock, AlertTriangle, Mail, MessageCircle,
-    ShieldAlert, LucideIcon, Activity, Smartphone, Zap, ChevronLeft, ChevronRight
+    ShieldAlert, LucideIcon, Smartphone, Zap, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { cn, withBasePath } from "@/lib/utils";
 import type { DashboardStats } from "@/lib/types";
@@ -286,7 +286,7 @@ export function StatsGrid() {
             {/* Main Health Grid - 2x3 Layout */}
             <section>
                 <div className="grid gap-4 grid-cols-1 md:grid-cols-3 md:grid-rows-2">
-                    {fixedCards.map((card, index) => (
+                    {fixedCards.map((card) => (
                         <StatsCard key={card.title} card={card} />
                     ))}
                 </div>

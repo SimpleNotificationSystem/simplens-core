@@ -22,19 +22,17 @@ const extractChannelContent = (content: Record<string, unknown>, channel: string
     return channelContent || content;
 };
 
-// Helper to get message from content (handles any channel)
-const getMessageFromContent = (content: Record<string, unknown>, channel: string): string | undefined => {
-    // Try channel-specific key first (e.g., content.email.message)
-    const channelContent = content[channel] as Record<string, unknown> | undefined;
-    if (channelContent?.message) {
-        return String(channelContent.message);
-    }
-    // Fallback to top-level message
-    if (content.message) {
-        return String(content.message);
-    }
-    return undefined;
-};
+// Helper to get message from content (handles any channel) - currently unused
+// const getMessageFromContent = (content: Record<string, unknown>, channel: string): string | undefined => {
+//     const channelContent = content[channel] as Record<string, unknown> | undefined;
+//     if (channelContent?.message) {
+//         return String(channelContent.message);
+//     }
+//     if (content.message) {
+//         return String(content.message);
+//     }
+//     return undefined;
+// };
 
 export async function POST(
     request: NextRequest,
