@@ -677,12 +677,12 @@ export default function TemplateEditorPage() {
         {/* Top bar */}
         <div className="flex items-center justify-between">
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
             onClick={() => router.push(withBasePath("/templates"))}
           >
             <ArrowLeft className="mr-1.5 h-4 w-4" />
-            Back to Templates
+            Back
           </Button>
           <div className="flex gap-2">
             <Button

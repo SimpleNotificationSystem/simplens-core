@@ -76,6 +76,7 @@ export default function ApiDesignerPage() {
     const [includeProvider, setIncludeProvider] = useState(true);
     const [includeVariables, setIncludeVariables] = useState(false);
     const [includeScheduledAt, setIncludeScheduledAt] = useState(false);
+    const [includeTemplateId, setIncludeTemplateId] = useState(false);
 
     // Copy state
     const [copied, setCopied] = useState(false);
@@ -171,6 +172,9 @@ export default function ApiDesignerPage() {
             if (includeProvider) {
                 result.provider = "string[] (optional)";
             }
+            if (includeTemplateId) {
+                result.template_id = "string[] (optional)";
+            }
             if (includeVariables) {
                 result.variables = "Record<string, string> (optional)";
             }
@@ -204,13 +208,16 @@ export default function ApiDesignerPage() {
             if (includeProvider) {
                 result.provider = "string | string[] (optional)";
             }
+            if (includeTemplateId) {
+                result.template_id = "string[] (optional)";
+            }
             if (includeScheduledAt) {
                 result.scheduled_at = "ISO 8601 date string (optional)";
             }
 
             return result;
         }
-    }, [mode, enabledChannels, includeClientName, includeProvider, includeVariables, includeScheduledAt, data, channelSelections]);
+    }, [mode, enabledChannels, includeClientName, includeProvider, includeTemplateId, includeVariables, includeScheduledAt, data, channelSelections]);
 
     const schemaJson = JSON.stringify(schema, null, 2);
 
@@ -335,13 +342,37 @@ export default function ApiDesignerPage() {
                                     <Switch checked={includeProvider} onCheckedChange={setIncludeProvider} />
                                 </div>
 
+                                {/* Template ID */}
+                                <div className="flex items-center justify-between pt-2 border-t">
+                                    <div className="space-y-0.5">
+                                        <Label>template_id</Label>
+                                        <p className="text-xs text-muted-foreground">Template IDs to use for content</p>
+                                    </div>
+                                    <Switch
+                                        checked={includeTemplateId}
+                                        onCheckedChange={(checked) => {
+                                            setIncludeTemplateId(checked);
+                                            if (checked) setIncludeVariables(true);
+                                        }}
+                                    />
+                                </div>
+
                                 {/* Variables */}
                                 <div className="flex items-center justify-between pt-2 border-t">
                                     <div className="space-y-0.5">
                                         <Label>variables</Label>
-                                        <p className="text-xs text-muted-foreground">Key-value pairs for templating</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            Key-value pairs for templating
+                                            {includeTemplateId && (
+                                                <span className="ml-1 text-primary">(required by template_id)</span>
+                                            )}
+                                        </p>
                                     </div>
-                                    <Switch checked={includeVariables} onCheckedChange={setIncludeVariables} />
+                                    <Switch
+                                        checked={includeVariables}
+                                        onCheckedChange={setIncludeVariables}
+                                        disabled={includeTemplateId}
+                                    />
                                 </div>
 
                                 {/* Scheduled At */}
