@@ -328,4 +328,4 @@ ISC
 
 For issues and questions:
 - GitHub Issues: [SimpleNS Core Issues](https://github.com/SimpleNotificationSystem/simplens-core/issues)
-- Documentation: [SimpleNS Docs](https://simplens.vercel.app)
+- Documentation: [SimpleNS Docs](https://simplens.in)
