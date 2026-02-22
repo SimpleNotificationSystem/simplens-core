@@ -12,10 +12,14 @@ export default function DashboardPage() {
         >
             <div className="space-y-6">
                 {/* Stats Grid: 7 cards in 2 rows, Alerts spans 2 rows */}
-                <StatsGrid />
+                <div data-tour="stats-grid">
+                    <StatsGrid />
+                </div>
 
                 {/* Recent Activity (full width) */}
-                <RecentActivity />
+                <div data-tour="recent-activity">
+                    <RecentActivity />
+                </div>
             </div>
         </DashboardLayout>
     );

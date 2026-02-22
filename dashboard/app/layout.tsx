@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/components/auth-provider";
 import { GlassmorphismProvider } from "@/components/glassmorphism-provider";
 import { SidebarPinProvider } from "@/components/sidebar-pin-provider";
+import { TourProvider } from "@/components/tour/tour-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -46,7 +47,9 @@ export default function RootLayout({
           >
             <SidebarPinProvider>
               <GlassmorphismProvider>
-                {children}
+                <TourProvider>
+                  {children}
+                </TourProvider>
                 <Toaster richColors position="top-right" />
               </GlassmorphismProvider>
             </SidebarPinProvider>

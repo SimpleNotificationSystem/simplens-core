@@ -118,7 +118,7 @@ function AppSidebar() {
     return (
         <Sidebar>
             <SidebarHeader>
-                <Link href={withBasePath("/dashboard")} className="flex items-center gap-3 px-2 py-2">
+                <Link href={withBasePath("/dashboard")} className="flex items-center gap-3 px-2 py-2" data-tour="sidebar-header">
                     <Image
                         src="/SimpleNSLogo.png"
                         alt="SimpleNS Logo"
@@ -134,7 +134,7 @@ function AppSidebar() {
                 <SidebarGroup className="pb-0">
                     <SidebarGroupContent>
                         <SidebarMenu>
-                            <SidebarMenuItem>
+                            <SidebarMenuItem data-tour="nav-dashboard">
                                 <SidebarMenuButton asChild isActive={pathname === withBasePath("/dashboard")}>
                                     <Link href={withBasePath("/dashboard")}>
                                         <LayoutDashboard className="h-4 w-4" />
@@ -156,7 +156,7 @@ function AppSidebar() {
                                     const count = item.badgeKey ? badgeCounts[item.badgeKey] : 0;
                                     const itemHref = withBasePath(item.href);
                                     return (
-                                        <SidebarMenuItem key={item.href}>
+                                        <SidebarMenuItem key={item.href} data-tour={`nav-${item.href.slice(1)}`}>
                                             <SidebarMenuButton asChild isActive={pathname === itemHref || (item.href !== "/dashboard" && pathname.startsWith(itemHref))}>
                                                 <Link href={itemHref}>
                                                     <item.icon className="h-4 w-4" />
@@ -187,7 +187,7 @@ function AppSidebar() {
                     {settingsItems.map((item) => {
                         const itemHref = withBasePath(item.href);
                         return (
-                            <SidebarMenuItem key={item.href}>
+                            <SidebarMenuItem key={item.href} data-tour={`nav-${item.href.slice(1)}`}>
                                 <SidebarMenuButton asChild isActive={pathname === itemHref}>
                                     <Link href={itemHref}>
                                         <item.icon className="h-4 w-4" />
@@ -197,7 +197,7 @@ function AppSidebar() {
                             </SidebarMenuItem>
                         );
                     })}
-                    <SidebarMenuItem>
+                    <SidebarMenuItem data-tour="theme-toggle">
                         <SidebarThemeToggle />
                     </SidebarMenuItem>
                     <SidebarMenuItem>

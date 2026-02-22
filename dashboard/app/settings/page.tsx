@@ -5,10 +5,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import { useGlassmorphism } from "@/components/glassmorphism-provider";
+import { useTour } from "@/components/tour/tour-provider";
+import { RotateCcw } from "lucide-react";
 
 export default function SettingsPage() {
     const { enabled, setEnabled } = useGlassmorphism();
+    const { restartTour } = useTour();
 
     return (
         <DashboardLayout
@@ -37,8 +41,27 @@ export default function SettingsPage() {
                                 />
                             </div>
                         </div>
+                        <Separator />
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="space-y-1">
+                                <p className="text-sm font-medium">Dashboard Tour</p>
+                                <p className="text-xs text-muted-foreground">
+                                    Replay the guided walkthrough of the dashboard and its features.
+                                </p>
+                            </div>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={restartTour}
+                                className="gap-2"
+                            >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                                Restart Tour
+                            </Button>
+                        </div>
                     </CardContent>
                 </Card>
+
 
                 {/* System Info */}
                 <Card>
