@@ -6,6 +6,20 @@ import { handleCancel, spinner } from './ui.js';
 import { HEALTH_CHECK, getServiceURL } from './config/constants.js';
 
 /**
+ * Execute docker compose command with fallback to docker-compose.
+ * Tries 'docker compose' first (newer), then falls back to 'docker-compose' (legacy).
+ */
+async function execDockerCompose(args: string[], cwd: string): Promise<void> {
+    try {
+        // Try newer 'docker compose' first
+        await execa('docker', ['compose', ...args], { cwd });
+    } catch (error) {
+        // Fallback to legacy 'docker-compose'
+        await execa('docker-compose', args, { cwd });
+    }
+}
+
+/**
  * Prompts user whether to start the services immediately after setup.
  *
  * @returns `true` if user wants to start services, `false` otherwise
@@ -35,10 +49,9 @@ export async function startInfraServices(targetDir: string): Promise<void> {
     s.start('Starting docker-compose.infra.yaml...');
 
     try {
-        await execa(
-            'docker-compose',
+        await execDockerCompose(
             ['-f', 'docker-compose.infra.yaml', 'up', '-d'],
-            { cwd: targetDir }
+            targetDir
         );
         s.stop('Infrastructure services started');
     } catch (error: unknown) {
@@ -101,10 +114,9 @@ export async function startAppServices(targetDir: string): Promise<void> {
     s.start('Starting docker-compose.yaml...');
 
     try {
-        await execa(
-            'docker-compose',
+        await execDockerCompose(
             ['up', '-d'],
-            { cwd: targetDir }
+            targetDir
         );
         s.stop('Application services started');
     } catch (error: unknown) {

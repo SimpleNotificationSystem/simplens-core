@@ -407,6 +407,9 @@ function getSuggestedValue(key: string): string {
     if (key === 'ADMIN_USERNAME') {
         return 'admin';
     }
+    if (key === 'CORE_VERSION' || key === 'DASHBOARD_VERSION') {
+        return 'latest';
+    }
     return '';
 }
 
