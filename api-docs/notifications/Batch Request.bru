@@ -5,7 +5,7 @@ meta {
 }
 
 post {
-  url: {{BASE_URL}}/api/notification/batch
+  url: {{process.env.BASE_URL}}/api/notification/batch
   body: json
   auth: inherit
 }
@@ -13,14 +13,14 @@ post {
 body:json {
   {
     "client_id": "59777441-3545-4507-8e0d-2d3a2ffd71c1",
-    "template_id": ["{{TEMPLATE_ID}}"],
-    "channel": ["{{CHANNEL}}", "mock"],
-    "provider": ["{{PROVIDER}}"],
+    "template_id": ["{{process.env.TEMPLATE_ID}}"],
+    "channel": ["{{process.env.CHANNEL}}", "mock"],
+    "provider": ["{{process.env.PROVIDER}}"],
     "recipients":[
        {
          "request_id": "5a698ff2-3910-4b28-b48a-17303651bdb6",
           "user_id": "user1234",
-          "email": "{{TO_EMAIL}}",
+          "email": "{{process.env.TO_EMAIL}}",
           "variables": {
             "name": "Adhish",
             "company": "SimpleNS"
@@ -29,7 +29,7 @@ body:json {
       {
         "request_id": "9c62ba98-ef14-4d4c-9ba5-a7ffd3c9d5f9",
         "user_id": "user1235",
-          "email": "{{TO_EMAIL_2}}",
+          "email": "{{process.env.TO_EMAIL_2}}",
           "variables": {
             "name": "Krishna",
             "company": "SimpleNS"

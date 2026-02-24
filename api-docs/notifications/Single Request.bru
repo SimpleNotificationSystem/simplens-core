@@ -5,7 +5,7 @@ meta {
 }
 
 post {
-  url: {{BASE_URL}}/api/notification
+  url: {{process.env.BASE_URL}}/api/notification
   body: json
   auth: inherit
 }
@@ -15,8 +15,8 @@ body:json {
     "request_id": "908604ba-2902-4e1e-be16-c05d1b371e21",
     "client_id": "59777441-3545-4507-8e0d-2d3a2ffd71c1",
     "template_id": ["email-temp-1"],
-    "channel": ["{{CHANNEL}}", "mock"],
-    "provider": ["{{PROVIDER}}"],
+    "channel": ["{{process.env.CHANNEL}}", "mock"],
+    "provider": ["{{process.env.PROVIDER}}"],
     "recipient": {
       "user_id": "user1234",
       "email": "{{TO_EMAIL}}"

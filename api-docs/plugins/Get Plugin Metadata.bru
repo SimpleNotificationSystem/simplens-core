@@ -5,11 +5,12 @@ meta {
 }
 
 get {
-  url: {{BASE_URL}}/api/plugins
+  url: {{process.env.BASE_URL}}/api/plugins
   body: none
   auth: inherit
 }
 
 settings {
   encodeUrl: true
+  timeout: 0
 }
