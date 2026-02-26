@@ -51,6 +51,34 @@ Configure your MCP Client (e.g. Claude Desktop) to connect via HTTP:
 }
 ```
 
+### Streamable HTTP (Local Command)
+
+Run the server locally:
+```bash
+npx @simplens/mcp
+# or: npm start
+```
+
+The server starts default at port: `3001`
+
+Then point your MCP client at the local HTTP endpoint and pass headers on every request:
+
+```json
+{
+  "mcpServers": {
+    "simplens-local-http": {
+      "type": "streamable-http",
+      "url": "http://localhost:3001/mcp",
+      "headers": {
+        "X-SimpleNS-API-Key": "your-ns-api-key",
+        "X-SimpleNS-Core-URL": "http://localhost:3000",
+        "X-SimpleNS-Dashboard-URL": "http://localhost:3002"
+      }
+    }
+  }
+}
+```
+
 ### Local (Stdio) Mode
 
 You can run the server locally if you have SimpleNS running locally.
@@ -61,8 +89,8 @@ Add to your MCP Client config:
 {
   "mcpServers": {
     "simplens-local": {
-      "command": "node",
-      "args": ["/path/to/packages/mcp-server/dist/index.js", "--stdio"],
+      "command": "npx",
+      "args": ["@simplens/mcp", "--stdio"],
       "env": {
         "NS_API_KEY": "your-local-api-key",
         "SIMPLENS_CORE_URL": "http://localhost:3000",
@@ -84,4 +112,3 @@ Add to your MCP Client config:
 | `retry_failure` | Retry a specific failed notification by ID |
 | `list_alerts` | List unresolved system alerts (ghost delivery, stuck processing) |
 | `resolve_alert` | Dismiss a specific system alert |
-
