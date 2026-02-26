@@ -1,12 +1,16 @@
 {
-  "name": "@simplens/mcp-server",
-  "version": "1.0.0",
+  "name": "@simplens/mcp",
+  "version": "1.0.1",
   "description": "Remote MCP server for SimpleNS notification orchestration engine",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
     "simplens-mcp": "dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
