@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useGlassmorphism } from "@/components/glassmorphism-provider";
 import { useTour } from "@/components/tour/tour-provider";
 import { RotateCcw } from "lucide-react";
-import packageJson from "@/../package.json";
+import packageJson from "../../package.json";
 
 export default function SettingsPage() {
     const { enabled, setEnabled } = useGlassmorphism();
