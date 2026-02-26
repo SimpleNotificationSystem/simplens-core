@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useGlassmorphism } from "@/components/glassmorphism-provider";
 import { useTour } from "@/components/tour/tour-provider";
 import { RotateCcw } from "lucide-react";
+import packageJson from "@/../package.json";
 
 export default function SettingsPage() {
     const { enabled, setEnabled } = useGlassmorphism();
@@ -72,7 +73,7 @@ export default function SettingsPage() {
                     <CardContent className="space-y-4">
                         <div className="flex items-center justify-between">
                             <span className="text-sm text-muted-foreground">Dashboard Version</span>
-                            <Badge variant="secondary">1.0.0</Badge>
+                            <Badge variant="secondary">{packageJson.version}</Badge>
                         </div>
                         <Separator />
                         <div className="flex items-center justify-between">
