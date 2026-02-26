@@ -1,12 +1,10 @@
 {
   "name": "simplens-core",
-  "version": "1.0.0",
-  "description": "Lightweight, backend notification service for sending EMAIL and WHATSAPP messages. It supports single and batch notifications, scheduled deliveries and webhook callbacks for final delivery status.",
+  "version": "1.2.0",
+  "private": true,
+  "description": "Open-source plugin-based notification orchestration engine for developers who value control ",
   "main": "dist/api/server.js",
   "type": "module",
-  "directories": {
-    "doc": "docs"
-  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
