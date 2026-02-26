@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 
 const basePath = process.env.BASE_PATH || "";
 const SESSION_COOKIE_NAME = "simplens_session";
+const NS_API_KEY = process.env.NS_API_KEY || "";
 
 // Routes that don't require authentication
 const publicRoutes = [
@@ -112,6 +113,61 @@ async function validateSessionFromRequest(request: NextRequest): Promise<{
     }
 }
 
+/**
+ * Validate an API key from the Authorization: Bearer header.
+ * Uses timing-safe comparison via HMAC to prevent timing attacks.
+ */
+async function validateApiKeyFromRequest(request: NextRequest): Promise<{ isValid: boolean }> {
+    try {
+        if (!NS_API_KEY) {
+            return { isValid: false };
+        }
+
+        const authHeader = request.headers.get("authorization");
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            return { isValid: false };
+        }
+
+        const providedKey = authHeader.slice(7); // Remove "Bearer " prefix
+        if (!providedKey) {
+            return { isValid: false };
+        }
+
+        // Timing-safe comparison using HMAC (Edge-compatible via Web Crypto API)
+        const encoder = new TextEncoder();
+        const key = await crypto.subtle.importKey(
+            "raw",
+            encoder.encode("api-key-compare"),
+            { name: "HMAC", hash: "SHA-256" },
+            false,
+            ["sign"]
+        );
+
+        const [providedMac, expectedMac] = await Promise.all([
+            crypto.subtle.sign("HMAC", key, encoder.encode(providedKey)),
+            crypto.subtle.sign("HMAC", key, encoder.encode(NS_API_KEY)),
+        ]);
+
+        const providedArr = new Uint8Array(providedMac);
+        const expectedArr = new Uint8Array(expectedMac);
+
+        if (providedArr.length !== expectedArr.length) {
+            return { isValid: false };
+        }
+
+        let match = true;
+        for (let i = 0; i < providedArr.length; i++) {
+            if (providedArr[i] !== expectedArr[i]) {
+                match = false;
+            }
+        }
+
+        return { isValid: match };
+    } catch {
+        return { isValid: false };
+    }
+}
+
 function isPublicRoute(pathname: string): boolean {
     // Remove base path prefix if present
     let normalizedPath = pathname;
@@ -198,7 +254,27 @@ export async function middleware(request: NextRequest) {
 
     // STEP 7: Protected routes - require authentication
     if (!session.isValid) {
-        // Redirect to login
+        // For API routes, fall back to API key (Bearer token) authentication
+        // This allows programmatic access (e.g. from MCP server) without a session cookie
+        if (pathname.startsWith("/api/")) {
+            const apiKeyAuth = await validateApiKeyFromRequest(request);
+            if (apiKeyAuth.isValid) {
+                // Valid API key — allow the request through
+                if (basePath && request.nextUrl.pathname.startsWith(basePath)) {
+                    const url = request.nextUrl.clone();
+                    url.pathname = pathname;
+                    return NextResponse.rewrite(url);
+                }
+                return NextResponse.next();
+            }
+            // Invalid or missing API key on an API route — return 401 JSON instead of redirect
+            return NextResponse.json(
+                { error: "Unauthorized: valid session or API key required" },
+                { status: 401 }
+            );
+        }
+
+        // Non-API routes: redirect to login
         const loginUrl = new URL(`${basePath}/login`, request.url);
         loginUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);
         return NextResponse.redirect(loginUrl);
