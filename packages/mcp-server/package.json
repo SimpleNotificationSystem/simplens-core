@@ -1,6 +1,6 @@
 {
   "name": "@simplens/mcp",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Remote MCP server for SimpleNS notification orchestration engine",
   "type": "module",
   "main": "dist/index.js",

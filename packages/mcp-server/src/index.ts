@@ -49,7 +49,6 @@ async function createHttpSession(req: Request): Promise<StreamableHTTPServerTran
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (sessionId) => {
             sessions.set(sessionId, { transport, server });
-            console.log('Session initialized:', sessionId);
         },
     });
 
@@ -57,7 +56,6 @@ async function createHttpSession(req: Request): Promise<StreamableHTTPServerTran
         const sessionId = transport.sessionId;
         if (sessionId) {
             sessions.delete(sessionId);
-            console.log('Session closed:', sessionId);
         }
         // Avoid recursive close loops: transport.close() triggers onclose,
         // and server.close() closes the transport again.
@@ -71,7 +69,7 @@ async function main() {
     const args = process.argv.slice(2);
     const mode = args.includes('--stdio') ? 'stdio' : 'http';
 
-    console.error(`Starting SimpleNS MCP Server in ${mode} mode...`);
+
 
     if (mode === 'stdio') {
         const server = new McpServer({
@@ -84,7 +82,7 @@ async function main() {
 
         const transport = new StdioServerTransport();
         await server.connect(transport);
-        console.error('SimpleNS MCP Server running on stdio');
+
     } else {
         const app = express();
 
@@ -159,7 +157,7 @@ async function main() {
                 res.setHeader('Allow', 'GET, POST, DELETE, OPTIONS');
                 res.status(405).send('Method Not Allowed');
             } catch (error) {
-                console.error('MCP route error:', error);
+
                 if (!res.headersSent) {
                     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
                 }
@@ -167,12 +165,12 @@ async function main() {
         });
 
         app.listen(serverConfig.PORT, () => {
-            console.error(`SimpleNS MCP Server HTTP listening on port ${serverConfig.PORT}`);
+
         });
     }
 }
 
 main().catch((error) => {
-    console.error('Fatal error:', error);
+
     process.exit(1);
 });
