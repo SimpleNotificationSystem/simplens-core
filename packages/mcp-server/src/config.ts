@@ -7,7 +7,7 @@
 
 import dotenv from 'dotenv';
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 export const serverConfig = {
     PORT: parseInt(process.env.PORT || '3001', 10),

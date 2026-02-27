@@ -118,7 +118,9 @@ export class DashboardApiClient {
     private authHeader: Record<string, string>;
 
     constructor(credentials: UserCredentials) {
-        this.baseUrl = credentials.dashboardUrl;
+        this.baseUrl = credentials.dashboardUrl.endsWith('/')
+            ? credentials.dashboardUrl
+            : `${credentials.dashboardUrl}/`;
         this.authHeader = { Authorization: `Bearer ${credentials.apiKey}` };
     }
 
@@ -131,7 +133,7 @@ export class DashboardApiClient {
         from?: string;
         to?: string;
     } = {}): Promise<ApiResponse> {
-        return request(this.baseUrl, '/api/notifications', {
+        return request(this.baseUrl, 'api/notifications', {
             headers: this.authHeader,
             params: {
                 status: 'failed',
@@ -147,7 +149,7 @@ export class DashboardApiClient {
 
     /** POST /api/notifications/[id]/retry - Retry a failed notification */
     async retryFailure(notificationId: string): Promise<ApiResponse> {
-        return request(this.baseUrl, `/api/notifications/${notificationId}/retry`, {
+        return request(this.baseUrl, `api/notifications/${notificationId}/retry`, {
             method: 'POST',
             headers: this.authHeader,
         });
@@ -159,7 +161,7 @@ export class DashboardApiClient {
         limit?: string;
         type?: string;
     } = {}): Promise<ApiResponse> {
-        return request(this.baseUrl, '/api/alerts', {
+        return request(this.baseUrl, 'api/alerts', {
             headers: this.authHeader,
             params: {
                 page: params.page || '1',
@@ -171,7 +173,7 @@ export class DashboardApiClient {
 
     /** DELETE /api/alerts/[id] - Resolve/dismiss an alert */
     async resolveAlert(alertId: string): Promise<ApiResponse> {
-        return request(this.baseUrl, `/api/alerts/${alertId}`, {
+        return request(this.baseUrl, `api/alerts/${alertId}`, {
             method: 'DELETE',
             headers: this.authHeader,
         });

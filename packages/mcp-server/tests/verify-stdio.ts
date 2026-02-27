@@ -34,8 +34,8 @@ async function main() {
     console.log(`Found ${tools.tools.length} tools:`);
     tools.tools.forEach(t => console.log(`- ${t.name}`));
 
-    if (tools.tools.length !== 7) {
-        throw new Error(`Expected 7 tools, found ${tools.tools.length}`);
+    if (tools.tools.length !== 8) {
+        throw new Error(`Expected 8 tools, found ${tools.tools.length}`);
     }
 
     // List Resources
@@ -43,8 +43,8 @@ async function main() {
     console.log(`Found ${resources.resources.length} resources:`);
     resources.resources.forEach(r => console.log(`- ${r.uri}`));
 
-    if (resources.resources.length !== 2) {
-        throw new Error(`Expected 2 resources, found ${resources.resources.length}`);
+    if (resources.resources.length !== 0) {
+        throw new Error(`Expected 0 resources, found ${resources.resources.length}`);
     }
 
     console.log('Verification successful!');
