@@ -64,6 +64,9 @@ jobs:
           VERSION="${{ steps.get_tag.outputs.version }}"
           TAG="${{ steps.get_tag.outputs.tag }}"
           PREV_TAG="${{ steps.prev_tag.outputs.prev_tag }}"
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          CORE_IMAGE="${{ env.REGISTRY }}/${OWNER_LOWER}/simplens-core"
+          DASHBOARD_IMAGE="${{ env.REGISTRY }}/${OWNER_LOWER}/simplens-dashboard"
           
           # Get commits
           if [ -z "$RANGE" ]; then
@@ -126,12 +129,12 @@ jobs:
           BODY="$BODY## 🐳 Docker Images"$'\n\n'
           BODY="$BODY| Service | Image |"$'\n'
           BODY="$BODY|---------|-------|"$'\n'
-          BODY="$BODY| Core | \`${{ env.REGISTRY }}/${{ env.CORE_IMAGE_NAME }}:$VERSION\` |"$'\n'
-          BODY="$BODY| Dashboard | \`${{ env.REGISTRY }}/${{ env.DASHBOARD_IMAGE_NAME }}:$VERSION\` |"$'\n\n'
+          BODY="$BODY| Core | \`${CORE_IMAGE}:$VERSION\` |"$'\n'
+          BODY="$BODY| Dashboard | \`${DASHBOARD_IMAGE}:$VERSION\` |"$'\n\n'
           BODY="$BODY\`\`\`bash"$'\n'
           BODY="$BODY# Pull images for this release"$'\n'
-          BODY="${BODY}docker pull ${{ env.REGISTRY }}/${{ env.CORE_IMAGE_NAME }}:$VERSION"$'\n'
-          BODY="${BODY}docker pull ${{ env.REGISTRY }}/${{ env.DASHBOARD_IMAGE_NAME }}:$VERSION"$'\n'
+          BODY="${BODY}docker pull ${CORE_IMAGE}:$VERSION"$'\n'
+          BODY="${BODY}docker pull ${DASHBOARD_IMAGE}:$VERSION"$'\n'
           BODY="$BODY\`\`\`"$'\n'
           
           # Save to file (to handle multiline output)
