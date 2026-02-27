@@ -1,36 +1,125 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SimpleNS Admin Dashboard
+
+The Admin Dashboard is a **Next.js** web application that provides a modern interface for monitoring, managing, and operating your SimpleNS notification infrastructure.
+
+> **Default URL:** [http://localhost:3002](http://localhost:3002)
+
+---
+
+## Features
+
+### Core Pages
+
+| Page | Description |
+|------|-------------|
+| **Dashboard Home** | Overview with status cards (total, delivered, pending, failed) and recent activity feed |
+| **Events Explorer** | Paginated event table with filtering, search, and live status indicators |
+| **Failed Events** | Dedicated view for failed notifications with one-click retry |
+| **Alerts** | System alerts for orphaned notifications, ghost deliveries, and stuck processing |
+| **Analytics** | Charts and visualizations for notification status and channel distribution |
+| **Plugins** | View installed plugins, their channels, and provider configurations |
+| **Payload Studio** | Interactive schema explorer for building notification payloads |
+| **Send** | Send test notifications directly from the dashboard |
+| **Admin Alert Channels** | Configure external channels to receive system health alerts |
+| **Notification Templates** | Create, manage, and preview reusable notification templates |
+
+### Admin Alert Channels
+
+Configure external notification channels (Discord, Telegram, etc.) to receive real-time system alerts directly in your team's communication tools.
+
+- **Multi-Provider Support** — Connect via Discord, Telegram, and other supported providers
+- **Granular Alert Filters** — Choose which alert types each channel receives:
+  - Failed Notifications — Notifications that exceeded max retry attempts
+  - Service Health — MongoDB, Redis, Kafka connection issues
+  - Stuck Processing — Notifications stuck in processing state
+  - Orphaned Pending — Pending notifications without outbox records
+  - Ghost Delivery — Processed notifications without corresponding records
+- **Test Before Saving** — Send a test message to verify channel configuration before going live
+- **Per-Channel Toggle** — Enable or disable individual channels without deleting their configuration
+- **Delete Channels** — Remove channels with a confirmation dialog
+
+### Notification Templates
+
+Create and manage reusable notification templates directly from the dashboard.
+
+- **Visual Template Editor** — Full-screen editor with side-by-side live HTML preview
+- **Monaco Code Editor** — Toggle an integrated code editor with syntax highlighting for HTML content fields
+- **Provider-Aware Schemas** — Content fields are dynamically loaded based on the selected provider package
+- **Template Variables** — Use `{{variable}}` syntax for per-recipient personalization; detected variables are displayed automatically
+- **CRUD Operations** — Create, view, edit, and delete templates with a card-based grid UI
+- **Filter by Package** — Quickly find templates by filtering on provider package name
+- **Use with API** — Reference templates by `template_id` when sending notifications via the API instead of inline content
+
+---
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+The dashboard is included in the default SimpleNS Docker Compose setup and runs automatically on port **3002**.
+
+### Development
+
+To run the dashboard locally for development:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3002](http://localhost:3002) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Copy `.env.example` to `.env` and configure the required variables:
 
-## Learn More
+```bash
+cp .env.example .env
+```
 
-To learn more about Next.js, take a look at the following resources:
+Refer to `.env.example` for the full list of available configuration options.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Tech Stack
 
-## Deploy on Vercel
+- **Framework:** [Next.js](https://nextjs.org) (App Router)
+- **UI Components:** [shadcn/ui](https://ui.shadcn.com)
+- **Code Editor:** [Monaco Editor](https://microsoft.github.io/monaco-editor/) (for template editing)
+- **Data Fetching:** [SWR](https://swr.vercel.app)
+- **Charts:** Analytics visualizations for notification metrics
+- **Typography:** [Geist](https://vercel.com/font) font family
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Project Structure
+
+```
+dashboard/
+├── app/                    # Next.js App Router pages
+│   ├── admin-alerts/       # Admin alert channel management
+│   ├── alerts/             # System alerts page
+│   ├── analytics/          # Analytics and charts
+│   ├── api/                # API route handlers
+│   ├── dashboard/          # Dashboard home page
+│   ├── events/             # Events explorer
+│   ├── failed/             # Failed events page
+│   ├── login/              # Authentication page
+│   ├── payload-studio/     # Payload schema explorer
+│   ├── plugins/            # Plugin viewer
+│   ├── send/               # Send notification page
+│   ├── settings/           # Settings page
+│   └── templates/          # Notification templates (list + editor)
+├── components/             # Reusable UI components
+│   ├── admin-alerts/       # Admin alert channel components
+│   ├── dashboard/          # Dashboard-specific components
+│   ├── events/             # Event table components
+│   ├── layout/             # Layout and navigation
+│   ├── send/               # Send form components
+│   ├── templates/          # Template components
+│   ├── tour/               # Onboarding tour
+│   └── ui/                 # shadcn/ui primitives
+├── hooks/                  # Custom React hooks
+├── lib/                    # Utilities and type definitions
+└── public/                 # Static assets
+```

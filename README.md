@@ -13,9 +13,6 @@
   <a href="https://github.com/sponsors">
     <img src="https://img.shields.io/badge/Open%20Source-Yes-blue.svg" alt="Open Source" />
   </a>
-  <a href="http://makeapullrequest.com">
-    <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome" />
-  </a>
 </p>
 
 <h3 align="center">Open-source plugin-based notification orchestration engine for developers who value control</h3>
@@ -59,7 +56,33 @@
 - 🚦 **Rate Limiting** — Per-provider token bucket algorithm
 - 🔔 **Webhook Callbacks** — Real-time delivery status updates
 - 📊 **Admin Dashboard** — Monitor, search, and retry notifications
+- 🔔 **Admin Alert Channels** — Receive system health alerts via Discord, Telegram, and more
+- 📝 **Notification Templates** — Create, edit, and manage reusable notification templates with live preview
+- 🤖 **MCP Server** — Native Model Context Protocol server for AI agent integration
 - 📋 **Observability** — Centralized logging with Grafana + Loki
+
+---
+
+## AI Agent Integration (MCP)
+
+SimpleNS includes a native [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server (`@simplens/mcp`) that allows AI assistants like Github Copilot (VS code), Antigravity and OpenAI Codex to interact directly with your notification infrastructure.
+
+AI agents can securely connect to your SimpleNS instance to:
+- **Send Notifications** — Dispatch individual or batch notifications using templates or inline content
+- **Explore Schemas** — Dynamically discover available channels, providers, and required payload fields
+- **Monitor Health** — Check system alerts and investigate failed deliveries
+- **Retry Failed Events** — Programmatically identify and retry failed notification events
+
+### Running the MCP Server
+Start the server without installation:
+```bash
+# Run in streamable-http mode
+npx -y @simplens/mcp
+
+# Run in stdio mode
+npx -y @simlpens/mcp --stdio
+```
+*(Supports both `streamable-http` and `stdio` transports)*
 
 ---
 
@@ -243,6 +266,8 @@ The Admin Dashboard provides a modern interface for monitoring and managing noti
 - 📈 **Analytics** — Charts and visualizations for notification status and channel distribution
 - 🔌 **Plugins** — View installed plugins, their channels, and provider configurations
 - 🔧 **Payload Studio** — Interactive schema explorer for building and notification payloads
+- 🔔 **Admin Alert Channels** — Configure external channels (Discord, Telegram, etc.) to receive system alerts
+- 📝 **Notification Templates** — Create, manage, and preview reusable notification templates
 
 ---
 
