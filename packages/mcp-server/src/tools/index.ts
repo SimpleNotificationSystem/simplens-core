@@ -14,6 +14,7 @@ import { registerFindFailures } from './find-failures.js';
 import { registerRetryFailure } from './retry-failure.js';
 import { registerListAlerts } from './list-alerts.js';
 import { registerResolveAlert } from './resolve-alert.js';
+import { registerGetSendSchema } from './get-send-schema.js';
 
 export function registerAllTools(server: McpServer, getCredentials: () => UserCredentials) {
     registerSendNotification(server, getCredentials);
@@ -23,4 +24,5 @@ export function registerAllTools(server: McpServer, getCredentials: () => UserCr
     registerRetryFailure(server, getCredentials);
     registerListAlerts(server, getCredentials);
     registerResolveAlert(server, getCredentials);
+    registerGetSendSchema(server);
 }

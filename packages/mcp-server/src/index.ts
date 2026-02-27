@@ -18,7 +18,6 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { serverConfig } from './config.js';
 import { extractCredentials, getStdioCredentials } from './auth.js';
 import { registerAllTools } from './tools/index.js';
-import { registerAllResources } from './resources/index.js';
 import { randomUUID } from 'crypto';
 
 interface SessionContext {
@@ -45,7 +44,6 @@ async function createHttpSession(req: Request): Promise<StreamableHTTPServerTran
     });
 
     registerAllTools(server, () => credentials);
-    registerAllResources(server);
 
     const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
@@ -83,7 +81,6 @@ async function main() {
 
         const credentials = getStdioCredentials();
         registerAllTools(server, () => credentials);
-        registerAllResources(server);
 
         const transport = new StdioServerTransport();
         await server.connect(transport);
