@@ -2,11 +2,23 @@
     <img src="./assets/SimpleNSLogo.png" alt="SimpleNS" width="320" />
 </p>
 
-<h3 align="center">Open-source plugin-based notification orchestration engine for developers who value control</h3>
+<p align="center">
+  <strong>Scalable. Reliable. Extensible</strong>
+</p>
 
 <p align="center">
-  <strong>Scalable • Reliable • Extensible</strong>
+  <a href="./LICENSE">
+    <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License" />
+  </a>
+  <a href="https://github.com/sponsors">
+    <img src="https://img.shields.io/badge/Open%20Source-Yes-blue.svg" alt="Open Source" />
+  </a>
+  <a href="http://makeapullrequest.com">
+    <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome" />
+  </a>
 </p>
+
+<h3 align="center">Open-source plugin-based notification orchestration engine for developers who value control</h3>
 
 <p align="center">
   <a href="#key-features">Features</a> •
