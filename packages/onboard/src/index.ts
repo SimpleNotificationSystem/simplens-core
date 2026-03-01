@@ -58,6 +58,8 @@ program
     .option('--env <mode>', 'Environment setup mode: "default" or "interactive"')
     .option('--dir <path>', 'Target directory for setup')
     .option('--base-path <path>', 'Dashboard BASE_PATH (example: /dashboard, default: root)')
+    .option('--core-version <version>', 'Override CORE_VERSION in generated .env (primarily for --full mode)')
+    .option('--dashboard-version <version>', 'Override DASHBOARD_VERSION in generated .env (primarily for --full mode)')
     .option('--plugin [plugins...]', 'Plugins to install (e.g., @simplens/mock @simplens/nodemailer-gmail)')
     .option('--no-output', 'Suppress all console output (silent mode)');
 
@@ -364,11 +366,18 @@ async function main() {
         // Step 4: Environment configuration
         log.step('Step 4/6 — Environment Configuration');
         const envMode = setupOptions.envMode;
+        const envOverrides = options.full
+            ? {
+                CORE_VERSION: options.coreVersion,
+                DASHBOARD_VERSION: options.dashboardVersion,
+            }
+            : undefined;
         const envVars = await promptEnvVariables(
             envMode,
             selectedInfraServices,
             setupOptions.basePath,
-            options.full || false
+            options.full || false,
+            envOverrides
         );
         await generateEnvFile(targetDir, envVars);
 

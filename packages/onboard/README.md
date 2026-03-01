@@ -26,10 +26,10 @@
 
 ```bash
 # Run directly with npx (recommended)
-npx @simplens/onboard
+npx-y @simplens/onboard@latest
 
 # Or install globally
-npm install -g @simplens/onboard
+npm install -g @simplens/onboard@latest
 simplens-onboard
 ```
 
@@ -78,7 +78,7 @@ npx @simplens/onboard --infra --dir /path/to/setup
 
 ```bash
 # Complete setup with all options via CLI (no prompts)
-npx @simplens/onboard --full --infra mongo kafka kafka-ui redis nginx --env default --base-path /dashboard --plugin @simplens/mock @simplens/nodemailer-gmail
+npx @simplens/onboard --full --infra mongo kafka redis nginx --env default --base-path /dashboard --plugin @simplens/mock @simplens/nodemailer-gmail --no-output
 ```
 
 This mode:
@@ -86,6 +86,7 @@ This mode:
 - Requires `--env <mode>` to specify environment mode
 - **Auto-generates secure credentials** for NS_API_KEY, AUTH_SECRET, and ADMIN_PASSWORD
 - **Auto-generates placeholder credentials** for plugins
+- **Auto-generates version values** for CORE_VERSION and DASHBOARD_VERSION
 - All other options are optional with sensible defaults
 - Services are not auto-started (use `docker-compose up -d` manually)
 
@@ -106,6 +107,8 @@ The CLI will display a security notice with all credentials that need to be upda
 | `--env <mode>` | Environment setup mode: `default` or `interactive` | Prompted |
 | `--dir <path>` | Target directory for setup files | Current directory |
 | `--base-path <path>` | Dashboard base path (example: `/dashboard`) | Empty (root) |
+| `--core-version <version>` | Override `CORE_VERSION` in generated `.env` (primarily for `--full`) | `latest` |
+| `--dashboard-version <version>` | Override `DASHBOARD_VERSION` in generated `.env` (primarily for `--full`) | `latest` |
 | `--plugin [plugins...]` | Plugins to install (e.g., `@simplens/mock @simplens/nodemailer-gmail`) | Prompted |
 | `--no-output` | Suppress all console output (silent mode) | `false` |
 
@@ -113,11 +116,11 @@ The CLI will display a security notice with all credentials that need to be upda
 
 - `mongo` - MongoDB database
 - `kafka` - Apache Kafka message queue
-- `kafka-ui` - Kafka UI dashboard
+- `kafka-ui` - Kafka UI dashboard (optional)
 - `redis` - Redis cache
-- `nginx` - Nginx reverse proxy
-- `loki` - Loki log aggregation
-- `grafana` - Grafana observability dashboard
+- `nginx` - Nginx reverse proxy (optional, Required only is BASE_PATH is configured)
+- `loki` - Loki log aggregation (optional)
+- `grafana` - Grafana observability dashboard (optional)
 
 ## Workflow
 
@@ -210,11 +213,14 @@ npx @simplens/onboard --infra --dir ~/simplens-dev
 # Full automated setup with specific services and plugins
 npx @simplens/onboard \
   --full \
-  --infra mongo kafka kafka-ui redis nginx \
+  --infra mongo kafka redis nginx \
   --env default \
+  --core-version 1.2 \
+  --dashboard-version 1.2 \
   --base-path /dashboard \
   --plugin @simplens/mock @simplens/nodemailer-gmail \
-  --dir ./my-simplens-setup
+  --dir ./my-simplens-setup \
+  --no-output
 
 # No prompts - everything configured via CLI
 # Services not auto-started in full mode
@@ -228,6 +234,8 @@ npx @simplens/onboard \
 npx @simplens/onboard \
   --full \
   --env default \
+  --core-version 1.2 \
+  --dashboard-version 1.2 \
   --dir /app/simplens
 
 # Then start services in CI:
