@@ -185,7 +185,6 @@ export const APP_COMPOSE_TEMPLATE = `services:
       API_BASE_URL: http://api:\${PORT:-3000}
       WEBHOOK_HOST: dashboard
       WEBHOOK_PORT: \${DASHBOARD_PORT:-3002}
-      NEXT_PUBLIC_BASE_PATH: \${BASE_PATH:-}
     restart: unless-stopped
 
 volumes:
