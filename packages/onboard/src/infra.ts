@@ -313,7 +313,7 @@ export async function generateNginxConfig(
     listen 80;
     server_name localhost;
 
-    location /api/notification/ {
+    location /api {
         proxy_pass http://api:3000;
         proxy_http_version 1.1;
 

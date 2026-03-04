@@ -7,6 +7,19 @@ import { CRITICAL_ENV_KEYS } from './config/constants.js';
 import type { EnvVariable } from './types/domain.js';
 
 export const DEFAULT_BASE_PATH = '';
+const AUTO_GENERATE_ON_EMPTY_KEYS = ['NS_API_KEY', 'AUTH_SECRET', 'CORE_VERSION', 'DASHBOARD_VERSION'] as const;
+
+function shouldAutoGenerateOnEmpty(key: string, fullMode: boolean): boolean {
+    return !fullMode && AUTO_GENERATE_ON_EMPTY_KEYS.includes(key as (typeof AUTO_GENERATE_ON_EMPTY_KEYS)[number]);
+}
+
+function resolveEnvAnswer(key: string, answer: string | symbol, fullMode: boolean): string {
+    const value = typeof answer === 'string' ? answer : '';
+    if (!value.trim() && shouldAutoGenerateOnEmpty(key, fullMode)) {
+        return generateDefaultValue(key);
+    }
+    return value;
+}
 
 /**
  * Generate a secure random string for credentials
@@ -20,13 +33,16 @@ export function generateSecureRandom(length: number = 32): string {
  */
 export function generateDefaultValue(key: string): string {
     if (key === 'NS_API_KEY') {
-        return `sk_${generateSecureRandom(48)}`;
+        return `ns_${generateSecureRandom(48)}`;
     }
     if (key === 'AUTH_SECRET') {
         return generateSecureRandom(64);
     }
     if (key === 'ADMIN_PASSWORD') {
         return `Admin${generateSecureRandom(16)}`;
+    }
+    if (key === 'CORE_VERSION' || key ==='DASHBOARD_VERSION') {
+        return `latest`;
     }
     return '';
 }
@@ -245,7 +261,8 @@ export async function promptEnvVariables(
     mode: 'default' | 'interactive',
     infraServices: string[],
     basePath: string = DEFAULT_BASE_PATH,
-    fullMode: boolean = false
+    fullMode: boolean = false,
+    envOverrides: Partial<Record<'CORE_VERSION' | 'DASHBOARD_VERSION', string>> = {}
 ): Promise<Map<string, string>> {
     logInfo('Configuring environment variables...');
 
@@ -274,6 +291,14 @@ export async function promptEnvVariables(
     if (mode === 'default') {
         // Use defaults, only prompt for critical values
         for (const envVar of envVars) {
+            if (fullMode && envVar.key in envOverrides) {
+                const overrideValue = envOverrides[envVar.key as keyof typeof envOverrides];
+                if (overrideValue) {
+                    result.set(envVar.key, overrideValue);
+                    continue;
+                }
+            }
+
             // Use auto-filled infra URLs
             if (autoInfraUrls[envVar.key]) {
                 result.set(envVar.key, autoInfraUrls[envVar.key]);
@@ -314,6 +339,9 @@ export async function promptEnvVariables(
                         answer = await password({
                             message: promptMessage,
                             validate: (input: string | undefined) => {
+                                if (shouldAutoGenerateOnEmpty(envVar.key, fullMode) && !input) {
+                                    return undefined;
+                                }
                                 if (!input && envVar.required) {
                                     return `${envVar.key} is required`;
                                 }
@@ -324,8 +352,11 @@ export async function promptEnvVariables(
                         answer = await text({
                             message: promptMessage,
                             placeholder: getSuggestedValue(envVar.key) || undefined,
-                            defaultValue: getSuggestedValue(envVar.key) || undefined,
+                            defaultValue: generateDefaultValue(envVar.key) || undefined,
                             validate: (input: string | undefined) => {
+                                if (shouldAutoGenerateOnEmpty(envVar.key, fullMode) && !input) {
+                                    return undefined;
+                                }
                                 if (!input && envVar.required) {
                                     return `${envVar.key} is required`;
                                 }
@@ -335,7 +366,7 @@ export async function promptEnvVariables(
                     }
 
                     handleCancel(answer);
-                    result.set(envVar.key, answer as string);
+                    result.set(envVar.key, resolveEnvAnswer(envVar.key, answer, fullMode));
                 }
             }
         }
@@ -344,6 +375,14 @@ export async function promptEnvVariables(
         logInfo('Interactive mode: You will be prompted for each environment variable.');
         
         for (const envVar of envVars) {
+            if (fullMode && envVar.key in envOverrides) {
+                const overrideValue = envOverrides[envVar.key as keyof typeof envOverrides];
+                if (overrideValue) {
+                    result.set(envVar.key, overrideValue);
+                    continue;
+                }
+            }
+
             const defaultValue = autoInfraUrls[envVar.key] || envVar.value || getSuggestedValue(envVar.key);
             
             // BASE_PATH is collected upfront in onboarding flow
@@ -365,6 +404,9 @@ export async function promptEnvVariables(
                 answer = await password({
                     message: promptMessage,
                     validate: (input: string | undefined) => {
+                        if (shouldAutoGenerateOnEmpty(envVar.key, fullMode) && !input) {
+                            return undefined;
+                        }
                         if (!input && envVar.required) {
                             return `${envVar.key} is required`;
                         }
@@ -377,6 +419,9 @@ export async function promptEnvVariables(
                     placeholder: defaultValue || undefined,
                     defaultValue: defaultValue || undefined,
                     validate: (input: string | undefined) => {
+                        if (shouldAutoGenerateOnEmpty(envVar.key, fullMode) && !input) {
+                            return undefined;
+                        }
                         if (!input && envVar.required) {
                             return `${envVar.key} is required`;
                         }
@@ -386,7 +431,7 @@ export async function promptEnvVariables(
             }
 
             handleCancel(answer);
-            result.set(envVar.key, answer as string);
+            result.set(envVar.key, resolveEnvAnswer(envVar.key, answer, fullMode));
         }
     }
 
@@ -399,7 +444,7 @@ export async function promptEnvVariables(
  */
 function getSuggestedValue(key: string): string {
     if (key === 'NS_API_KEY' || key === 'AUTH_SECRET') {
-        return `Replace with: openssl rand -base64 32`;
+        return `Replace with: openssl rand -base64 32 (or) Press <Enter> to auto-generate value`;
     }
     if (key === 'NODE_ENV') {
         return 'production';

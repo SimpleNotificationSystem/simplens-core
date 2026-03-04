@@ -44,7 +44,6 @@ export const CRITICAL_ENV_KEYS = [
     'REDIS_URL',
     'AUTH_SECRET',
     'ADMIN_PASSWORD',
-    'LOKI_URL',
     'CORE_VERSION',
     'DASHBOARD_VERSION',
 ];
