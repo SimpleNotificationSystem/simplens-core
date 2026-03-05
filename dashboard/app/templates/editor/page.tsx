@@ -718,6 +718,7 @@ function TemplateEditorContent() {
               <Label className="text-xs">Package</Label>
               <Select
                 value={form.package}
+                disabled={mode === "edit"}
                 onValueChange={(value) =>
                   setForm((prev) => ({
                     ...prev,
