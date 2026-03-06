@@ -525,14 +525,14 @@ export const validateContentSchema = (
   }
   if (!provider) {
     throw new ProviderNotFoundError(
-      `Provider not found with the given provider_id: ${provider_id}`,
+      `Provider not found with the given provider_id: ${provider_id ?? "Default Provider"}`,
     );
   }
   const providerContentSchema = provider.getContentSchema();
   const validationResult = providerContentSchema.safeParse(content);
   if (!validationResult.success) {
     throw new InvalidContentSchemaError(
-      `Content Validation failed for given provider_id: ${provider_id}`,
+      `Content Validation failed for given provider_id: ${provider_id ?? "Default Provider"}`,
       validationResult.error,
     );
   }

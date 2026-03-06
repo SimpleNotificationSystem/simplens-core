@@ -184,6 +184,46 @@ describe('Notification Request Schema', () => {
             const result = safeValidateNotificationRequest(validRequest);
             expect(result.success).toBe(true);
         });
+
+        it('should fail when channel is empty', () => {
+            const invalidRequest = {
+                request_id: randomUUID(),
+                client_id: randomUUID(),
+                channel: [],
+                recipient: {
+                    user_id: 'user-123',
+                    email: 'test@example.com',
+                },
+                content: {
+                    email: {
+                        subject: 'Test',
+                        message: 'Test',
+                    },
+                },
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const result = safeValidateNotificationRequest(invalidRequest);
+            expect(result.success).toBe(false);
+        });
+
+        it('should fail when template_id and content are both empty', () => {
+            const invalidRequest = {
+                request_id: randomUUID(),
+                client_id: randomUUID(),
+                channel: ['email'],
+                template_id: [],
+                recipient: {
+                    user_id: 'user-123',
+                    email: 'test@example.com',
+                },
+                content: {},
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const result = safeValidateNotificationRequest(invalidRequest);
+            expect(result.success).toBe(false);
+        });
     });
 });
 
@@ -211,6 +251,60 @@ describe('Batch Notification Request Schema', () => {
             if (result.success) {
                 expect(result.data.recipients.length).toBe(2);
             }
+        });
+
+        it('should fail when batch channel is empty', () => {
+            const invalidRequest = {
+                client_id: randomUUID(),
+                channel: [],
+                content: {
+                    email: {
+                        subject: 'Batch Test',
+                        message: 'Hello {{name}}',
+                    },
+                },
+                recipients: [
+                    { request_id: randomUUID(), user_id: 'user-1', email: 'user1@example.com' },
+                ],
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const result = safeValidateBatchNotificationRequest(invalidRequest);
+            expect(result.success).toBe(false);
+        });
+
+        it('should fail when batch recipients are empty', () => {
+            const invalidRequest = {
+                client_id: randomUUID(),
+                channel: ['email'],
+                content: {
+                    email: {
+                        subject: 'Batch Test',
+                        message: 'Hello {{name}}',
+                    },
+                },
+                recipients: [],
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const result = safeValidateBatchNotificationRequest(invalidRequest);
+            expect(result.success).toBe(false);
+        });
+
+        it('should fail when batch template_id and content are both empty', () => {
+            const invalidRequest = {
+                client_id: randomUUID(),
+                channel: ['email'],
+                template_id: [],
+                content: {},
+                recipients: [
+                    { request_id: randomUUID(), user_id: 'user-1', email: 'user1@example.com' },
+                ],
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const result = safeValidateBatchNotificationRequest(invalidRequest);
+            expect(result.success).toBe(false);
         });
     });
 });
