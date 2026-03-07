@@ -19,4 +19,11 @@ export {
 export { loadProviders, loadProvidersFromEnv, registerProvider, getConfiguredChannels } from './loader/loader.js';
 
 // Router
-export { sendWithFallback, sendToProvider, validateNotification, getRateLimitConfig } from './loader/router.js';
+export {
+    sendWithFallback,
+    sendToProvider,
+    validateNotification,
+    validateNotificationForProvider,
+    resolveFallbackProviderId,
+    getRateLimitConfig
+} from './loader/router.js';

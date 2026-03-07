@@ -17,7 +17,12 @@ import { env } from '@src/config/env.config.js';
 import { unifiedProcessorLogger as logger } from './unified.logger.js';
 
 // Plugin system
-import { sendWithFallback, PluginRegistry } from '@src/plugins/index.js';
+import {
+    sendWithFallback,
+    PluginRegistry,
+    resolveFallbackProviderId,
+    validateNotificationForProvider
+} from '@src/plugins/index.js';
 import type { BaseNotification, DeliveryResult } from '@src/plugins/interfaces/provider.types.js';
 
 // Shared utilities
@@ -93,6 +98,67 @@ const publishFailureStatus = async (
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await publishStatus(status as any);
+};
+
+/**
+ * Hand off a retry-exhausted notification to the fallback provider via delayed queue.
+ * This gives the fallback provider its own retry budget while preserving normal backoff.
+ */
+export const scheduleFallbackProviderHandoff = async (
+    channel: string,
+    notification: BaseNotification,
+    currentProviderId: string | undefined,
+    errorMessage: string
+): Promise<boolean> => {
+    const fallbackProviderId = resolveFallbackProviderId(channel, currentProviderId);
+
+    if (!fallbackProviderId) {
+        return false;
+    }
+
+    const fallbackNotification: BaseNotification = {
+        ...notification,
+        provider: fallbackProviderId,
+    };
+
+    const validationResult = validateNotificationForProvider<BaseNotification>(
+        fallbackProviderId,
+        fallbackNotification
+    );
+
+    if (!validationResult.success) {
+        logger.error(
+            `[${channel}] Fallback handoff validation failed: ${notification.notification_id} - ${validationResult.error}`
+        );
+        return false;
+    }
+
+    await setFailed(notification.notification_id.toString(), notification.retry_count);
+    const delayedPayload = buildDelayedPayloadGeneric(
+        validationResult.data as unknown as Record<string, unknown>,
+        channel,
+        0
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await publishDelayed(delayedPayload as any);
+
+    void AdminAlertService.sendAlert(
+        'service_health',
+        `INFO: RETRY BUDGET EXHAUSTED, SWITCHING TO FALLBACK\n` +
+        `Notification ID: ${notification.notification_id}\n` +
+        `Channel: ${channel}\n` +
+        `Primary provider: ${currentProviderId || 'default'}\n` +
+        `Fallback provider: ${fallbackProviderId}\n` +
+        `Error: ${errorMessage}\n` +
+        `Action: Investigate the primary provider if this handoff becomes frequent.`,
+        { severity: 'warning', notificationId: notification.notification_id, channel }
+    );
+
+    logger.warn(
+        `[${channel}] Retry budget exhausted for provider ${currentProviderId || 'default'}, ` +
+        `scheduled fallback handoff to ${fallbackProviderId}: ${notification.notification_id}`
+    );
+    return true;
 };
 
 /**
@@ -204,13 +270,25 @@ const processMessage = async (
 
             const newRetryCount = notification.retry_count + 1;
             if (newRetryCount > env.MAX_RETRY_COUNT) {
-                logger.error(`[${channel}] Max retries exceeded: ${notificationId}`);
+                const currentProviderId = notification.provider || PluginRegistry.getDefaultProviderId(channel);
+                const handoffScheduled = await scheduleFallbackProviderHandoff(
+                    channel,
+                    notification,
+                    currentProviderId,
+                    `Rate limited after ${env.MAX_RETRY_COUNT} retries`
+                );
+
+                if (handoffScheduled) {
+                    return true;
+                }
+
+                logger.error(`[${channel}] Max retries exceeded (rate limited): ${notificationId}`);
 
                 void AdminAlertService.sendAlert('failed_notification',
                     `❌ MAX RETRIES EXCEEDED (RATE LIMITED)\n` +
                     `Notification ID: ${notificationId}\n` +
                     `Channel: ${channel}\n` +
-                    `Provider: ${providerId}\n` +
+                    `Provider: ${currentProviderId || providerId || 'default'}\n` +
                     `Root cause: Provider rate limit exhausted after ${env.MAX_RETRY_COUNT} retries\n` +
                     `Action: Check provider rate limits in simplens.config.yaml. Consider increasing limits or adding fallback provider.`,
                     { severity: 'critical', notificationId, channel });
@@ -286,42 +364,43 @@ const processMessage = async (
             return true;
         }
         else if (result.success === false && result.error?.retryable === false) {
-            // Non-retryable failure from router (e.g., ALL_PROVIDERS_FAILED, SCHEMA_VALIDATION_ERROR)
-            // Schema validation failures are already handled by handleSchemaValidationFailure
-            // But ALL_PROVIDERS_FAILED and PROVIDER_NOT_FOUND need explicit handling here
-            if (result.error?.code === 'ALL_PROVIDERS_FAILED') {
-                logger.error(`[${channel}] All providers failed: ${notificationId} - ${result.error?.message}`);
+            const errorCode = result.error?.code || 'NON_RETRYABLE_FAILURE';
+            const errorMessage = result.error?.message || 'Non-retryable provider error';
 
-                void AdminAlertService.sendAlert('failed_notification',
-                    `🔴 ALL PROVIDERS FAILED\n` +
-                    `Notification ID: ${notificationId}\n` +
-                    `Channel: ${channel}\n` +
-                    `Error: ${result.error?.message}\n` +
-                    `Action: Check provider credentials and connectivity. Review simplens.config.yaml.`,
-                    { severity: 'critical', notificationId, channel });
+            logger.error(`[${channel}] Non-retryable failure: ${notificationId} (${errorCode}) - ${errorMessage}`);
 
-                await setFailed(notificationId, validationResult.data.retry_count);
-                await publishFailureStatus(notification, channel, result.error?.message || 'All providers failed');
-            } else if (result.error?.code === 'PROVIDER_NOT_FOUND') {
-                logger.error(`[${channel}] Provider not found: ${notificationId} - ${result.error?.message}`);
+            void AdminAlertService.sendAlert('failed_notification',
+                `❌ NON-RETRYABLE PROVIDER FAILURE\n` +
+                `Notification ID: ${notificationId}\n` +
+                `Channel: ${channel}\n` +
+                `Error code: ${errorCode}\n` +
+                `Error: ${errorMessage}\n` +
+                `Action: Check provider configuration and connectivity. Review simplens.config.yaml.`,
+                { severity: 'critical', notificationId, channel });
 
-                void AdminAlertService.sendAlert('failed_notification',
-                    `🔴 PROVIDER NOT FOUND\n` +
-                    `Notification ID: ${notificationId}\n` +
-                    `Channel: ${channel}\n` +
-                    `Error: ${result.error?.message}\n` +
-                    `Action: Check simplens.config.yaml. Verify provider is installed and configured.`,
-                    { severity: 'critical', notificationId, channel });
+            await setFailed(notificationId, validationResult.data.retry_count);
+            await publishFailureStatus(notification, channel, errorMessage);
 
-                await setFailed(notificationId, validationResult.data.retry_count);
-                await publishFailureStatus(notification, channel, result.error?.message || 'Provider not found');
-            }
-            // Commit kafka offset
+            // Commit kafka offset after persisting failed state + status
             return true;
         }
         else {
             // 6b. Failure - check if retryable
             const newRetryCount = notification.retry_count + 1;
+            const currentProviderId = notification.provider || PluginRegistry.getDefaultProviderId(channel);
+
+            if (result.error?.retryable && newRetryCount > env.MAX_RETRY_COUNT) {
+                const handoffScheduled = await scheduleFallbackProviderHandoff(
+                    channel,
+                    notification,
+                    currentProviderId,
+                    result.error?.message || 'Unknown retryable error'
+                );
+
+                if (handoffScheduled) {
+                    return true;
+                }
+            }
 
             if (!result.error?.retryable || newRetryCount > env.MAX_RETRY_COUNT) {
                 logger.error(`[${channel}] Final failure: ${notificationId} - ${result.error?.message}`);

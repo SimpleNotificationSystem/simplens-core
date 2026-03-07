@@ -69,6 +69,8 @@ describe('Provider Router', () => {
     let sendWithFallback: typeof import('../../../src/plugins/loader/router.js').sendWithFallback;
     let sendToProvider: typeof import('../../../src/plugins/loader/router.js').sendToProvider;
     let validateNotification: typeof import('../../../src/plugins/loader/router.js').validateNotification;
+    let validateNotificationForProvider: typeof import('../../../src/plugins/loader/router.js').validateNotificationForProvider;
+    let resolveFallbackProviderId: typeof import('../../../src/plugins/loader/router.js').resolveFallbackProviderId;
     let getRateLimitConfig: typeof import('../../../src/plugins/loader/router.js').getRateLimitConfig;
 
     beforeEach(async () => {
@@ -80,6 +82,8 @@ describe('Provider Router', () => {
         sendWithFallback = routerModule.sendWithFallback;
         sendToProvider = routerModule.sendToProvider;
         validateNotification = routerModule.validateNotification;
+        validateNotificationForProvider = routerModule.validateNotificationForProvider;
+        resolveFallbackProviderId = routerModule.resolveFallbackProviderId;
         getRateLimitConfig = routerModule.getRateLimitConfig;
 
         PluginRegistry.clear();
@@ -313,6 +317,63 @@ describe('Provider Router', () => {
             if (!result.success) {
                 expect(result.error).toContain('No provider for channel');
             }
+        });
+    });
+
+    describe('validateNotificationForProvider', () => {
+        it('should validate notification against a specific provider schema', () => {
+            const gmail = createMockProvider({ name: 'gmail', channel: 'email' });
+            PluginRegistry.register(gmail as any, 'gmail', 1);
+
+            const notification = {
+                notification_id: 'notif-123',
+                request_id: 'req-123',
+                client_id: 'client-123',
+                channel: 'email',
+                provider: 'gmail',
+                recipient: { user_id: 'user-123' },
+                content: { message: 'Hello' },
+                webhook_url: 'https://webhook.example.com',
+                retry_count: 0,
+                created_at: new Date(),
+            };
+
+            const result = validateNotificationForProvider('gmail', notification);
+
+            expect(result.success).toBe(true);
+        });
+
+        it('should return an error if provider is not found', () => {
+            const result = validateNotificationForProvider('missing-provider', {});
+
+            expect(result.success).toBe(false);
+            if (!result.success) {
+                expect(result.error).toContain("Provider 'missing-provider' not found");
+            }
+        });
+    });
+
+    describe('resolveFallbackProviderId', () => {
+        it('should resolve fallback provider when it differs from the current provider', () => {
+            const primary = createMockProvider({ name: 'primary', channel: 'email' });
+            const fallback = createMockProvider({ name: 'fallback', channel: 'email' });
+
+            PluginRegistry.register(primary as any, 'primary', 2);
+            PluginRegistry.register(fallback as any, 'fallback', 1);
+            PluginRegistry.setChannelConfig('email', { default: 'primary', fallback: 'fallback' });
+
+            expect(resolveFallbackProviderId('email', 'primary')).toBe('fallback');
+        });
+
+        it('should return undefined when current provider is already the fallback provider', () => {
+            const primary = createMockProvider({ name: 'primary', channel: 'email' });
+            const fallback = createMockProvider({ name: 'fallback', channel: 'email' });
+
+            PluginRegistry.register(primary as any, 'primary', 2);
+            PluginRegistry.register(fallback as any, 'fallback', 1);
+            PluginRegistry.setChannelConfig('email', { default: 'primary', fallback: 'fallback' });
+
+            expect(resolveFallbackProviderId('email', 'fallback')).toBeUndefined();
         });
     });
 

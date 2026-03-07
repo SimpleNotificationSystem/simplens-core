@@ -87,6 +87,23 @@ async function tryFallback<T extends BaseNotification>(
 }
 
 /**
+ * Resolve a fallback provider ID for retry exhaustion handoff.
+ * Returns undefined when no distinct fallback provider is available.
+ */
+export function resolveFallbackProviderId(
+    channel: string,
+    currentProviderId?: string
+): string | undefined {
+    const fallbackProviderId = PluginRegistry.getFallbackProviderId(channel);
+
+    if (!fallbackProviderId || fallbackProviderId === currentProviderId) {
+        return undefined;
+    }
+
+    return fallbackProviderId;
+}
+
+/**
  * Send notification with automatic fallback
  * 
  * 1. Try explicit/default provider for channel
@@ -163,6 +180,32 @@ export async function sendToProvider<T extends BaseNotification>(
     }
 
     return provider.send(notification);
+}
+
+/**
+ * Validate notification against a specific provider schema
+ */
+export function validateNotificationForProvider<T extends BaseNotification>(
+    providerId: string,
+    notification: unknown
+): { success: true; data: T } | { success: false; error: string } {
+    const provider = PluginRegistry.get(providerId);
+
+    if (!provider) {
+        return { success: false, error: `Provider '${providerId}' not found` };
+    }
+
+    const schema = provider.getNotificationSchema();
+    const result = schema.safeParse(notification);
+
+    if (result.success) {
+        return { success: true, data: result.data as T };
+    }
+
+    return {
+        success: false,
+        error: result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', '),
+    };
 }
 
 /**
