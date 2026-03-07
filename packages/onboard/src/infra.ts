@@ -363,7 +363,7 @@ export async function writeAppCompose(
 export async function generateNginxConfig(
     targetDir: string,
     basePath: string,
-    options: { enableSsl?: boolean; domain?: string } = {}
+    options: { enableSsl?: boolean; domain?: string; sslMode?: 'bootstrap' | 'final' } = {}
 ): Promise<void> {
     const s = spinner();
     s.start('Generating nginx.conf...');
@@ -373,6 +373,7 @@ export async function generateNginxConfig(
     const hasBasePath = normalizedPath.length > 0;
     const enableSsl = options.enableSsl === true;
     const domain = options.domain?.trim() || 'localhost';
+    const sslMode = options.sslMode ?? 'final';
 
     const proxyRoutes = `
     location /api {
@@ -459,8 +460,21 @@ ${hasBasePath ? `
 `}
 `;
 
+    const rootRedirectPath = hasBasePath ? `/${normalizedPath}` : '/';
+
     const nginxTemplate = enableSsl
-        ? `server {
+        ? sslMode === 'bootstrap'
+            ? `server {
+    listen 80;
+    server_name ${domain};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+${proxyRoutes}
+}
+`
+            : `server {
     listen 80;
     server_name ${domain};
 
@@ -482,7 +496,7 @@ server {
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_prefer_server_ciphers on;
     location = / {
-        return 302 /dashboard;
+        return 302 ${rootRedirectPath};
     }
     ${proxyRoutes}
 }

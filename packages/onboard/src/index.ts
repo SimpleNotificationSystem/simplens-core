@@ -51,6 +51,7 @@ import {
     displayServiceStatus,
     setupSslCertificates,
     getSslManualCommands,
+    reloadNginxConfiguration,
 } from './services.js';
 
 const program = new Command();
@@ -505,6 +506,7 @@ async function main() {
             await generateNginxConfig(targetDir, setupOptions.basePath, {
                 enableSsl: setupOptions.enableSsl,
                 domain: setupOptions.sslDomain,
+                sslMode: setupOptions.enableSsl ? 'bootstrap' : 'final',
             });
         }
 
@@ -573,6 +575,16 @@ async function main() {
                     composeFile: 'docker-compose.infra.yaml',
                     domain: setupOptions.sslDomain,
                     email: setupOptions.sslEmail,
+                });
+
+                await generateNginxConfig(targetDir, setupOptions.basePath, {
+                    enableSsl: true,
+                    domain: setupOptions.sslDomain,
+                    sslMode: 'final',
+                });
+
+                await reloadNginxConfiguration(targetDir, {
+                    composeFile: 'docker-compose.infra.yaml',
                 });
             }
 

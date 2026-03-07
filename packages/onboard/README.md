@@ -89,7 +89,7 @@ This mode:
 - **Auto-generates placeholder credentials** for plugins
 - **Auto-generates version values** for CORE_VERSION and DASHBOARD_VERSION
 - All other options are optional with sensible defaults
-- Services are not auto-started (use `docker-compose up -d` manually)
+- Services are not auto-started (use `docker compose up -d` manually; fallback: `docker-compose up -d`)
 
 **⚠️ IMPORTANT**: Auto-generated credentials are **NOT secure for production**. After setup completes, you **must** update the following in your `.env` file:
 - `NS_API_KEY` - API authentication key
@@ -234,7 +234,7 @@ npx @simplens/onboard \
 
 # No prompts - everything configured via CLI
 # Services not auto-started in full mode
-# Start manually with: docker-compose up -d
+# Start manually with: docker compose up -d
 ```
 
 ### CI/CD Pipeline Setup
@@ -250,7 +250,7 @@ npx @simplens/onboard \
 
 # Then start services in CI:
 cd /app/simplens
-docker-compose up -d
+docker compose up -d
 ```
 
 ### Full Setup With SSL Automation
@@ -315,7 +315,7 @@ When using `--full` mode, credentials are auto-generated. To update them:
    ADMIN_PASSWORD=YourSecurePassword123!
    ```
 3. For plugin credentials, update the values at the end of the `.env` file
-4. Restart services: `docker-compose restart`
+4. Restart services: `docker compose restart` (fallback: `docker-compose restart`)
 
 **Tip**: Generate secure random values with:
 ```bash

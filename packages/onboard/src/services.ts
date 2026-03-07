@@ -19,6 +19,44 @@ async function execDockerCompose(args: string[], cwd: string): Promise<void> {
     }
 }
 
+async function waitForContainerRunning(
+    containerName: string,
+    timeoutMs: number = 60_000,
+    intervalMs: number = 1_500
+): Promise<void> {
+    const maxRetries = Math.ceil(timeoutMs / intervalMs);
+
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            const { stdout } = await execa('docker', [
+                'ps',
+                '--filter',
+                `name=^${containerName}$`,
+                '--filter',
+                'status=running',
+                '--format',
+                '{{.Names}}',
+            ]);
+
+            const running = stdout
+                .split('\n')
+                .map(line => line.trim())
+                .filter(Boolean)
+                .includes(containerName);
+
+            if (running) {
+                return;
+            }
+        } catch {
+            // continue polling
+        }
+
+        await sleep(intervalMs);
+    }
+
+    throw new Error(`Container '${containerName}' did not reach running state within ${timeoutMs}ms`);
+}
+
 type ComposeFile = 'docker-compose.yaml' | 'docker-compose.infra.yaml';
 
 function withComposeFile(args: string[], composeFile?: ComposeFile): string[] {
@@ -45,11 +83,12 @@ export async function promptStartServices(): Promise<boolean> {
 }
 
 /**
- * Starts infrastructure services using docker-compose.
- * Runs `docker-compose -f docker-compose.infra.yaml up -d` in the target directory.
+ * Starts infrastructure services using docker compose.
+ * Runs `docker compose -f docker-compose.infra.yaml up -d` first,
+ * then falls back to `docker-compose -f docker-compose.infra.yaml up -d`.
  *
  * @param targetDir - Directory containing docker-compose.infra.yaml
- * @throws Error if docker-compose command fails
+ * @throws Error if both docker compose and docker-compose commands fail
  */
 export async function startInfraServices(targetDir: string): Promise<void> {
     logInfo('Starting infrastructure services...');
@@ -163,6 +202,8 @@ export async function setupSslCertificates(targetDir: string, options: {
 
     s.start('Ensuring nginx/certbot services are running...');
     await execDockerCompose(composeArgs(['up', '-d', 'nginx', 'certbot']), targetDir);
+    await waitForContainerRunning('nginx');
+    await waitForContainerRunning('certbot');
     s.stop('Nginx and certbot services are running');
 
     s.start('Requesting initial certificate from Let\'s Encrypt...');
@@ -195,6 +236,14 @@ export async function setupSslCertificates(targetDir: string, options: {
     s.start('Starting automatic certificate renewal service...');
     await execDockerCompose(composeArgs(['up', '-d', 'certbot-renew']), targetDir);
     s.stop('Certificate auto-renewal service started');
+}
+
+export async function reloadNginxConfiguration(targetDir: string, options: {
+    composeFile: ComposeFile;
+}): Promise<void> {
+    const composeArgs = (args: string[]) => withComposeFile(args, options.composeFile);
+    await execDockerCompose(composeArgs(['exec', '-T', 'nginx', 'nginx', '-t']), targetDir);
+    await execDockerCompose(composeArgs(['exec', '-T', 'nginx', 'nginx', '-s', 'reload']), targetDir);
 }
 
 /**
