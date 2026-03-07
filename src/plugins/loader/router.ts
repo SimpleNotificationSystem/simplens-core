@@ -154,6 +154,8 @@ export async function sendWithFallback<T extends BaseNotification>(
         };
     }
 
+    const defaultProviderId = PluginRegistry.getDefaultProviderId(channel);
+
     // Try default provider
     const result = await defaultProvider.send(notification);
 
@@ -167,7 +169,12 @@ export async function sendWithFallback<T extends BaseNotification>(
     }
 
     // Try fallback provider
-    const fallbackResult = await tryFallback(channel, notification, result.error);
+    const fallbackResult = await tryFallback(
+        channel,
+        notification,
+        result.error,
+        defaultProviderId
+    );
     return fallbackResult ?? result;
 }
 
