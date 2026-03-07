@@ -127,8 +127,11 @@ export const APP_COMPOSE_TEMPLATE = `services:
       - 3000:3000
     env_file:
       - .env
+    environment:
+      SIMPLENS_CONFIG_PATH: \${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}
     volumes:
       - plugin-data:/app/.plugins
+      - logs-data:/app/logs
       - ./simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/api/server.js" ]
     restart: unless-stopped
@@ -143,6 +146,8 @@ export const APP_COMPOSE_TEMPLATE = `services:
     image: ghcr.io/simplenotificationsystem/simplens-core:\${CORE_VERSION:-latest}
     env_file:
       - .env
+    volumes:
+      - logs-data:/app/logs
     command: [ "node", "dist/workers/worker.js" ]
     restart: unless-stopped
 
@@ -150,8 +155,11 @@ export const APP_COMPOSE_TEMPLATE = `services:
     image: ghcr.io/simplenotificationsystem/simplens-core:\${CORE_VERSION:-latest}
     env_file:
       - .env
+    environment:
+      SIMPLENS_CONFIG_PATH: \${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}
     volumes:
       - plugin-data:/app/.plugins
+      - logs-data:/app/logs
       - ./simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/processors/unified/unified.processor.js" ]
     depends_on:
@@ -163,6 +171,8 @@ export const APP_COMPOSE_TEMPLATE = `services:
     image: ghcr.io/simplenotificationsystem/simplens-core:\${CORE_VERSION:-latest}
     env_file:
       - .env
+    volumes:
+      - logs-data:/app/logs
     command: [ "node", "dist/processors/delayed/delayed.processor.js" ]
     restart: unless-stopped
 
@@ -170,6 +180,8 @@ export const APP_COMPOSE_TEMPLATE = `services:
     image: ghcr.io/simplenotificationsystem/simplens-core:\${CORE_VERSION:-latest}
     env_file:
       - .env
+    volumes:
+      - logs-data:/app/logs
     command: [ "node", "dist/workers/recovery/recovery.service.js" ]
     restart: unless-stopped
 
@@ -189,6 +201,7 @@ export const APP_COMPOSE_TEMPLATE = `services:
 
 volumes:
   plugin-data:
+  logs-data:
 
 networks:
   default:

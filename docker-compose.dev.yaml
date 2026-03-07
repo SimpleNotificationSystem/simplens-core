@@ -152,6 +152,7 @@ services:
     volumes:
       # Mount plugins directory for user-installed plugins (optional)
       - plugin-data:/app/.plugins
+      - logs-data:/app/logs
       - ./simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/api/server.js" ]
     depends_on:
@@ -190,6 +191,8 @@ services:
       OUTBOX_CLAIM_TIMEOUT_MS: ${OUTBOX_CLAIM_TIMEOUT_MS:-30000}
       LOKI_URL: http://loki:3100
       LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - logs-data:/app/logs
     command: [ "node", "dist/workers/worker.js" ]
     depends_on:
       mongo:
@@ -231,6 +234,7 @@ services:
     volumes:
       # Mount plugins directory for user-installed plugins (optional)
       - plugin-data:/app/.plugins
+      - logs-data:/app/logs
       - ./simplens.config.yaml:/app/simplens.config.yaml:ro
     depends_on:
       mongo:
@@ -264,6 +268,8 @@ services:
       # Logging
       LOKI_URL: http://loki:3100
       LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - logs-data:/app/logs
     command: [ "node", "dist/processors/delayed/delayed.processor.js" ]
     depends_on:
       mongo:
@@ -301,6 +307,8 @@ services:
       # Logging
       LOKI_URL: http://loki:3100
       LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - logs-data:/app/logs
     command: [ "node", "dist/workers/recovery/recovery.service.js" ]
     depends_on:
       mongo:
@@ -355,6 +363,7 @@ volumes:
   loki_data:
   grafana_data:
   plugin-data:
+  logs-data:
 
 
 networks:
