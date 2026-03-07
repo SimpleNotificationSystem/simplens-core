@@ -16,8 +16,20 @@ import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 async function tryFallback<T extends BaseNotification>(
     channel: string,
     notification: T,
-    primaryError: DeliveryResult['error']
+    primaryError: DeliveryResult['error'],
+    currentProviderId?: string
 ): Promise<DeliveryResult | null> {
+    const fallbackProviderId = PluginRegistry.getFallbackProviderId(channel);
+    if (!fallbackProviderId) {
+        logger.debug(`[ProviderRouter] No fallback provider for ${channel}, returning error`);
+        return null;
+    }
+
+    if (currentProviderId && fallbackProviderId === currentProviderId) {
+        logger.debug(`[ProviderRouter] Fallback provider is same as current provider (${currentProviderId}), skipping fallback`);
+        return null;
+    }
+
     const fallbackProvider = PluginRegistry.getFallbackProvider(channel);
 
     if (!fallbackProvider) {
@@ -125,7 +137,7 @@ export async function sendWithFallback<T extends BaseNotification>(
         }
 
         // Non-retryable failure - try fallback provider
-        const fallbackResult = await tryFallback(channel, notification, result.error);
+        const fallbackResult = await tryFallback(channel, notification, result.error, notification.provider);
         return fallbackResult ?? result;
     }
 
