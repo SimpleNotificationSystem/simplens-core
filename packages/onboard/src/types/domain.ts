@@ -52,6 +52,12 @@ export interface SetupOptions {
     targetDir: string;
     /** Dashboard base path (empty string means root) */
     basePath: string;
+    /** Whether SSL automation with Certbot is enabled */
+    enableSsl?: boolean;
+    /** Public domain for SSL certificate */
+    sslDomain?: string;
+    /** Registration email for Let's Encrypt */
+    sslEmail?: string;
 }
 
 /**

@@ -19,6 +19,15 @@ async function execDockerCompose(args: string[], cwd: string): Promise<void> {
     }
 }
 
+type ComposeFile = 'docker-compose.yaml' | 'docker-compose.infra.yaml';
+
+function withComposeFile(args: string[], composeFile?: ComposeFile): string[] {
+    if (!composeFile) {
+        return args;
+    }
+    return ['-f', composeFile, ...args];
+}
+
 /**
  * Prompts user whether to start the services immediately after setup.
  *
@@ -123,6 +132,69 @@ export async function startAppServices(targetDir: string): Promise<void> {
         s.error('Failed to start application services');
         throw error;
     }
+}
+
+export function getSslManualCommands(options: {
+    composeFile: ComposeFile;
+    domain: string;
+    email: string;
+}): string[] {
+    const composeFlag = options.composeFile === 'docker-compose.infra.yaml'
+        ? '-f docker-compose.infra.yaml '
+        : '';
+
+    return [
+        `docker compose ${composeFlag}up -d nginx certbot certbot-renew`,
+        `docker compose ${composeFlag}exec -T certbot certbot certonly --webroot -w /var/www/certbot --email ${options.email} --agree-tos --no-eff-email -d ${options.domain} --non-interactive`,
+        `docker compose ${composeFlag}exec -T nginx nginx -s reload`,
+        `docker compose ${composeFlag}up -d certbot-renew`,
+    ];
+}
+
+export async function setupSslCertificates(targetDir: string, options: {
+    composeFile: ComposeFile;
+    domain: string;
+    email: string;
+}): Promise<void> {
+    logInfo(`Setting up SSL certificate for ${options.domain}...`);
+
+    const s = spinner();
+    const composeArgs = (args: string[]) => withComposeFile(args, options.composeFile);
+
+    s.start('Ensuring nginx/certbot services are running...');
+    await execDockerCompose(composeArgs(['up', '-d', 'nginx', 'certbot']), targetDir);
+    s.stop('Nginx and certbot services are running');
+
+    s.start('Requesting initial certificate from Let\'s Encrypt...');
+    await execDockerCompose(
+        composeArgs([
+            'exec',
+            '-T',
+            'certbot',
+            'certbot',
+            'certonly',
+            '--webroot',
+            '-w',
+            '/var/www/certbot',
+            '--email',
+            options.email,
+            '--agree-tos',
+            '--no-eff-email',
+            '-d',
+            options.domain,
+            '--non-interactive',
+        ]),
+        targetDir
+    );
+    s.stop('Initial certificate issued');
+
+    s.start('Reloading nginx to apply certificates...');
+    await execDockerCompose(composeArgs(['exec', '-T', 'nginx', 'nginx', '-s', 'reload']), targetDir);
+    s.stop('Nginx reloaded');
+
+    s.start('Starting automatic certificate renewal service...');
+    await execDockerCompose(composeArgs(['up', '-d', 'certbot-renew']), targetDir);
+    s.stop('Certificate auto-renewal service started');
 }
 
 /**

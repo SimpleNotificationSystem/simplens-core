@@ -219,3 +219,60 @@ export const APP_NGINX_SERVICE_TEMPLATE = `  nginx:
       - api
       - dashboard
     restart: unless-stopped`;
+
+export const APP_NGINX_SSL_SERVICE_TEMPLATE = `  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "./nginx.conf:/etc/nginx/conf.d/default.conf:ro"
+      - certbot-etc:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    depends_on:
+      - api
+      - dashboard
+    restart: unless-stopped`;
+
+export const APP_CERTBOT_SERVICES_TEMPLATE = `  certbot:
+    image: certbot/certbot:latest
+    container_name: certbot
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    command: sh -c "trap exit TERM; while :; do sleep 86400; done"
+    restart: unless-stopped
+
+  certbot-renew:
+    image: docker:cli
+    container_name: certbot-renew
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - certbot
+      - nginx
+    command: sh -c "while :; do sleep 12h; docker exec certbot certbot renew --webroot -w /var/www/certbot --quiet && docker exec nginx nginx -s reload || true; done"
+    restart: unless-stopped`;
+
+export const INFRA_CERTBOT_SERVICES_TEMPLATE = `  certbot:
+    image: certbot/certbot:latest
+    container_name: certbot
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    command: sh -c "trap exit TERM; while :; do sleep 86400; done"
+    restart: unless-stopped
+
+  certbot-renew:
+    image: docker:cli
+    container_name: certbot-renew
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - certbot
+      - nginx
+    command: sh -c "while :; do sleep 12h; docker exec certbot certbot renew --webroot -w /var/www/certbot --quiet && docker exec nginx nginx -s reload || true; done"
+    restart: unless-stopped`;
+
+export const INFRA_CERTBOT_VOLUMES = ['certbot-etc', 'certbot-www'] as const;
