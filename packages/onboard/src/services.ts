@@ -242,8 +242,8 @@ export async function displayServiceStatus(): Promise<void> {
         console.log('');
 
         printCommandHints('Helpful commands', [
-            'docker-compose logs -f',
-            'docker-compose down',
+            'docker compose logs -f',
+            'docker compose down',
         ]);
         console.log(`${divider('green', '═')}\n`);
     } catch (error) {

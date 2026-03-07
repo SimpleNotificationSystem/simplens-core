@@ -329,7 +329,12 @@ async function promptSetupOptions(options: any): Promise<OnboardSetupOptions> {
 
     if (enableSslValue) {
         if (typeof options.sslDomain === 'string') {
-            sslDomainValue = options.sslDomain.trim().toLowerCase();
+            const normalizedDomain = options.sslDomain.trim().toLowerCase();
+            const domainValidation = validatePublicDomain(normalizedDomain);
+            if (domainValidation !== true) {
+                throw new Error(`Invalid --ssl-domain value: ${domainValidation}`);
+            }
+            sslDomainValue = normalizedDomain;
         } else if (!isFullMode) {
             const domainAnswer = await text({
                 message: 'Public domain to secure (example: app.example.com):',
@@ -344,7 +349,12 @@ async function promptSetupOptions(options: any): Promise<OnboardSetupOptions> {
         }
 
         if (typeof options.sslEmail === 'string') {
-            sslEmailValue = options.sslEmail.trim();
+            const normalizedEmail = options.sslEmail.trim();
+            const emailValidation = validateEmailAddress(normalizedEmail);
+            if (emailValidation !== true) {
+                throw new Error(`Invalid --ssl-email value: ${emailValidation}`);
+            }
+            sslEmailValue = normalizedEmail;
         } else if (!isFullMode) {
             const emailAnswer = await text({
                 message: 'Email for Let\'s Encrypt registration:',
@@ -572,9 +582,9 @@ async function main() {
             log.info('Services not started. You can start them later with:');
             const commands: string[] = [];
             if (selectedInfraServices.length > 0) {
-                commands.push('docker-compose -f docker-compose.infra.yaml up -d');
+                commands.push('docker compose -f docker-compose.infra.yaml up -d');
             }
-            commands.push('docker-compose up -d');
+            commands.push('docker compose up -d');
             if (setupOptions.enableSsl && setupOptions.sslDomain && setupOptions.sslEmail) {
                 commands.push(...getSslManualCommands({
                     composeFile: 'docker-compose.infra.yaml',
