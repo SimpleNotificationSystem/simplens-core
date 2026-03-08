@@ -33,6 +33,13 @@ export const UUIDV4Schema = z.custom<UUID>(
 
 export const variablesSchema = z.record(z.string(), z.string());
 
+const hasNonEmptyTemplateIds = (templateIds?: string[]) =>
+  Array.isArray(templateIds) && templateIds.length > 0;
+
+const hasNonEmptyContent = (
+  content?: Record<string, Record<string, string>>,
+) => !!content && Object.keys(content).length > 0;
+
 // ============================================================================
 // BASE NOTIFICATION SCHEMA (Channel-Agnostic)
 // ============================================================================
@@ -271,7 +278,7 @@ export const baseNotificationRequestSchema = z
     client_id: UUIDV4Schema,
     client_name: z.string().optional(),
     template_id: z.array(z.string()).optional(),
-    channel: z.array(z.string()),
+    channel: z.array(z.string()).min(1, "At least one channel is required."),
     provider: z.array(z.string()).optional(),
     recipient: z.record(z.string(), z.unknown()),
     content: z.record(z.string(), z.record(z.string(), z.string())).optional(),
@@ -279,17 +286,21 @@ export const baseNotificationRequestSchema = z
     scheduled_at: z.coerce.date().optional(),
     webhook_url: z.url(),
   })
-  .refine(
-    (data) => {
-      if (data.template_id || data.content) {
-        return true;
+  .superRefine((data, ctx) => {
+    if (
+      !hasNonEmptyTemplateIds(data.template_id) &&
+      !hasNonEmptyContent(data.content)
+    ) {
+      for (const path of ["template_id", "content"] as const) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "Either a non-empty template_id array or non-empty content must be present.",
+          path: [path],
+        });
       }
-    },
-    {
-      message: "Either template_id array or content must be present.",
-      path: ["template_id", "content"],
-    },
-  );
+    }
+  });
 
 /**
  * Batch notification request - channel-agnostic
@@ -298,7 +309,7 @@ export const baseBatchNotificationRequestSchema = z
   .object({
     client_id: UUIDV4Schema,
     client_name: z.string().optional(),
-    channel: z.array(z.string()),
+    channel: z.array(z.string()).min(1, "At least one channel is required."),
     template_id: z.array(z.string()).optional(),
     provider: z
       .union([z.string(), z.array(z.string().nullable().optional())])
@@ -310,7 +321,7 @@ export const baseBatchNotificationRequestSchema = z
         user_id: z.string(),
         variables: variablesSchema.optional(),
       }),
-    ),
+    ).min(1, "At least one recipient is required."),
     scheduled_at: z.coerce.date().optional(),
     webhook_url: z.url(),
   })
@@ -330,17 +341,21 @@ export const baseBatchNotificationRequestSchema = z
       path: ["recipients"],
     },
   )
-  .refine(
-    (data) => {
-      if (data.template_id || data.content) {
-        return true;
+  .superRefine((data, ctx) => {
+    if (
+      !hasNonEmptyTemplateIds(data.template_id) &&
+      !hasNonEmptyContent(data.content)
+    ) {
+      for (const path of ["template_id", "content"] as const) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "Either a non-empty template_id array or non-empty content must be present.",
+          path: [path],
+        });
       }
-    },
-    {
-      message: "Either template_id array or content must be present.",
-      path: ["template_id", "content"],
-    },
-  );
+    }
+  });
 
 /*
 Notification Template Request Schema

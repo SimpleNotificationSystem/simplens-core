@@ -1,4 +1,11 @@
-import { APP_COMPOSE_TEMPLATE, APP_NGINX_SERVICE_TEMPLATE } from './templates.js';
+import {
+    APP_COMPOSE_TEMPLATE,
+    APP_NGINX_SERVICE_TEMPLATE,
+    APP_NGINX_SSL_SERVICE_TEMPLATE,
+    APP_CERTBOT_SERVICES_TEMPLATE,
+    INFRA_CERTBOT_SERVICES_TEMPLATE,
+    INFRA_CERTBOT_VOLUMES,
+} from './templates.js';
 import { writeFile, logInfo, logSuccess } from './utils.js';
 import { multiselect } from '@clack/prompts';
 import { handleCancel, spinner } from './ui.js';
@@ -8,7 +15,7 @@ import type { InfraService } from './types/domain.js';
 const INFRA_SERVICES: InfraService[] = [
     { name: 'MongoDB (Database)', value: 'mongo', checked: true },
     { name: 'Kafka (Message Queue)', value: 'kafka', checked: true },
-    { name: 'Kafka UI (Dashboard)', value: 'kafka-ui', checked: true },
+    { name: 'Kafka UI (Dashboard)', value: 'kafka-ui', checked: false },
     { name: 'Redis (Cache)', value: 'redis', checked: true },
     { name: 'Nginx (Reverse Proxy)', value: 'nginx', checked: false },
     { name: 'Loki (Log Aggregation)', value: 'loki', checked: false },
@@ -31,9 +38,15 @@ export async function promptInfraServices(): Promise<string[]> {
  */
 export async function promptInfraServicesWithBasePath(options: {
     allowNginx: boolean;
+    defaultNginx?: boolean;
 }): Promise<string[]> {
     const choices = options.allowNginx
-        ? INFRA_SERVICES
+        ? INFRA_SERVICES.map(service => {
+            if (service.value === 'nginx') {
+                return { ...service, checked: options.defaultNginx === true };
+            }
+            return service;
+        })
         : INFRA_SERVICES.filter(service => service.value !== 'nginx');
 
     const message = options.allowNginx
@@ -179,6 +192,18 @@ const SERVICE_CHUNKS: Record<string, string> = {
     restart: unless-stopped`,
 };
 
+const NGINX_INFRA_SSL_SERVICE_CHUNK = `  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "./nginx.conf:/etc/nginx/conf.d/default.conf:ro"
+      - certbot-etc:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    restart: unless-stopped`;
+
 /**
  * Service-to-volumes mapping
  */
@@ -195,7 +220,10 @@ const SERVICE_VOLUMES: Record<string, string[]> = {
 /**
  * Build docker-compose content from selected services
  */
-function buildInfraCompose(selectedServices: string[]): string {
+function buildInfraCompose(
+    selectedServices: string[],
+    options: { includeSsl?: boolean } = {}
+): string {
     // Header
     const header = `# ============================================
 # SimpleNS Infrastructure Services
@@ -212,8 +240,16 @@ services:
     const serviceBlocks: string[] = [];
     for (const service of selectedServices) {
         if (SERVICE_CHUNKS[service]) {
-            serviceBlocks.push(SERVICE_CHUNKS[service]);
+            if (service === 'nginx' && options.includeSsl === true) {
+                serviceBlocks.push(NGINX_INFRA_SSL_SERVICE_CHUNK);
+            } else {
+                serviceBlocks.push(SERVICE_CHUNKS[service]);
+            }
         }
+    }
+
+    if (options.includeSsl === true) {
+        serviceBlocks.push(INFRA_CERTBOT_SERVICES_TEMPLATE);
     }
     
     // Collect volumes for selected services
@@ -221,6 +257,12 @@ services:
     for (const service of selectedServices) {
         const volumes = SERVICE_VOLUMES[service] || [];
         volumes.forEach(v => volumeSet.add(v));
+    }
+
+    if (options.includeSsl === true) {
+        for (const volumeName of INFRA_CERTBOT_VOLUMES) {
+            volumeSet.add(volumeName);
+        }
     }
     
     // Build volumes section
@@ -248,13 +290,14 @@ services:
  */
 export async function generateInfraCompose(
     targetDir: string,
-    selectedServices: string[]
+    selectedServices: string[],
+    options: { includeSsl?: boolean } = {}
 ): Promise<void> {
     const s = spinner();
     s.start('Generating docker-compose.infra.yaml...');
 
     // Build compose content from service chunks
-    const infraContent = buildInfraCompose(selectedServices);
+    const infraContent = buildInfraCompose(selectedServices, options);
 
     // Write infrastructure compose file
     const infraPath = path.join(targetDir, 'docker-compose.infra.yaml');
@@ -266,17 +309,35 @@ export async function generateInfraCompose(
  * Build app docker-compose content.
  * Optionally inject nginx reverse-proxy service before the volumes section.
  */
-export function buildAppComposeContent(includeNginx: boolean): string {
-    if (!includeNginx) {
-        return APP_COMPOSE_TEMPLATE;
-    }
-
+export function buildAppComposeContent(
+    includeNginx: boolean,
+    options: { includeSsl?: boolean } = {}
+): string {
+    let content = APP_COMPOSE_TEMPLATE;
+    const includeSsl = options.includeSsl === true;
+    const shouldIncludeNginx = includeNginx || includeSsl;
     const marker = '\nvolumes:';
-    if (!APP_COMPOSE_TEMPLATE.includes(marker)) {
-        return APP_COMPOSE_TEMPLATE;
+
+    if (!content.includes(marker)) {
+        return content;
     }
 
-    return APP_COMPOSE_TEMPLATE.replace(marker, `\n${APP_NGINX_SERVICE_TEMPLATE}\n${marker}`);
+    if (shouldIncludeNginx) {
+        const nginxBlock = includeSsl
+            ? APP_NGINX_SSL_SERVICE_TEMPLATE
+            : APP_NGINX_SERVICE_TEMPLATE;
+        content = content.replace(marker, `\n${nginxBlock}\n${marker}`);
+    }
+
+    if (includeSsl) {
+        content = content.replace(marker, `\n${APP_CERTBOT_SERVICES_TEMPLATE}\n${marker}`);
+        content = content.replace(
+            '\nvolumes:\n  plugin-data:',
+            '\nvolumes:\n  certbot-etc:\n  certbot-www:\n  plugin-data:'
+        );
+    }
+
+    return content;
 }
 
 /**
@@ -284,12 +345,14 @@ export function buildAppComposeContent(includeNginx: boolean): string {
  */
 export async function writeAppCompose(
     targetDir: string,
-    options: { includeNginx?: boolean } = {}
+    options: { includeNginx?: boolean; includeSsl?: boolean } = {}
 ): Promise<void> {
     const s = spinner();
     s.start('Generating docker-compose.yaml...');
     const appPath = path.join(targetDir, 'docker-compose.yaml');
-    const appContent = buildAppComposeContent(options.includeNginx === true);
+    const appContent = buildAppComposeContent(options.includeNginx === true, {
+        includeSsl: options.includeSsl === true,
+    });
     await writeFile(appPath, appContent);
     s.stop('Generated docker-compose.yaml');
 }
@@ -299,20 +362,21 @@ export async function writeAppCompose(
  */
 export async function generateNginxConfig(
     targetDir: string,
-    basePath: string
+    basePath: string,
+    options: { enableSsl?: boolean; domain?: string; sslMode?: 'bootstrap' | 'final'; filename?: string } = {}
 ): Promise<void> {
+    const outputFilename = options.filename ?? 'nginx.conf';
     const s = spinner();
-    s.start('Generating nginx.conf...');
+    s.start(`Generating ${outputFilename}...`);
 
     // Normalize basePath (remove leading/trailing slashes for template)
     const normalizedPath = basePath.trim().replace(/^\/|\/$/g, '');
     const hasBasePath = normalizedPath.length > 0;
+    const enableSsl = options.enableSsl === true;
+    const domain = options.domain?.trim() || 'localhost';
+    const sslMode = options.sslMode ?? 'final';
 
-    // Template for nginx.conf
-    const nginxTemplate = `server {
-    listen 80;
-    server_name localhost;
-
+    const proxyRoutes = `
     location /api {
         proxy_pass http://api:3000;
         proxy_http_version 1.1;
@@ -395,10 +459,57 @@ ${hasBasePath ? `
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 `}
+`;
+
+    const rootRedirectPath = hasBasePath ? `/${normalizedPath}` : '/';
+
+    const nginxTemplate = enableSsl
+        ? sslMode === 'bootstrap'
+            ? `server {
+    listen 80;
+    server_name ${domain};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+${proxyRoutes}
+}
+`
+            : `server {
+    listen 80;
+    server_name ${domain};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name ${domain};
+
+    ssl_certificate /etc/letsencrypt/live/${domain}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${domain}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    location = / {
+        return 302 ${rootRedirectPath};
+    }
+    ${proxyRoutes}
+}
+`
+        : `server {
+    listen 80;
+    server_name localhost;${proxyRoutes}
 }
 `;
 
-    const nginxPath = path.join(targetDir, 'nginx.conf');
+    const nginxPath = path.join(targetDir, outputFilename);
     await writeFile(nginxPath, nginxTemplate);
-    s.stop(`Generated nginx.conf${hasBasePath ? ` with base path: /${normalizedPath}` : ' (root path)'}`);
+    const sslLabel = enableSsl ? `, SSL domain: ${domain}` : '';
+    s.stop(`Generated ${outputFilename}${hasBasePath ? ` with base path: /${normalizedPath}` : ' (root path)'}${sslLabel}`);
 }

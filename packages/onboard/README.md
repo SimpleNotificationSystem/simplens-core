@@ -13,6 +13,7 @@
 - 🐧 **OS-Aware Configuration** - Automatically detects and configures for Windows, Linux, or macOS
 - ⚙️ **Smart Environment Config** - Default or interactive mode for environment variables
 - 🔌 **Plugin Management** - Browse and install official SimpleNS plugins
+- 🔐 **Optional SSL Setup** - Automatic Let's Encrypt setup with Dockerized Certbot (Windows/macOS/Linux)
 - 🚀 **Service Orchestration** - Automatic health checks and sequential service startup
 - 📊 **Service Dashboard** - View all running services and their access URLs
 
@@ -88,7 +89,7 @@ This mode:
 - **Auto-generates placeholder credentials** for plugins
 - **Auto-generates version values** for CORE_VERSION and DASHBOARD_VERSION
 - All other options are optional with sensible defaults
-- Services are not auto-started (use `docker-compose up -d` manually)
+- Services are not auto-started (use `docker compose up -d` manually; fallback: `docker-compose up -d`)
 
 **⚠️ IMPORTANT**: Auto-generated credentials are **NOT secure for production**. After setup completes, you **must** update the following in your `.env` file:
 - `NS_API_KEY` - API authentication key
@@ -110,6 +111,9 @@ The CLI will display a security notice with all credentials that need to be upda
 | `--core-version <version>` | Override `CORE_VERSION` in generated `.env` (primarily for `--full`) | `latest` |
 | `--dashboard-version <version>` | Override `DASHBOARD_VERSION` in generated `.env` (primarily for `--full`) | `latest` |
 | `--plugin [plugins...]` | Plugins to install (e.g., `@simplens/mock @simplens/nodemailer-gmail`) | Prompted |
+| `--ssl` | Enable optional SSL automation with Certbot | `false` |
+| `--ssl-domain <domain>` | Public domain for SSL cert (required with `--ssl` in `--full`) | Prompted |
+| `--ssl-email <email>` | Email for Let's Encrypt registration (required with `--ssl` in `--full`) | Prompted |
 | `--no-output` | Suppress all console output (silent mode) | `false` |
 
 ### Valid Infrastructure Services
@@ -118,7 +122,7 @@ The CLI will display a security notice with all credentials that need to be upda
 - `kafka` - Apache Kafka message queue
 - `kafka-ui` - Kafka UI dashboard (optional)
 - `redis` - Redis cache
-- `nginx` - Nginx reverse proxy (optional, Required only is BASE_PATH is configured)
+- `nginx` - Nginx reverse proxy (optional, Required only is BASE_PATH or SSL is configured)
 - `loki` - Loki log aggregation (optional)
 - `grafana` - Grafana observability dashboard (optional)
 
@@ -156,12 +160,18 @@ The CLI will display a security notice with all credentials that need to be upda
    - Start application services
    - Display service URLs and status
 
+6. **Optional SSL Automation** (if enabled)
+   - Auto-enables Nginx if required
+   - Issues cert via Dockerized Certbot (`http-01` webroot challenge)
+   - Configures auto-renew service and Nginx reload
+
 ## Generated Files
 
 - `docker-compose.infra.yaml` - Infrastructure services (if `--infra` used)
 - `docker-compose.yaml` - Application services
 - `.env` - Environment variables and credentials
 - `simplens.config.yaml` - Plugin configuration
+- `nginx.conf` - Generated reverse proxy config (HTTP/HTTPS based on options)
 
 ## Service URLs
 
@@ -224,7 +234,7 @@ npx @simplens/onboard \
 
 # No prompts - everything configured via CLI
 # Services not auto-started in full mode
-# Start manually with: docker-compose up -d
+# Start manually with: docker compose up -d
 ```
 
 ### CI/CD Pipeline Setup
@@ -240,8 +250,24 @@ npx @simplens/onboard \
 
 # Then start services in CI:
 cd /app/simplens
-docker-compose up -d
+docker compose up -d
 ```
+
+### Full Setup With SSL Automation
+
+```bash
+npx @simplens/onboard \
+  --full \
+  --infra mongo kafka redis \
+  --env default \
+  --ssl \
+  --ssl-domain app.example.com \
+  --ssl-email ops@example.com
+```
+
+Notes:
+- Your domain DNS must point to the host running onboarding.
+- Ports 80 and 443 must be publicly reachable for Let's Encrypt validation.
 
 ### Silent Mode (No Console Output)
 
@@ -289,7 +315,7 @@ When using `--full` mode, credentials are auto-generated. To update them:
    ADMIN_PASSWORD=YourSecurePassword123!
    ```
 3. For plugin credentials, update the values at the end of the `.env` file
-4. Restart services: `docker-compose restart`
+4. Restart services: `docker compose restart` (fallback: `docker-compose restart`)
 
 **Tip**: Generate secure random values with:
 ```bash

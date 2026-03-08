@@ -1,11 +1,15 @@
 {
   "name": "@simplens/onboard",
-  "version": "1.0.5",
+  "version": "1.0.10",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
     "simplens-onboard": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",

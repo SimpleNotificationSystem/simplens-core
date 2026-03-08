@@ -8,6 +8,7 @@ services:
       - .env
     volumes:
       - plugin-data:/app/.plugins
+      - logs-data:/app/logs
       - ./simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/api/server.js" ]
     networks:
@@ -24,6 +25,8 @@ services:
     image: ghcr.io/simplenotificationsystem/simplens-core:latest
     env_file:
       - .env
+    volumes:
+      - logs-data:/app/logs
     command: [ "node", "dist/workers/worker.js" ]
     networks:
       - simplens
@@ -35,6 +38,7 @@ services:
       - .env
     volumes:
       - plugin-data:/app/.plugins
+      - logs-data:/app/logs
       - ./simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/processors/unified/unified.processor.js" ]
     depends_on:
@@ -48,6 +52,8 @@ services:
     image: ghcr.io/simplenotificationsystem/simplens-core:latest
     env_file:
       - .env
+    volumes:
+      - logs-data:/app/logs
     command: [ "node", "dist/processors/delayed/delayed.processor.js" ]
     networks:
       - simplens
@@ -57,6 +63,8 @@ services:
     image: ghcr.io/simplenotificationsystem/simplens-core:latest
     env_file:
       - .env
+    volumes:
+      - logs-data:/app/logs
     command: [ "node", "dist/workers/recovery/recovery.service.js" ]
     networks:
       - simplens
@@ -80,8 +88,8 @@ services:
 
 volumes:
   plugin-data:
+  logs-data:
 
 networks:
   simplens:
     driver: bridge
-

@@ -4,7 +4,9 @@ import {
     checkDockerRunning,
     detectOS,
     validatePrerequisites,
-    validateEnvValue
+    validateEnvValue,
+    validatePublicDomain,
+    validateEmailAddress
 } from '../validators.js';
 import {
     DockerNotInstalledError,
@@ -190,6 +192,30 @@ describe('validators', () => {
             it('should accept valid non-special values', () => {
                 expect(validateEnvValue('SOME_VAR', 'some-value')).toBe(true);
             });
+        });
+    });
+
+    describe('validatePublicDomain', () => {
+        it('accepts valid public domains', () => {
+            expect(validatePublicDomain('example.com')).toBe(true);
+            expect(validatePublicDomain('app.example.com')).toBe(true);
+        });
+
+        it('rejects urls or malformed values', () => {
+            expect(validatePublicDomain('https://example.com')).not.toBe(true);
+            expect(validatePublicDomain('example')).not.toBe(true);
+            expect(validatePublicDomain('example.com/path')).not.toBe(true);
+        });
+    });
+
+    describe('validateEmailAddress', () => {
+        it('accepts valid email addresses', () => {
+            expect(validateEmailAddress('admin@example.com')).toBe(true);
+        });
+
+        it('rejects invalid email values', () => {
+            expect(validateEmailAddress('admin@')).not.toBe(true);
+            expect(validateEmailAddress('not-an-email')).not.toBe(true);
         });
     });
 });

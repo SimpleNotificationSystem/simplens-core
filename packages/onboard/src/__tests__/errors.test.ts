@@ -86,6 +86,7 @@ describe('error types', () => {
         it('should have default troubleshooting', () => {
             const error = new DockerComposeError('operation');
 
+            expect(error.troubleshooting).toContain('docker compose logs');
             expect(error.troubleshooting).toContain('docker-compose logs');
         });
     });

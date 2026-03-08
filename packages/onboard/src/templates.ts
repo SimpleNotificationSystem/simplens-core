@@ -127,8 +127,11 @@ export const APP_COMPOSE_TEMPLATE = `services:
       - 3000:3000
     env_file:
       - .env
+    environment:
+      SIMPLENS_CONFIG_PATH: \${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}
     volumes:
       - plugin-data:/app/.plugins
+      - logs-data:/app/logs
       - ./simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/api/server.js" ]
     restart: unless-stopped
@@ -143,6 +146,8 @@ export const APP_COMPOSE_TEMPLATE = `services:
     image: ghcr.io/simplenotificationsystem/simplens-core:\${CORE_VERSION:-latest}
     env_file:
       - .env
+    volumes:
+      - logs-data:/app/logs
     command: [ "node", "dist/workers/worker.js" ]
     restart: unless-stopped
 
@@ -150,8 +155,11 @@ export const APP_COMPOSE_TEMPLATE = `services:
     image: ghcr.io/simplenotificationsystem/simplens-core:\${CORE_VERSION:-latest}
     env_file:
       - .env
+    environment:
+      SIMPLENS_CONFIG_PATH: \${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}
     volumes:
       - plugin-data:/app/.plugins
+      - logs-data:/app/logs
       - ./simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/processors/unified/unified.processor.js" ]
     depends_on:
@@ -163,6 +171,8 @@ export const APP_COMPOSE_TEMPLATE = `services:
     image: ghcr.io/simplenotificationsystem/simplens-core:\${CORE_VERSION:-latest}
     env_file:
       - .env
+    volumes:
+      - logs-data:/app/logs
     command: [ "node", "dist/processors/delayed/delayed.processor.js" ]
     restart: unless-stopped
 
@@ -170,6 +180,8 @@ export const APP_COMPOSE_TEMPLATE = `services:
     image: ghcr.io/simplenotificationsystem/simplens-core:\${CORE_VERSION:-latest}
     env_file:
       - .env
+    volumes:
+      - logs-data:/app/logs
     command: [ "node", "dist/workers/recovery/recovery.service.js" ]
     restart: unless-stopped
 
@@ -189,6 +201,7 @@ export const APP_COMPOSE_TEMPLATE = `services:
 
 volumes:
   plugin-data:
+  logs-data:
 
 networks:
   default:
@@ -206,3 +219,64 @@ export const APP_NGINX_SERVICE_TEMPLATE = `  nginx:
       - api
       - dashboard
     restart: unless-stopped`;
+
+export const APP_NGINX_SSL_SERVICE_TEMPLATE = `  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "./nginx.conf:/etc/nginx/conf.d/default.conf:ro"
+      - certbot-etc:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    depends_on:
+      - api
+      - dashboard
+    restart: unless-stopped`;
+
+export const APP_CERTBOT_SERVICES_TEMPLATE = `  certbot:
+    image: certbot/certbot:latest
+    container_name: certbot
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["trap 'exit 0' TERM; while true; do sleep 86400; done"]
+    restart: unless-stopped
+
+  certbot-renew:
+    image: docker:cli
+    container_name: certbot-renew
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - certbot
+      - nginx
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["while true; do sleep 43200; docker exec certbot certbot renew --webroot -w /var/www/certbot --quiet && docker exec nginx nginx -s reload || true; done"]
+    restart: unless-stopped`;
+
+export const INFRA_CERTBOT_SERVICES_TEMPLATE = `  certbot:
+    image: certbot/certbot:latest
+    container_name: certbot
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["trap 'exit 0' TERM; while true; do sleep 86400; done"]
+    restart: unless-stopped
+
+  certbot-renew:
+    image: docker:cli
+    container_name: certbot-renew
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - certbot
+      - nginx
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["while true; do sleep 43200; docker exec certbot certbot renew --webroot -w /var/www/certbot --quiet && docker exec nginx nginx -s reload || true; done"]
+    restart: unless-stopped`;
+
+export const INFRA_CERTBOT_VOLUMES = ['certbot-etc', 'certbot-www'] as const;

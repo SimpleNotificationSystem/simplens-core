@@ -16,8 +16,20 @@ import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 async function tryFallback<T extends BaseNotification>(
     channel: string,
     notification: T,
-    primaryError: DeliveryResult['error']
+    primaryError: DeliveryResult['error'],
+    currentProviderId?: string
 ): Promise<DeliveryResult | null> {
+    const fallbackProviderId = PluginRegistry.getFallbackProviderId(channel);
+    if (!fallbackProviderId) {
+        logger.debug(`[ProviderRouter] No fallback provider for ${channel}, returning error`);
+        return null;
+    }
+
+    if (currentProviderId && fallbackProviderId === currentProviderId) {
+        logger.debug(`[ProviderRouter] Fallback provider is same as current provider (${currentProviderId}), skipping fallback`);
+        return null;
+    }
+
     const fallbackProvider = PluginRegistry.getFallbackProvider(channel);
 
     if (!fallbackProvider) {
@@ -87,6 +99,23 @@ async function tryFallback<T extends BaseNotification>(
 }
 
 /**
+ * Resolve a fallback provider ID for retry exhaustion handoff.
+ * Returns undefined when no distinct fallback provider is available.
+ */
+export function resolveFallbackProviderId(
+    channel: string,
+    currentProviderId?: string
+): string | undefined {
+    const fallbackProviderId = PluginRegistry.getFallbackProviderId(channel);
+
+    if (!fallbackProviderId || fallbackProviderId === currentProviderId) {
+        return undefined;
+    }
+
+    return fallbackProviderId;
+}
+
+/**
  * Send notification with automatic fallback
  * 
  * 1. Try explicit/default provider for channel
@@ -108,7 +137,7 @@ export async function sendWithFallback<T extends BaseNotification>(
         }
 
         // Non-retryable failure - try fallback provider
-        const fallbackResult = await tryFallback(channel, notification, result.error);
+        const fallbackResult = await tryFallback(channel, notification, result.error, notification.provider);
         return fallbackResult ?? result;
     }
 
@@ -125,6 +154,8 @@ export async function sendWithFallback<T extends BaseNotification>(
         };
     }
 
+    const defaultProviderId = PluginRegistry.getDefaultProviderId(channel);
+
     // Try default provider
     const result = await defaultProvider.send(notification);
 
@@ -138,7 +169,12 @@ export async function sendWithFallback<T extends BaseNotification>(
     }
 
     // Try fallback provider
-    const fallbackResult = await tryFallback(channel, notification, result.error);
+    const fallbackResult = await tryFallback(
+        channel,
+        notification,
+        result.error,
+        defaultProviderId
+    );
     return fallbackResult ?? result;
 }
 
@@ -163,6 +199,32 @@ export async function sendToProvider<T extends BaseNotification>(
     }
 
     return provider.send(notification);
+}
+
+/**
+ * Validate notification against a specific provider schema
+ */
+export function validateNotificationForProvider<T extends BaseNotification>(
+    providerId: string,
+    notification: unknown
+): { success: true; data: T } | { success: false; error: string } {
+    const provider = PluginRegistry.get(providerId);
+
+    if (!provider) {
+        return { success: false, error: `Provider '${providerId}' not found` };
+    }
+
+    const schema = provider.getNotificationSchema();
+    const result = schema.safeParse(notification);
+
+    if (result.success) {
+        return { success: true, data: result.data as T };
+    }
+
+    return {
+        success: false,
+        error: result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', '),
+    };
 }
 
 /**

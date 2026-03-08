@@ -28,12 +28,14 @@ describe('promptInfraServicesWithBasePath', () => {
         const mockMultiselect = vi.mocked(multiselect);
         mockMultiselect.mockResolvedValue(['mongo', 'redis', 'nginx']);
 
-        const result = await promptInfraServicesWithBasePath({ allowNginx: true });
+        const result = await promptInfraServicesWithBasePath({ allowNginx: true, defaultNginx: true });
 
         // Should include nginx in options
         const callArgs = mockMultiselect.mock.calls[0][0] as any;
         const values = callArgs.options.map((o: any) => o.value);
         expect(values).toContain('nginx');
+        expect(callArgs.initialValues).toContain('nginx');
+        expect(callArgs.initialValues).not.toContain('kafka-ui');
 
         expect(result).toContain('nginx');
     });

@@ -15,7 +15,11 @@ import {
 } from './utils.js';
 import { text, confirm, select } from '@clack/prompts';
 import { intro, outro, handleCancel, log, note } from './ui.js';
-import { validatePrerequisites } from './validators.js';
+import {
+    validatePrerequisites,
+    validatePublicDomain,
+    validateEmailAddress,
+} from './validators.js';
 import {
     promptInfraServicesWithBasePath,
     generateInfraCompose,
@@ -45,6 +49,10 @@ import {
     waitForInfraHealth,
     startAppServices,
     displayServiceStatus,
+    setupSslCertificates,
+    getSslManualCommands,
+    getSslDetailedInstructions,
+    reloadNginxConfiguration,
 } from './services.js';
 
 const program = new Command();
@@ -61,6 +69,9 @@ program
     .option('--core-version <version>', 'Override CORE_VERSION in generated .env (primarily for --full mode)')
     .option('--dashboard-version <version>', 'Override DASHBOARD_VERSION in generated .env (primarily for --full mode)')
     .option('--plugin [plugins...]', 'Plugins to install (e.g., @simplens/mock @simplens/nodemailer-gmail)')
+    .option('--ssl', 'Enable optional SSL certificate setup using Dockerized Certbot')
+    .option('--ssl-domain <domain>', 'Public domain for SSL certificate (required with --ssl in --full mode)')
+    .option('--ssl-email <email>', 'Email for Let\'s Encrypt registration (required with --ssl in --full mode)')
     .option('--no-output', 'Suppress all console output (silent mode)');
 
 interface OnboardSetupOptions {
@@ -70,6 +81,9 @@ interface OnboardSetupOptions {
     targetDir: string;
     basePath: string;
     plugins: string[];
+    enableSsl: boolean;
+    sslDomain?: string;
+    sslEmail?: string;
 }
 
 function printStep(step: number, total: number, title: string): void {
@@ -112,6 +126,9 @@ function showSetupSummary(setupOptions: OnboardSetupOptions, targetDir: string, 
     const pluginsLabel = setupOptions.plugins.length > 0 
         ? setupOptions.plugins.join(', ') 
         : 'none';
+    const sslLabel = setupOptions.enableSsl
+        ? `enabled (${setupOptions.sslDomain})`
+        : 'disabled';
 
     const summaryLines = [
         `Target directory   : ${targetDir}`,
@@ -119,6 +136,7 @@ function showSetupSummary(setupOptions: OnboardSetupOptions, targetDir: string, 
         `Environment mode   : ${setupOptions.envMode}`,
         `BASE_PATH          : ${basePathLabel}`,
         `Plugins            : ${pluginsLabel}`,
+        `SSL (Certbot)      : ${sslLabel}`,
         `Nginx auto-include : ${autoNginx ? 'enabled (BASE_PATH is non-default)' : 'disabled'}`,
     ].join('\n');
 
@@ -167,6 +185,26 @@ async function promptSetupOptions(options: any): Promise<OnboardSetupOptions> {
             const { valid, invalid } = validatePlugins(options.plugin);
             if (!valid) {
                 errors.push(`Invalid plugin names: ${invalid.join(', ')}`);
+            }
+        }
+
+        if (options.ssl === true) {
+            if (!options.sslDomain) {
+                errors.push('--ssl-domain <domain> is required in --full mode when --ssl is enabled');
+            } else {
+                const domainValidation = validatePublicDomain(options.sslDomain);
+                if (domainValidation !== true) {
+                    errors.push(`Invalid --ssl-domain: ${domainValidation}`);
+                }
+            }
+
+            if (!options.sslEmail) {
+                errors.push('--ssl-email <email> is required in --full mode when --ssl is enabled');
+            } else {
+                const emailValidation = validateEmailAddress(options.sslEmail);
+                if (emailValidation !== true) {
+                    errors.push(`Invalid --ssl-email: ${emailValidation}`);
+                }
             }
         }
 
@@ -274,6 +312,65 @@ async function promptSetupOptions(options: any): Promise<OnboardSetupOptions> {
     }
     // If not provided and not in full mode, will prompt later in the main workflow
 
+    // --- SSL ---
+    let enableSslValue = false;
+    let sslDomainValue: string | undefined;
+    let sslEmailValue: string | undefined;
+
+    if (options.ssl === true) {
+        enableSslValue = true;
+    } else if (!isFullMode) {
+        const sslConfirm = await confirm({
+            message: 'Do you want to automatically setup SSL certificate using Certbot?',
+            initialValue: false,
+            withGuide: true,
+        });
+        handleCancel(sslConfirm);
+        enableSslValue = sslConfirm as boolean;
+    }
+
+    if (enableSslValue) {
+        if (typeof options.sslDomain === 'string') {
+            const normalizedDomain = options.sslDomain.trim().toLowerCase();
+            const domainValidation = validatePublicDomain(normalizedDomain);
+            if (domainValidation !== true) {
+                throw new Error(`Invalid --ssl-domain value: ${domainValidation}`);
+            }
+            sslDomainValue = normalizedDomain;
+        } else if (!isFullMode) {
+            const domainAnswer = await text({
+                message: 'Public domain to secure (example: app.example.com):',
+                validate: (value: string | undefined) => {
+                    const validation = validatePublicDomain(value ?? '');
+                    return validation === true ? undefined : validation;
+                },
+                withGuide: true,
+            });
+            handleCancel(domainAnswer);
+            sslDomainValue = (domainAnswer as string).trim().toLowerCase();
+        }
+
+        if (typeof options.sslEmail === 'string') {
+            const normalizedEmail = options.sslEmail.trim();
+            const emailValidation = validateEmailAddress(normalizedEmail);
+            if (emailValidation !== true) {
+                throw new Error(`Invalid --ssl-email value: ${emailValidation}`);
+            }
+            sslEmailValue = normalizedEmail;
+        } else if (!isFullMode) {
+            const emailAnswer = await text({
+                message: 'Email for Let\'s Encrypt registration:',
+                validate: (value: string | undefined) => {
+                    const validation = validateEmailAddress(value ?? '');
+                    return validation === true ? undefined : validation;
+                },
+                withGuide: true,
+            });
+            handleCancel(emailAnswer);
+            sslEmailValue = (emailAnswer as string).trim();
+        }
+    }
+
     return {
         infra: infraValue,
         infraServices: infraServices,
@@ -281,6 +378,9 @@ async function promptSetupOptions(options: any): Promise<OnboardSetupOptions> {
         targetDir: targetDirValue || process.cwd(),
         basePath: basePathValue,
         plugins: pluginsValue,
+        enableSsl: enableSslValue,
+        sslDomain: sslDomainValue,
+        sslEmail: sslEmailValue,
     };
 }
 
@@ -318,6 +418,7 @@ async function main() {
         // Get target directory
         const targetDir = path.resolve(setupOptions.targetDir);
         const autoEnableNginx = shouldAutoEnableNginx(setupOptions.basePath);
+        const nginxRequired = autoEnableNginx || setupOptions.enableSsl;
 
         logDebug(`Resolved target directory: ${targetDir}`);
         showSetupSummary(setupOptions, targetDir, autoEnableNginx);
@@ -329,39 +430,50 @@ async function main() {
         // Step 2: Infrastructure setup (if --infra flag is provided)
         log.step('Step 2/6 — Infrastructure Setup');
         let selectedInfraServices: string[] = [];
+        const shouldSetupInfra = setupOptions.infra || nginxRequired;
 
-        if (setupOptions.infra) {
+        if (shouldSetupInfra) {
             // Use pre-provided services from CLI, or prompt for them
-            if (setupOptions.infraServices.length > 0) {
+            if (setupOptions.infra && setupOptions.infraServices.length > 0) {
                 selectedInfraServices = setupOptions.infraServices;
                 log.info(`Using infrastructure services: ${selectedInfraServices.join(', ')}`);
+            } else if (!setupOptions.infra && nginxRequired) {
+                selectedInfraServices = ['nginx'];
+                log.info('Nginx is required (BASE_PATH/SSL), so infrastructure compose will be generated with nginx.');
             } else {
                 // Prompt for services (interactive mode)
                 if (!autoEnableNginx) {
                     log.info('BASE_PATH is empty, nginx reverse proxy is disabled.');
-                    selectedInfraServices = await promptInfraServicesWithBasePath({ allowNginx: false });
+                    selectedInfraServices = await promptInfraServicesWithBasePath({
+                        allowNginx: false,
+                    });
                 } else {
-                    selectedInfraServices = await promptInfraServicesWithBasePath({ allowNginx: true });
+                    selectedInfraServices = await promptInfraServicesWithBasePath({
+                        allowNginx: true,
+                        defaultNginx: true,
+                    });
                 }
             }
 
-            if (autoEnableNginx && !selectedInfraServices.includes('nginx')) {
+            if (setupOptions.enableSsl && !selectedInfraServices.includes('nginx')) {
                 selectedInfraServices.push('nginx');
-                log.info('BASE_PATH is non-default, so nginx was added automatically.');
+                log.info('SSL is enabled, so nginx was added automatically.');
             }
 
-            await generateInfraCompose(targetDir, selectedInfraServices);
+            const infraHasNginx = selectedInfraServices.includes('nginx');
+            await generateInfraCompose(targetDir, selectedInfraServices, {
+                includeSsl: setupOptions.enableSsl && infraHasNginx,
+            });
         } else {
             log.info('Skipping infrastructure setup (use --infra to enable).');
         }
 
         // Step 3: Always write app docker-compose
         log.step('Step 3/6 — Application Compose Setup');
-        const includeNginxInAppCompose = autoEnableNginx && !selectedInfraServices.includes('nginx');
-        if (includeNginxInAppCompose) {
-            log.info('Including nginx in docker-compose.yaml because BASE_PATH is non-default.');
-        }
-        await writeAppCompose(targetDir, { includeNginx: includeNginxInAppCompose });
+        await writeAppCompose(targetDir, {
+            includeNginx: false,
+            includeSsl: false,
+        });
 
         // Step 4: Environment configuration
         log.step('Step 4/6 — Environment Configuration');
@@ -390,9 +502,13 @@ async function main() {
         }
 
         // Generate nginx.conf whenever nginx is active in either compose file
-        const nginxEnabled = selectedInfraServices.includes('nginx') || includeNginxInAppCompose;
+        const nginxEnabled = selectedInfraServices.includes('nginx');
         if (nginxEnabled) {
-            await generateNginxConfig(targetDir, setupOptions.basePath);
+            await generateNginxConfig(targetDir, setupOptions.basePath, {
+                enableSsl: setupOptions.enableSsl,
+                domain: setupOptions.sslDomain,
+                sslMode: setupOptions.enableSsl ? 'bootstrap' : 'final',
+            });
         }
 
         // Step 5: Plugin installation
@@ -436,6 +552,18 @@ async function main() {
 
         // Step 6: Service orchestration
         log.step('Step 6/6 — Service Orchestration');
+
+        if (setupOptions.enableSsl && setupOptions.sslDomain) {
+            note(
+                `Before proceeding, ensure the following:\n\n` +
+                `  1. You have a registered domain name (e.g. ${setupOptions.sslDomain})\n` +
+                `  2. An A record for ${setupOptions.sslDomain} points to this machine's public IP\n` +
+                `  3. Port 80 and 443 are open in your firewall / security group\n\n` +
+                `Let's Encrypt will verify domain ownership via an HTTP challenge on port 80.\n` +
+                `If the A record is missing or DNS has not propagated, certificate issuance will fail.`,
+                'DNS Prerequisite'
+            );
+        }
         
         let shouldStart = false;
         if (options.full) {
@@ -447,7 +575,7 @@ async function main() {
 
         if (shouldStart) {
             // Start infra services first (if --infra was used)
-            if (setupOptions.infra && selectedInfraServices.length > 0) {
+            if (selectedInfraServices.length > 0) {
                 await startInfraServices(targetDir);
                 await waitForInfraHealth(targetDir);
             }
@@ -455,16 +583,61 @@ async function main() {
             // Start app services
             await startAppServices(targetDir);
 
+            if (setupOptions.enableSsl && setupOptions.sslDomain && setupOptions.sslEmail) {
+                await setupSslCertificates(targetDir, {
+                    composeFile: 'docker-compose.infra.yaml',
+                    domain: setupOptions.sslDomain,
+                    email: setupOptions.sslEmail,
+                });
+
+                await generateNginxConfig(targetDir, setupOptions.basePath, {
+                    enableSsl: true,
+                    domain: setupOptions.sslDomain,
+                    sslMode: 'final',
+                });
+
+                await reloadNginxConfiguration(targetDir, {
+                    composeFile: 'docker-compose.infra.yaml',
+                });
+            }
+
             // Display service status
             await displayServiceStatus();
         } else {
-            log.info('Services not started. You can start them later with:');
-            const commands: string[] = [];
-            if (setupOptions.infra) {
-                commands.push('docker-compose -f docker-compose.infra.yaml up -d');
+            if (setupOptions.enableSsl && setupOptions.sslDomain && setupOptions.sslEmail) {
+                // Generate bootstrap nginx.conf (HTTP-only, needed so nginx can start before certs exist)
+                // This was already generated above with sslMode: 'bootstrap'
+
+                // Also generate the final SSL nginx.conf as nginx.ssl.conf
+                await generateNginxConfig(targetDir, setupOptions.basePath, {
+                    enableSsl: true,
+                    domain: setupOptions.sslDomain,
+                    sslMode: 'final',
+                    filename: 'nginx.ssl.conf',
+                });
+
+                // Print detailed step-by-step SSL setup instructions
+                const sslSteps = getSslDetailedInstructions({
+                    composeFile: 'docker-compose.infra.yaml',
+                    domain: setupOptions.sslDomain,
+                    email: setupOptions.sslEmail,
+                    hasInfra: selectedInfraServices.length > 0,
+                });
+
+                const numberedSteps = sslSteps
+                    .map((s, i) => `${i + 1}. ${s.step}${s.command ? `\n   ${s.command}` : ''}`)
+                    .join('\n\n');
+
+                note(numberedSteps, 'SSL Setup — Run these commands in order');
+            } else {
+                log.info('Services not started. You can start them later with:');
+                const commands: string[] = [];
+                if (selectedInfraServices.length > 0) {
+                    commands.push('docker compose -f docker-compose.infra.yaml up -d');
+                }
+                commands.push('docker compose up -d');
+                printCommandHints('Manual startup commands', commands);
             }
-            commands.push('docker-compose up -d');
-            printCommandHints('Manual startup commands', commands);
         }
 
         // Final success message

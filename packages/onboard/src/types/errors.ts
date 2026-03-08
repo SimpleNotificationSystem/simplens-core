@@ -62,8 +62,8 @@ export class DockerPermissionError extends DockerError {
 export class DockerComposeError extends DockerError {
     constructor(operation: string, details?: string) {
         super(
-            `Failed to ${operation} with docker-compose`,
-            details || 'Check docker-compose logs for more details:\n  docker-compose logs'
+            `Failed to ${operation} with docker compose (fallback: docker-compose)`,
+            details || 'Check service logs for more details:\n  docker compose logs\n  (fallback: docker-compose logs)'
         );
         this.name = 'DockerComposeError';
     }
@@ -139,7 +139,7 @@ export class ServiceHealthError extends OnboardingError {
         super(
             'SERVICE_HEALTH_ERROR',
             `Service '${serviceName}' did not become healthy within ${timeout}ms`,
-            `Check service logs:\n  docker-compose logs ${serviceName}\n\n` +
+            `Check service logs:\n  docker compose logs ${serviceName}\n  (fallback: docker-compose logs ${serviceName})\n\n` +
             'Or check container status:\n  docker ps -a'
         );
         this.name = 'ServiceHealthError';

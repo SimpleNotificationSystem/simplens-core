@@ -11,6 +11,57 @@ import { VALIDATION } from './config/constants.js';
 export type OSType = 'windows' | 'linux' | 'darwin';
 
 /**
+ * Validate a public domain used for ACME/Certbot.
+ * Accepts FQDN only (no protocol, path, query, port, or wildcard).
+ */
+export function validatePublicDomain(input: string): true | string {
+    const value = input.trim().toLowerCase();
+
+    if (!value) {
+        return 'Domain is required';
+    }
+
+    if (
+        value.includes('://') ||
+        value.includes('/') ||
+        value.includes('?') ||
+        value.includes('#') ||
+        value.includes(':') ||
+        value.includes('*')
+    ) {
+        return 'Enter only a domain name (example: app.example.com)';
+    }
+
+    // RFC-ish practical FQDN validation
+    const domainRegex =
+        /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+
+    if (!domainRegex.test(value)) {
+        return 'Invalid domain format (example: app.example.com)';
+    }
+
+    return true;
+}
+
+/**
+ * Validate email format for Let's Encrypt registration.
+ */
+export function validateEmailAddress(input: string): true | string {
+    const value = input.trim();
+
+    if (!value) {
+        return 'Email is required';
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(value)) {
+        return 'Invalid email format (example: admin@example.com)';
+    }
+
+    return true;
+}
+
+/**
  * Checks if Docker is installed on the system by running `docker --version`.
  *
  * @throws {DockerNotInstalledError} When Docker is not found in PATH or not installed

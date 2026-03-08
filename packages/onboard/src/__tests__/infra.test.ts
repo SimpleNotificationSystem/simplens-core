@@ -12,4 +12,19 @@ describe('infra app compose generation', () => {
         expect(compose).toContain('  nginx:');
         expect(compose).toContain('./nginx.conf:/etc/nginx/conf.d/default.conf:ro');
     });
+
+    it('does not include certbot services when ssl is disabled', () => {
+        const compose = buildAppComposeContent(true, { includeSsl: false });
+        expect(compose).not.toContain('  certbot:');
+        expect(compose).not.toContain('  certbot-renew:');
+    });
+
+    it('includes certbot services and volumes when ssl is enabled', () => {
+        const compose = buildAppComposeContent(false, { includeSsl: true });
+        expect(compose).toContain('  nginx:');
+        expect(compose).toContain('  certbot:');
+        expect(compose).toContain('  certbot-renew:');
+        expect(compose).toContain('certbot-etc:');
+        expect(compose).toContain('certbot-www:');
+    });
 });
