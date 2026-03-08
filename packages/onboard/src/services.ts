@@ -13,10 +13,42 @@ async function execDockerCompose(args: string[], cwd: string): Promise<void> {
     try {
         // Try newer 'docker compose' first
         await execa('docker', ['compose', ...args], { cwd });
-    } catch (error) {
+    } catch (error: unknown) {
+        if (!shouldFallbackToLegacyCompose(error)) {
+            throw error;
+        }
         // Fallback to legacy 'docker-compose'
         await execa('docker-compose', args, { cwd });
     }
+}
+
+function shouldFallbackToLegacyCompose(error: unknown): boolean {
+    const execaError = error as {
+        code?: string;
+        stderr?: string;
+        stdout?: string;
+        shortMessage?: string;
+        message?: string;
+    };
+
+    if (execaError?.code === 'ENOENT') {
+        return true;
+    }
+
+    const output = [
+        execaError?.stderr,
+        execaError?.stdout,
+        execaError?.shortMessage,
+        execaError?.message,
+    ]
+        .filter(Boolean)
+        .join('\n')
+        .toLowerCase();
+
+    return (
+        output.includes("'compose' is not a docker command") ||
+        output.includes('unknown command "compose" for "docker"')
+    );
 }
 
 async function waitForContainerRunning(
@@ -183,11 +215,71 @@ export function getSslManualCommands(options: {
         : '';
 
     return [
-        `docker compose ${composeFlag}up -d nginx certbot certbot-renew`,
-        `docker compose ${composeFlag}exec -T certbot certbot certonly --webroot -w /var/www/certbot --email ${options.email} --agree-tos --no-eff-email -d ${options.domain} --non-interactive`,
+        `docker compose ${composeFlag}up -d nginx`,
+        `docker compose ${composeFlag}run --rm --no-deps --entrypoint certbot certbot certonly --webroot -w /var/www/certbot --email ${options.email} --agree-tos --no-eff-email -d ${options.domain} --non-interactive`,
         `docker compose ${composeFlag}exec -T nginx nginx -s reload`,
         `docker compose ${composeFlag}up -d certbot-renew`,
     ];
+}
+
+/**
+ * Returns detailed step-by-step manual SSL setup instructions.
+ * Includes the nginx.conf swap from bootstrap → final (nginx.ssl.conf → nginx.conf).
+ */
+export function getSslDetailedInstructions(options: {
+    composeFile: ComposeFile;
+    domain: string;
+    email: string;
+    hasInfra: boolean;
+}): { step: string; command?: string }[] {
+    const composeFlag = options.composeFile === 'docker-compose.infra.yaml'
+        ? '-f docker-compose.infra.yaml '
+        : '';
+
+    const steps: { step: string; command?: string }[] = [];
+
+    if (options.hasInfra) {
+        steps.push({
+            step: 'Start infrastructure services (includes nginx with HTTP-only bootstrap config)',
+            command: `docker compose ${composeFlag}up -d`,
+        });
+    }
+
+    steps.push({
+        step: 'Start application services',
+        command: 'docker compose up -d',
+    });
+
+    if (!options.hasInfra) {
+        steps.push({
+            step: 'Ensure nginx is running for the ACME challenge',
+            command: `docker compose ${composeFlag}up -d nginx`,
+        });
+    }
+
+    steps.push({
+        step: `Request SSL certificate from Let's Encrypt for ${options.domain}`,
+        command: `docker compose ${composeFlag}run --rm --no-deps --entrypoint certbot certbot certonly --webroot -w /var/www/certbot --email ${options.email} --agree-tos --no-eff-email -d ${options.domain} --non-interactive`,
+    });
+
+    steps.push({
+        step: 'Replace bootstrap nginx config with the SSL-enabled config (nginx.ssl.conf → nginx.conf)',
+        command: process.platform === 'win32'
+            ? 'copy /Y nginx.ssl.conf nginx.conf'
+            : 'cp nginx.ssl.conf nginx.conf',
+    });
+
+    steps.push({
+        step: 'Reload nginx to apply SSL configuration',
+        command: `docker compose ${composeFlag}exec -T nginx nginx -s reload`,
+    });
+
+    steps.push({
+        step: 'Start automatic certificate renewal service',
+        command: `docker compose ${composeFlag}up -d certbot-renew`,
+    });
+
+    return steps;
 }
 
 export async function setupSslCertificates(targetDir: string, options: {
@@ -200,17 +292,18 @@ export async function setupSslCertificates(targetDir: string, options: {
     const s = spinner();
     const composeArgs = (args: string[]) => withComposeFile(args, options.composeFile);
 
-    s.start('Ensuring nginx/certbot services are running...');
-    await execDockerCompose(composeArgs(['up', '-d', 'nginx', 'certbot']), targetDir);
+    s.start('Ensuring nginx service is running...');
+    await execDockerCompose(composeArgs(['up', '-d', 'nginx']), targetDir);
     await waitForContainerRunning('nginx');
-    await waitForContainerRunning('certbot');
-    s.stop('Nginx and certbot services are running');
+    s.stop('Nginx service is running');
 
     s.start('Requesting initial certificate from Let\'s Encrypt...');
     await execDockerCompose(
         composeArgs([
-            'exec',
-            '-T',
+            'run',
+            '--rm',
+            '--no-deps',
+            '--entrypoint',
             'certbot',
             'certbot',
             'certonly',

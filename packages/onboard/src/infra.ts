@@ -363,10 +363,11 @@ export async function writeAppCompose(
 export async function generateNginxConfig(
     targetDir: string,
     basePath: string,
-    options: { enableSsl?: boolean; domain?: string; sslMode?: 'bootstrap' | 'final' } = {}
+    options: { enableSsl?: boolean; domain?: string; sslMode?: 'bootstrap' | 'final'; filename?: string } = {}
 ): Promise<void> {
+    const outputFilename = options.filename ?? 'nginx.conf';
     const s = spinner();
-    s.start('Generating nginx.conf...');
+    s.start(`Generating ${outputFilename}...`);
 
     // Normalize basePath (remove leading/trailing slashes for template)
     const normalizedPath = basePath.trim().replace(/^\/|\/$/g, '');
@@ -507,8 +508,8 @@ server {
 }
 `;
 
-    const nginxPath = path.join(targetDir, 'nginx.conf');
+    const nginxPath = path.join(targetDir, outputFilename);
     await writeFile(nginxPath, nginxTemplate);
     const sslLabel = enableSsl ? `, SSL domain: ${domain}` : '';
-    s.stop(`Generated nginx.conf${hasBasePath ? ` with base path: /${normalizedPath}` : ' (root path)'}${sslLabel}`);
+    s.stop(`Generated ${outputFilename}${hasBasePath ? ` with base path: /${normalizedPath}` : ' (root path)'}${sslLabel}`);
 }

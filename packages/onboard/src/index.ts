@@ -51,6 +51,7 @@ import {
     displayServiceStatus,
     setupSslCertificates,
     getSslManualCommands,
+    getSslDetailedInstructions,
     reloadNginxConfiguration,
 } from './services.js';
 
@@ -591,20 +592,40 @@ async function main() {
             // Display service status
             await displayServiceStatus();
         } else {
-            log.info('Services not started. You can start them later with:');
-            const commands: string[] = [];
-            if (selectedInfraServices.length > 0) {
-                commands.push('docker compose -f docker-compose.infra.yaml up -d');
-            }
-            commands.push('docker compose up -d');
             if (setupOptions.enableSsl && setupOptions.sslDomain && setupOptions.sslEmail) {
-                commands.push(...getSslManualCommands({
+                // Generate bootstrap nginx.conf (HTTP-only, needed so nginx can start before certs exist)
+                // This was already generated above with sslMode: 'bootstrap'
+
+                // Also generate the final SSL nginx.conf as nginx.ssl.conf
+                await generateNginxConfig(targetDir, setupOptions.basePath, {
+                    enableSsl: true,
+                    domain: setupOptions.sslDomain,
+                    sslMode: 'final',
+                    filename: 'nginx.ssl.conf',
+                });
+
+                // Print detailed step-by-step SSL setup instructions
+                const sslSteps = getSslDetailedInstructions({
                     composeFile: 'docker-compose.infra.yaml',
                     domain: setupOptions.sslDomain,
                     email: setupOptions.sslEmail,
-                }));
+                    hasInfra: selectedInfraServices.length > 0,
+                });
+
+                const numberedSteps = sslSteps
+                    .map((s, i) => `${i + 1}. ${s.step}${s.command ? `\n   ${s.command}` : ''}`)
+                    .join('\n\n');
+
+                note(numberedSteps, 'SSL Setup — Run these commands in order');
+            } else {
+                log.info('Services not started. You can start them later with:');
+                const commands: string[] = [];
+                if (selectedInfraServices.length > 0) {
+                    commands.push('docker compose -f docker-compose.infra.yaml up -d');
+                }
+                commands.push('docker compose up -d');
+                printCommandHints('Manual startup commands', commands);
             }
-            printCommandHints('Manual startup commands', commands);
         }
 
         // Final success message
