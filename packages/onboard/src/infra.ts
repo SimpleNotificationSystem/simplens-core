@@ -496,10 +496,10 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/${domain}/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_prefer_server_ciphers on;
-    location = / {
-        return 302 ${rootRedirectPath};
-    }
-    ${proxyRoutes}
+${hasBasePath ? `    location = / {
+            return 302 ${rootRedirectPath};
+        }
+    ` : ''}    ${proxyRoutes}
 }
 `
         : `server {
