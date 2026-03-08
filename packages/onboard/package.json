@@ -6,6 +6,10 @@
   "bin": {
     "simplens-onboard": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",

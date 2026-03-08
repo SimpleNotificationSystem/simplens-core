@@ -242,7 +242,7 @@ export const APP_CERTBOT_SERVICES_TEMPLATE = `  certbot:
       - certbot-etc:/etc/letsencrypt
       - certbot-www:/var/www/certbot
     entrypoint: ["/bin/sh", "-c"]
-    command: "trap 'exit 0' TERM; while true; do sleep 86400; done"
+    command: ["trap 'exit 0' TERM; while true; do sleep 86400; done"]
     restart: unless-stopped
 
   certbot-renew:
@@ -254,7 +254,7 @@ export const APP_CERTBOT_SERVICES_TEMPLATE = `  certbot:
       - certbot
       - nginx
     entrypoint: ["/bin/sh", "-c"]
-    command: "while true; do sleep 43200; docker exec certbot certbot renew --webroot -w /var/www/certbot --quiet && docker exec nginx nginx -s reload || true; done"
+    command: ["while true; do sleep 43200; docker exec certbot certbot renew --webroot -w /var/www/certbot --quiet && docker exec nginx nginx -s reload || true; done"]
     restart: unless-stopped`;
 
 export const INFRA_CERTBOT_SERVICES_TEMPLATE = `  certbot:
@@ -264,7 +264,7 @@ export const INFRA_CERTBOT_SERVICES_TEMPLATE = `  certbot:
       - certbot-etc:/etc/letsencrypt
       - certbot-www:/var/www/certbot
     entrypoint: ["/bin/sh", "-c"]
-    command: "trap 'exit 0' TERM; while true; do sleep 86400; done"
+    command: ["trap 'exit 0' TERM; while true; do sleep 86400; done"]
     restart: unless-stopped
 
   certbot-renew:
@@ -276,7 +276,7 @@ export const INFRA_CERTBOT_SERVICES_TEMPLATE = `  certbot:
       - certbot
       - nginx
     entrypoint: ["/bin/sh", "-c"]
-    command: "while true; do sleep 43200; docker exec certbot certbot renew --webroot -w /var/www/certbot --quiet && docker exec nginx nginx -s reload || true; done"
+    command: ["while true; do sleep 43200; docker exec certbot certbot renew --webroot -w /var/www/certbot --quiet && docker exec nginx nginx -s reload || true; done"]
     restart: unless-stopped`;
 
 export const INFRA_CERTBOT_VOLUMES = ['certbot-etc', 'certbot-www'] as const;

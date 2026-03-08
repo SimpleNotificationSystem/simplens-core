@@ -552,6 +552,18 @@ async function main() {
 
         // Step 6: Service orchestration
         log.step('Step 6/6 — Service Orchestration');
+
+        if (setupOptions.enableSsl && setupOptions.sslDomain) {
+            note(
+                `Before proceeding, ensure the following:\n\n` +
+                `  1. You have a registered domain name (e.g. ${setupOptions.sslDomain})\n` +
+                `  2. An A record for ${setupOptions.sslDomain} points to this machine's public IP\n` +
+                `  3. Port 80 and 443 are open in your firewall / security group\n\n` +
+                `Let's Encrypt will verify domain ownership via an HTTP challenge on port 80.\n` +
+                `If the A record is missing or DNS has not propagated, certificate issuance will fail.`,
+                'DNS Prerequisite'
+            );
+        }
         
         let shouldStart = false;
         if (options.full) {
