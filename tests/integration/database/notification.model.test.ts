@@ -17,7 +17,7 @@ describe('Notification Model Integration Tests', () => {
         // Import model after DB connection
         const module = await import('../../../src/database/models/notification.models.js');
         notification_model = module.default;
-    });
+    }, 180000);
 
     afterAll(async () => {
         await disconnectTestDb();

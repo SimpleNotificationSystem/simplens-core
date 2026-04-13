@@ -23,13 +23,29 @@ import "@src/admin-alerts/channels/telegram.channel.js";
 
 const app = express();
 
+const configuredCorsOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+const defaultCorsOrigins = ['http://localhost:3002', 'http://127.0.0.1:3002'];
+const allowedOrigins = configuredCorsOrigins.length > 0 ? configuredCorsOrigins : defaultCorsOrigins;
+
 //implement rate limiter with REDIS later
 
 app.use(express.json({ limit: '1mb' }));
 
 app.use(helmet());
 
-app.use(cors({ origin: "*" })); //allows all origins
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+            return;
+        }
+        callback(new Error('Not allowed by CORS'));
+    },
+}));
 
 app.get("/", (req: Request, res: Response) => {
     res.json({
@@ -49,7 +65,7 @@ app.get("/health", (req: Request, res: Response) => {
 
 app.use('/api/notification', auth_middleware, notification_router);
 app.use('/api/plugins', plugins_router);
-app.use('/api/admin-channels', admin_channels_router);
+app.use('/api/admin-channels', auth_middleware, admin_channels_router);
 app.use('/api/templates', auth_middleware, notification_templates_router);
 
 const start_server = async () => {

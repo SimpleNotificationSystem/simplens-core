@@ -175,7 +175,7 @@ const SERVICE_CHUNKS: Record<string, string> = {
       - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+            - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-change_this_password}
     volumes:
       - "grafana_data:/var/lib/grafana"
     depends_on:

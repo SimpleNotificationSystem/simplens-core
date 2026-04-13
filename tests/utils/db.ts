@@ -7,6 +7,11 @@ import mongoose from 'mongoose';
 
 let mongoReplSet: MongoMemoryReplSet | null = null;
 
+function getExternalTestMongoUri(): string | null {
+    const uri = process.env.TEST_MONGO_URI?.trim();
+    return uri ? uri : null;
+}
+
 /**
  * Connect to an in-memory MongoDB replica set
  * Used for integration tests that need real database operations including transactions
@@ -17,7 +22,16 @@ export const connectTestDb = async (): Promise<typeof mongoose> => {
         await mongoose.disconnect();
     }
 
+    const externalUri = getExternalTestMongoUri();
+    if (externalUri) {
+        await mongoose.connect(externalUri);
+        return mongoose;
+    }
+
     mongoReplSet = await MongoMemoryReplSet.create({
+        binary: {
+            version: process.env.MONGOMS_VERSION || '7.0.14',
+        },
         replSet: {
             count: 1, // Single node replica set for testing
             storageEngine: 'wiredTiger',

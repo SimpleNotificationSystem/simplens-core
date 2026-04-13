@@ -6,8 +6,8 @@
  */
 
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
-import { join } from 'path';
-import { execSync } from 'child_process';
+import { dirname, join } from 'path';
+import { execFileSync } from 'child_process';
 import { pathToFileURL } from 'url';
 import { parse as parseYaml } from 'yaml';
 import { PluginRegistry, type ChannelConfig } from './registry.js';
@@ -17,6 +17,13 @@ import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
 // Plugins directory for user-installed plugins
 const PLUGINS_DIR = join(process.cwd(), '.plugins');
 const PLUGINS_NODE_MODULES = join(PLUGINS_DIR, 'node_modules');
+const NPM_PACKAGE_SPEC_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(?:@[a-z0-9][a-z0-9._-]*)?$/i;
+
+function assertValidNpmPackageSpec(spec: string): void {
+    if (!NPM_PACKAGE_SPEC_PATTERN.test(spec)) {
+        throw new Error(`Invalid plugin package spec: ${spec}`);
+    }
+}
 
 /**
  * Initialize plugins directory with package.json if needed
@@ -68,7 +75,8 @@ async function installMissingPlugins(config: SimpleNSConfig): Promise<void> {
     for (const pkg of missingPackages) {
         logger.info(`Installing ${pkg}...`);
         try {
-            execSync(`npm install ${pkg}`, {
+            assertValidNpmPackageSpec(pkg);
+            execFileSync('npm', ['install', pkg], {
                 cwd: PLUGINS_DIR,
                 stdio: 'pipe' // Suppress output for cleaner logs
             });
@@ -123,7 +131,7 @@ interface SimpleNSConfig {
  * Checks for simplens.config.yaml/.yml/.json
  */
 function findLocalConfig(basePath: string): string | null {
-    const dir = basePath.substring(0, basePath.lastIndexOf('/') + 1) || './';
+    const dir = dirname(basePath);
     const localPatterns = [
         'simplens.config.yaml',
         'simplens.config.yml',
@@ -131,7 +139,7 @@ function findLocalConfig(basePath: string): string | null {
     ];
 
     for (const filename of localPatterns) {
-        const localPath = dir + filename;
+        const localPath = join(dir, filename);
         if (existsSync(localPath)) {
             return localPath;
         }

@@ -44,7 +44,7 @@ describe('process_notifications Integration Tests', () => {
         const utils = await import('../../../src/api/utils/utils.js');
         process_notifications = utils.process_notifications;
         DuplicateNotificationError = utils.DuplicateNotificationError;
-    });
+    }, 180000);
 
     afterAll(async () => {
         await disconnectTestDb();

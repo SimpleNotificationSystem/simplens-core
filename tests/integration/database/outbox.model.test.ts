@@ -20,7 +20,7 @@ describe('Outbox Model', () => {
         // Import models after connection
         outbox_model = (await import('../../../src/database/models/outbox.models.js')).default;
         notification_model = (await import('../../../src/database/models/notification.models.js')).default;
-    });
+    }, 180000);
 
     afterAll(async () => {
         await disconnectTestDb();

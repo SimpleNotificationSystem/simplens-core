@@ -8,7 +8,7 @@ import { mkdtemp, rm, writeFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import chalk from 'chalk';
 import ora from 'ora';
 import { extractManifest, ProviderManifest } from './manifest.js'
@@ -27,6 +27,16 @@ interface PluginInfo {
     providerId: string;
 }
 
+const NPM_PACKAGE_SPEC_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(?:@[a-z0-9][a-z0-9._-]*)?$/i;
+
+function assertValidPackageSpecs(packages: string[]): void {
+    for (const pkg of packages) {
+        if (!NPM_PACKAGE_SPEC_PATTERN.test(pkg)) {
+            throw new Error(`Invalid package spec: ${pkg}`);
+        }
+    }
+}
+
 export async function generateConfig(packages: string[], options: GenerateOptions): Promise<void> {
     const spinner = ora('Creating temporary directory...').start();
     const tempDir = await mkdtemp(join(tmpdir(), 'simplens-config-'));
@@ -42,12 +52,13 @@ export async function generateConfig(packages: string[], options: GenerateOption
 
         // Step 2: Initialize temp npm project
         spinner.start('Initializing npm project...');
-        execSync('npm init -y', { cwd: tempDir, stdio: 'pipe' });
+        execFileSync('npm', ['init', '-y'], { cwd: tempDir, stdio: 'pipe' });
 
         // Step 3: Install all plugins
         spinner.text = `Installing ${packages.length} plugin(s)...`;
         try {
-            execSync(`npm install ${packages.join(' ')}`, { cwd: tempDir, stdio: 'pipe' });
+            assertValidPackageSpecs(packages);
+            execFileSync('npm', ['install', ...packages], { cwd: tempDir, stdio: 'pipe' });
         } catch (err) {
             spinner.fail('Failed to install plugins');
             console.error(chalk.red('\nError: Could not install one or more plugins.'));
