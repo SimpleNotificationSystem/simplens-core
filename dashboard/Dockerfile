@@ -12,7 +12,7 @@ RUN --mount=type=cache,target=/root/.npm \
 # ==========================================
 # Stage 2: Build the application
 # ==========================================
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Copy dependencies from deps stage
@@ -30,7 +30,7 @@ RUN --mount=type=cache,target=/app/.next/cache \
 # ==========================================
 # Stage 3: Production runner
 # ==========================================
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
