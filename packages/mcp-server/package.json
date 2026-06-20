@@ -4,6 +4,9 @@
   "description": "Remote MCP server for SimpleNS notification orchestration engine",
   "type": "module",
   "main": "dist/index.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "bin": {
     "simplens-mcp": "dist/index.js"
   },
