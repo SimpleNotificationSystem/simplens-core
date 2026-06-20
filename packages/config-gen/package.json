@@ -3,6 +3,9 @@
     "version": "1.0.2",
     "description": "CLI tool to generate simplens.config.yaml from plugin manifests",
     "type": "module",
+    "engines": {
+        "node": ">=22.0.0"
+    },
     "bin": {
         "simplens-config": "./dist/index.js"
     },

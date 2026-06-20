@@ -5,6 +5,9 @@
   "description": "Open-source plugin-based notification orchestration engine for developers who value control ",
   "main": "dist/api/server.js",
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",

@@ -138,7 +138,7 @@ Notes:
 ## Contribution Workflow
 
 1. Look into the open issues on [simplens-core issues](https://github.com/SimpleNotificationSystem/simplens-core/issues) and choose an issue you like to solve.
-2. Create a new branch (`<type_of_issue>-<name>`) from the `master` branch.
+2. Create a new branch (`<type_of_issue>-<name>`) from the `development` branch.
 3. Solve or complete the feature/bug mentioned in the issue.
 4. Add or update tests for behavior changes.
 5. Run lint + tests locally.
