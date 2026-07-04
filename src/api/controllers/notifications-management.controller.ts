@@ -28,6 +28,7 @@ export const listNotifications = async (req: Request, res: Response): Promise<vo
     const from = req.query.from as string;
     const to = req.query.to as string;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const filter: any = {};
 
     if (status) {
