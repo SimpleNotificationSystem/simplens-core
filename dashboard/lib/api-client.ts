@@ -133,7 +133,7 @@ export const pluginService = {
 };
 
 export const adminChannelService = {
-  list: (): Promise<AdminChannel[]> => apiClient.get('/api/admin-channels'),
+  list: (): Promise<{ channels: AdminChannel[] }> => apiClient.get('/api/admin-channels'),
   get: (id: string): Promise<AdminChannel> => apiClient.get(`/api/admin-channels/${id}`),
   create: (payload: AdminChannelFormData): Promise<{ success: boolean; channel: AdminChannel }> => 
     apiClient.post('/api/admin-channels', payload),
