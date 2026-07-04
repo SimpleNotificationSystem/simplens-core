@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { API_BASE_URL, NS_API_KEY } from "./lib/api-config";
 
 const basePath = process.env.BASE_PATH || "";
 const SESSION_COOKIE_NAME = "simplens_session";
-const NS_API_KEY = process.env.NS_API_KEY || "";
-const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:3000";
 
 const localApiPaths = [
     "/api/auth/",
