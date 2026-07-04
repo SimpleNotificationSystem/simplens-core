@@ -11,7 +11,6 @@ import { serverConfig } from './config.js';
 export interface UserCredentials {
     apiKey: string;
     coreUrl: string;
-    dashboardUrl: string;
 }
 
 /**
@@ -23,11 +22,10 @@ export function extractCredentials(req: Request): UserCredentials {
     const coreUrl = req.headers['x-simplens-core-url'] as string | undefined;
     const dashboardUrl = req.headers['x-simplens-dashboard-url'] as string | undefined;
 
-    if (!apiKey || !coreUrl || !dashboardUrl) {
+    if (!apiKey || !coreUrl) {
         const missing: string[] = [];
         if (!apiKey) missing.push('X-SimpleNS-API-Key');
         if (!coreUrl) missing.push('X-SimpleNS-Core-URL');
-        if (!dashboardUrl) missing.push('X-SimpleNS-Dashboard-URL');
         throw new Error(`Missing required headers: ${missing.join(', ')}`);
     }
 
@@ -38,13 +36,7 @@ export function extractCredentials(req: Request): UserCredentials {
         throw new Error(`Invalid X-SimpleNS-Core-URL: ${coreUrl}`);
     }
 
-    try {
-        new URL(dashboardUrl);
-    } catch {
-        throw new Error(`Invalid X-SimpleNS-Dashboard-URL: ${dashboardUrl}`);
-    }
-
-    return { apiKey, coreUrl, dashboardUrl };
+    return { apiKey, coreUrl };
 }
 
 /**
@@ -59,7 +51,6 @@ export function getStdioCredentials(): UserCredentials {
 
     return {
         apiKey: SIMPLENS_API_KEY,
-        coreUrl: SIMPLENS_CORE_URL,
-        dashboardUrl: SIMPLENS_DASHBOARD_URL,
+        coreUrl: SIMPLENS_CORE_URL
     };
 }

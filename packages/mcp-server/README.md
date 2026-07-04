@@ -39,6 +39,26 @@ Then point your MCP client at the local HTTP endpoint and pass headers on every 
       "url": "http://localhost:3001/mcp",
       "headers": {
         "X-SimpleNS-API-Key": "your-ns-api-key",
+        "X-SimpleNS-Core-URL": "http://localhost:3000"
+      }
+    }
+  }
+}
+```
+
+> [!NOTE]
+> **Version 1.1 Update**: The Dashboard URL (`X-SimpleNS-Dashboard-URL` header / `SIMPLENS_DASHBOARD_URL` environment variable) is no longer required. All tools (including alerts, failure queries, and retries) now route directly to the core Express API service. *Note: Versions below 1.1 still require the dashboard URL to be provided.*
+
+> Sample Config for versions < `1.1`
+
+```json
+{
+  "mcpServers": {
+    "simplens-local-http": {
+      "type": "streamable-http",
+      "url": "http://localhost:3001/mcp",
+      "headers": {
+        "X-SimpleNS-API-Key": "your-ns-api-key",
         "X-SimpleNS-Core-URL": "http://localhost:3000",
         "X-SimpleNS-Dashboard-URL": "http://localhost:3002"
       }
@@ -61,8 +81,7 @@ Add to your MCP Client config:
       "args": ["-y", "@simplens/mcp", "--stdio"],
       "env": {
         "NS_API_KEY": "your-local-api-key",
-        "SIMPLENS_CORE_URL": "http://localhost:3000",
-        "SIMPLENS_DASHBOARD_URL": "http://localhost:3002"
+        "SIMPLENS_CORE_URL": "http://localhost:3000"
       }
     }
   }
