@@ -10,36 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import useSWR from "swr";
 import { Puzzle, RefreshCw, Mail, MessageCircle, TestTube2, Zap, User, FileText } from "lucide-react";
 import { useMemo, useState } from "react";
-import { withBasePath } from "@/lib/utils";
+import { apiClient } from "@/lib/api-client";
+import { ProviderMetadata, PluginMetadata as PluginsResponse } from "@/lib/types";
 
-interface FieldDefinition {
-    name: string;
-    type: string;
-    required: boolean;
-    description?: string;
-}
-
-interface ProviderMetadata {
-    id: string;
-    name: string;
-    displayName: string;
-    description?: string;
-    priority: number;
-    recipientFields: FieldDefinition[];
-    contentFields: FieldDefinition[];
-}
-
-interface ChannelMetadata {
-    providers: ProviderMetadata[];
-    default?: string;
-    fallback?: string;
-}
-
-interface PluginsResponse {
-    channels: Record<string, ChannelMetadata>;
-}
-
-const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
+const fetcher = <T,>(url: string): Promise<T> => apiClient.get(url) as unknown as Promise<T>;
 
 // Channel-specific colors and icons
 const channelConfig: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string }> = {

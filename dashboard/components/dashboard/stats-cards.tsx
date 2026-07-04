@@ -12,8 +12,8 @@ import {
 } from "lucide-react";
 import { cn, withBasePath } from "@/lib/utils";
 import type { DashboardStats } from "@/lib/types";
-
-const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
+import { apiClient } from "@/lib/api-client";
+const fetcher = <T,>(url: string): Promise<T> => apiClient.get(url) as unknown as Promise<T>;
 
 interface StatsCardConfig {
     title: string;

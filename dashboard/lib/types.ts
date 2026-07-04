@@ -191,6 +191,23 @@ export interface AdminChannel {
 export interface AdminChannelFormData {
   channel_type: AdminChannelType;
   name: string;
-  webhook_url: string;
+  config: Record<string, string>;
   alert_filters: AlertFilters;
+  enabled?: boolean;
+}
+
+export interface AdminChannelProviderField {
+  name: string;
+  type: 'string' | 'url' | 'secret';
+  label: string;
+  placeholder?: string;
+  description?: string;
+  required: boolean;
+  pattern?: string;
+}
+
+export interface AdminChannelProviderMeta {
+  channelType: string;
+  displayName: string;
+  credentialFields: AdminChannelProviderField[];
 }

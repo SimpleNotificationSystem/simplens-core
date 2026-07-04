@@ -21,8 +21,8 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Loader2, TestTube2, Save, AlertCircle } from "lucide-react";
-import type { AlertFilters } from "@/lib/types";
-import { withBasePath } from "@/lib/utils";
+import type { AlertFilters, AdminChannelType, AdminChannelProviderMeta as ProviderMeta } from "@/lib/types";
+import { adminChannelService } from "@/lib/api-client";
 
 interface AddChannelDialogProps {
     open: boolean;
@@ -30,21 +30,7 @@ interface AddChannelDialogProps {
     onSuccess: () => void;
 }
 
-interface CredentialField {
-    name: string;
-    type: 'string' | 'url' | 'secret';
-    label: string;
-    placeholder?: string;
-    description?: string;
-    required: boolean;
-    pattern?: string;
-}
-
-interface ProviderMeta {
-    channelType: string;
-    displayName: string;
-    credentialFields: CredentialField[];
-}
+// Types are imported from @/lib/types
 
 const DEFAULT_FILTERS: AlertFilters = {
     failed_notifications: true,
@@ -123,9 +109,7 @@ export function AddChannelDialog({ open, onOpenChange, onSuccess }: AddChannelDi
         setLoadingProviders(true);
         setProviderError(null);
         try {
-            const res = await fetch(withBasePath("/api/admin-channels/providers"));
-            if (!res.ok) throw new Error("Failed to fetch providers");
-            const data = await res.json();
+            const data = await adminChannelService.getProviders();
             setProviders(data.providers || []);
             // Set default channel type to first provider
             if (data.providers?.length > 0 && !channelType) {
@@ -175,21 +159,17 @@ export function AddChannelDialog({ open, onOpenChange, onSuccess }: AddChannelDi
         setTesting(true);
         setTestResult(null);
         try {
-            const res = await fetch(withBasePath("/api/admin-channels/test"), {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    channel_type: channelType,
-                    config,
-                }),
+            const data = await adminChannelService.test({
+                channel_type: channelType,
+                config,
             });
-            const data = await res.json();
             setTestResult({
                 success: data.success,
-                message: data.success ? `Test message sent! Check your ${currentProvider?.displayName || 'channel'}.` : data.error,
+                message: data.success ? `Test message sent! Check your ${currentProvider?.displayName || 'channel'}.` : data.error || "Test failed",
             });
-        } catch {
-            setTestResult({ success: false, message: "Test failed - network error" });
+        } catch (err) {
+            const error = err as Error;
+            setTestResult({ success: false, message: error.message || "Test failed - network error" });
         } finally {
             setTesting(false);
         }
@@ -198,27 +178,18 @@ export function AddChannelDialog({ open, onOpenChange, onSuccess }: AddChannelDi
     const handleSubmit = async () => {
         setLoading(true);
         try {
-            const res = await fetch(withBasePath("/api/admin-channels"), {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    channel_type: channelType,
-                    name,
-                    config,
-                    alert_filters: filters,
-                }),
+            await adminChannelService.create({
+                channel_type: channelType as AdminChannelType,
+                name,
+                config,
+                alert_filters: filters,
             });
-
-            if (res.ok) {
-                onSuccess();
-                onOpenChange(false);
-                resetForm();
-            } else {
-                const data = await res.json();
-                alert(data.error || "Failed to create channel");
-            }
-        } catch {
-            alert("Failed to create channel - network error");
+            onSuccess();
+            onOpenChange(false);
+            resetForm();
+        } catch (err) {
+            const error = err as Error;
+            alert(error.message || "Failed to create channel");
         } finally {
             setLoading(false);
         }

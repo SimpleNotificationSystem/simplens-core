@@ -36,16 +36,15 @@ import type {
   FieldDefinition,
   PluginMetadata,
   NotificationTemplateDetail,
+  NotificationTemplateCreatePayload,
+  NotificationTemplateUpdatePayload,
 } from "@/lib/types";
 import { Switch } from "@/components/ui/switch";
 
 import { StableMonacoEditor } from "@/components/ui/monaco-wrapper";
 
-const fetcher = (url: string) =>
-  fetch(withBasePath(url)).then((res) => {
-    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
-    return res.json();
-  });
+import { apiClient, templateService } from "@/lib/api-client";
+const fetcher = <T,>(url: string): Promise<T> => apiClient.get(url) as unknown as Promise<T>;
 
 function TemplateEditorContent() {
   const router = useRouter();
@@ -189,11 +188,7 @@ function TemplateEditorContent() {
   useEffect(() => {
     if (mode !== "edit" || !templateId) return;
     setIsLoading(true);
-    fetch(withBasePath(`/api/templates/${encodeURIComponent(templateId)}`))
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to load template");
-        return res.json();
-      })
+    templateService.get(templateId)
       .then((data: NotificationTemplateDetail) => {
         setForm({
           package: data.package,
@@ -272,13 +267,6 @@ function TemplateEditorContent() {
     setIsSaving(true);
 
     try {
-      const url =
-        mode === "create"
-          ? withBasePath("/api/templates/create")
-          : withBasePath(
-              `/api/templates/${encodeURIComponent(form.template_id)}`,
-            );
-      const method = mode === "create" ? "POST" : "PUT";
       const body =
         mode === "create"
           ? {
@@ -295,16 +283,10 @@ function TemplateEditorContent() {
               content: form.content,
             };
 
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(
-          data.message || data.error || `Failed to ${mode} template`,
-        );
+      if (mode === "create") {
+        await templateService.create(body as NotificationTemplateCreatePayload);
+      } else {
+        await templateService.update(templateId, body as NotificationTemplateUpdatePayload);
       }
 
       toast.success(
