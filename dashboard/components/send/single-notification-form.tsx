@@ -15,6 +15,7 @@ import { PluginMetadata, ProviderMetadata, NotificationTemplateDetail, Notificat
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { withBasePath } from "@/lib/utils";
+import { WEBHOOK_HOST, WEBHOOK_PORT } from "@/lib/api-config";
 
 // Generate a UUIDv4
 function generateUUID(): string {
@@ -337,6 +338,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                 client_id: clientId,
                 channel: selectedChannels,
                 recipient: { ...recipientData },
+                webhook_url: `http://${WEBHOOK_HOST}:${WEBHOOK_PORT}/api/webhook`
             };
 
             if (inputMode === "template") {
@@ -386,7 +388,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                 }
             }
 
-            const response = await fetch(withBasePath("/api/send"), {
+            const response = await fetch(withBasePath("/api/notification"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),

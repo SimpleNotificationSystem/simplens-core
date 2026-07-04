@@ -274,7 +274,7 @@ function TemplateEditorContent() {
     try {
       const url =
         mode === "create"
-          ? withBasePath("/api/templates")
+          ? withBasePath("/api/templates/create")
           : withBasePath(
               `/api/templates/${encodeURIComponent(form.template_id)}`,
             );

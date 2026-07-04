@@ -8,6 +8,8 @@ import { NextResponse } from "next/server";
 export async function GET() {
   return NextResponse.json({
     basePath: process.env.BASE_PATH || "",
+    webhookHost: process.env.WEBHOOK_HOST || "localhost",
+    webhookPort: process.env.WEBHOOK_PORT || "3002",
   });
 }
 
