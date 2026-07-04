@@ -48,8 +48,8 @@ app.get("/health", (req: Request, res: Response) => {
 });
 
 app.use('/api/notification', auth_middleware, notification_router);
-app.use('/api/plugins', plugins_router);
-app.use('/api/admin-channels', admin_channels_router);
+app.use('/api/plugins', auth_middleware, plugins_router);
+app.use('/api/admin-channels', auth_middleware, admin_channels_router);
 app.use('/api/templates', auth_middleware, notification_templates_router);
 
 const start_server = async () => {
