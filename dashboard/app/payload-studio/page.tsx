@@ -306,8 +306,16 @@ export default function ApiDesignerPage() {
                                                     </div>
                                                 ))}
                                                 {channelSelections.length === 0 && (
-                                                    <p className="text-sm text-muted-foreground">
-                                                        No plugins installed. Install plugins with: <code className="bg-muted px-1 rounded">npm run plugin:install</code>
+                                                    <p className="text-sm text-muted-foreground flex flex-col items-start gap-2">
+                                                        <span>No plugins installed.</span>
+                                                        <a
+                                                            href="https://www.simplens.in/docs/plugins#installing-plugins"
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-primary hover:underline font-medium text-xs"
+                                                        >
+                                                            View Plugin Installation Guide
+                                                        </a>
                                                     </p>
                                                 )}
                                             </div>

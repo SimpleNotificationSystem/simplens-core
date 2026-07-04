@@ -308,9 +308,16 @@ export default function PluginsPage() {
                             <p className="text-muted-foreground max-w-sm mx-auto mb-4">
                                 Get started by installing your first notification plugin.
                             </p>
-                            <code className="bg-muted px-3 py-1.5 rounded text-sm">
-                                npm run plugin:install &lt;package-name&gt;
-                            </code>
+                            <div className="mt-4">
+                                <a
+                                    href="https://www.simplens.in/docs/plugins#installing-plugins"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 h-9 px-4 py-2"
+                                >
+                                    View Plugin Installation Guide
+                                </a>
+                            </div>
                         </CardContent>
                     </Card>
                 )}
