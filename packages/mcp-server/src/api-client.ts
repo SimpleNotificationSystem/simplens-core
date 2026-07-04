@@ -105,7 +105,9 @@ export class CoreApiClient {
 
     /** GET /api/plugins - List installed plugins */
     async getPlugins(): Promise<ApiResponse> {
-        return request(this.baseUrl, '/api/plugins');
+        return request(this.baseUrl, '/api/plugins', {
+            headers: this.authHeader,
+        });
     }
 }
 
