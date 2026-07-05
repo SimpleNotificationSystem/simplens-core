@@ -14,7 +14,6 @@ import { DynamicField } from "./dynamic-field";
 import { PluginMetadata, ProviderMetadata, NotificationTemplateDetail, NotificationTemplateListItem } from "@/lib/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { WEBHOOK_HOST, WEBHOOK_PORT } from "@/lib/api-config";
 import { pluginService, templateService, notificationService } from "@/lib/api-client";
 
 // Generate a UUIDv4
@@ -320,7 +319,8 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                 client_id: clientId,
                 channel: selectedChannels,
                 recipient: { ...recipientData },
-                webhook_url: `http://${WEBHOOK_HOST}:${WEBHOOK_PORT}/api/webhook`
+                //hard-coded the webhook url as the simplest solution. This url may not be correct all the times. Nop issues, the worker just fire and forgets while sending webhook, it does not retires
+                webhook_url: "http://localhost:3002/api/webhook"
             };
 
             if (inputMode === "template") {
