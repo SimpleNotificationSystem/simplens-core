@@ -20,7 +20,6 @@ export interface UserCredentials {
 export function extractCredentials(req: Request): UserCredentials {
     const apiKey = req.headers['x-simplens-api-key'] as string | undefined;
     const coreUrl = req.headers['x-simplens-core-url'] as string | undefined;
-    const dashboardUrl = req.headers['x-simplens-dashboard-url'] as string | undefined;
 
     if (!apiKey || !coreUrl) {
         const missing: string[] = [];
@@ -43,7 +42,7 @@ export function extractCredentials(req: Request): UserCredentials {
  * Get credentials from environment variables (for stdio transport).
  */
 export function getStdioCredentials(): UserCredentials {
-    const { SIMPLENS_API_KEY, SIMPLENS_CORE_URL, SIMPLENS_DASHBOARD_URL } = serverConfig;
+    const { SIMPLENS_API_KEY, SIMPLENS_CORE_URL } = serverConfig;
 
     if (!SIMPLENS_API_KEY) {
         throw new Error('NS_API_KEY environment variable is required for stdio mode');

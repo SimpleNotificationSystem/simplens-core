@@ -7,7 +7,7 @@ import { getBasePath } from './utils';
 import {
   Notification,
   DashboardStats,
-  TrendDataPoint,
+  DashboardTrendsResponse,
   PaginatedResponse,
   NotificationFilters,
   Alert,
@@ -118,8 +118,6 @@ export const alertService = {
     apiClient.get('/api/alerts', {
       params: { page, limit, type },
     }),
-  get: (id: string): Promise<Alert> => 
-    apiClient.get(`/api/alerts/${id}`),
   resolve: (id: string, payload: { appendWarning?: boolean }): Promise<{ success: boolean }> =>
     apiClient.post(`/api/alerts/${id}/resolve`, payload),
   bulkResolve: (payload: { appendWarning?: boolean; limit?: number }): Promise<{ success: boolean; message: string }> =>
@@ -149,6 +147,6 @@ export const adminChannelService = {
 
 export const dashboardService = {
   getStats: (): Promise<DashboardStats> => apiClient.get('/api/dashboard/stats'),
-  getTrends: (hours?: number): Promise<TrendDataPoint[]> => 
-    apiClient.get('/api/dashboard/trends', { params: { hours } }),
+  getTrends: (period?: string): Promise<DashboardTrendsResponse> => 
+    apiClient.get('/api/dashboard/trends', { params: { period } }),
 };

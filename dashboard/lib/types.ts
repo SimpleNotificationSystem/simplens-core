@@ -51,10 +51,15 @@ export interface DashboardStats {
 }
 
 export interface TrendDataPoint {
-  timestamp: string;
-  hour: number;
-  count: number;
+  time: number;
   status: NOTIFICATION_STATUS;
+  count: number;
+}
+
+export interface DashboardTrendsResponse {
+  period: string;
+  startDate: string;
+  data: TrendDataPoint[];
 }
 
 export interface PaginatedResponse<T> {

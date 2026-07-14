@@ -2,7 +2,7 @@ import { Router } from 'express';
 import {
   getDashboardStats,
   getDashboardTrends
-} from '../controllers/dashboard.controller.js'; // Wait, let's verify if TS compilation uses .js extension! Yes, ES modules imports use .js extension. So dashboard.controller.js is correct. Let's write that.
+} from '../controllers/dashboard.controller.js';
 
 const router = Router();
 
