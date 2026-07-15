@@ -19,7 +19,8 @@
     "prepublishOnly": "npm run build",
     "start": "node dist/index.js",
     "stdio": "node dist/index.js --stdio",
-    "dev": "tsx watch src/index.ts"
+    "dev": "tsx watch src/index.ts",
+    "test": "npm run build && tsx tests/verify-stdio.ts"
   },
   "keywords": [
     "mcp",

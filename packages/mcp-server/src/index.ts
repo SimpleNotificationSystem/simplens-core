@@ -98,7 +98,6 @@ async function main() {
                 'Last-Event-ID',
                 'X-SimpleNS-API-Key',
                 'X-SimpleNS-Core-URL',
-                'X-SimpleNS-Dashboard-URL',
             ],
         }));
 

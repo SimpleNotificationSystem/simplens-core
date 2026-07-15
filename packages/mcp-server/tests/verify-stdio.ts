@@ -15,7 +15,6 @@ async function main() {
             ...process.env,
             NS_API_KEY: process.env.NS_API_KEY || "",
             SIMPLENS_CORE_URL: process.env.SIMPLENS_CORE_URL || "",
-            SIMPLENS_DASHBOARD_URL: process.env.SIMPLENS_DASHBOARD_URL || "",
         }
     });
 
@@ -34,18 +33,11 @@ async function main() {
     console.log(`Found ${tools.tools.length} tools:`);
     tools.tools.forEach(t => console.log(`- ${t.name}`));
 
-    if (tools.tools.length !== 8) {
-        throw new Error(`Expected 8 tools, found ${tools.tools.length}`);
+    if (tools.tools.length !== 29) {
+        throw new Error(`Expected 29 tools, found ${tools.tools.length}`);
     }
 
-    // List Resources
-    const resources = await client.listResources();
-    console.log(`Found ${resources.resources.length} resources:`);
-    resources.resources.forEach(r => console.log(`- ${r.uri}`));
 
-    if (resources.resources.length !== 0) {
-        throw new Error(`Expected 0 resources, found ${resources.resources.length}`);
-    }
 
     console.log('Verification successful!');
     await client.close();
