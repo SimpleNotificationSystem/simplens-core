@@ -148,6 +148,7 @@ export const resolveAlert = async (req: Request, res: Response): Promise<void> =
           } else if (content.message) {
             content.message = String(content.message) + warningMessage;
           }
+          notification.markModified('content');
         }
 
         // Reset notification to pending
@@ -252,6 +253,7 @@ export const bulkResolveAlerts = async (req: Request, res: Response): Promise<vo
             } else if (content.message) {
               content.message = String(content.message) + warningMessage;
             }
+            notification.markModified('content');
           }
 
           notification.status = NOTIFICATION_STATUS.pending;
