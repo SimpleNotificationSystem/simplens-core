@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { batch_notification_controller, notification_controller } from "../controllers/notification.controllers.js";
+import { batch_notification_controller, notification_controller } from "../controllers/notification.controller.js";
 
 const notification_router= Router();
 

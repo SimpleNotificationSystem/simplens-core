@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-# Get base path from environment (defaults to empty)
+# Get configuration from environment
 BASE_PATH="${BASE_PATH:-}"
 
 echo "🚀 Starting SimpleNS Dashboard..."

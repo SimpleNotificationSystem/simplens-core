@@ -105,7 +105,9 @@ export class CoreApiClient {
 
     /** GET /api/plugins - List installed plugins */
     async getPlugins(): Promise<ApiResponse> {
-        return request(this.baseUrl, '/api/plugins');
+        return request(this.baseUrl, '/api/plugins', {
+            headers: this.authHeader,
+        });
     }
 }
 
@@ -118,9 +120,9 @@ export class DashboardApiClient {
     private authHeader: Record<string, string>;
 
     constructor(credentials: UserCredentials) {
-        this.baseUrl = credentials.dashboardUrl.endsWith('/')
-            ? credentials.dashboardUrl
-            : `${credentials.dashboardUrl}/`;
+        this.baseUrl = credentials.coreUrl.endsWith('/')
+            ? credentials.coreUrl
+            : `${credentials.coreUrl}/`;
         this.authHeader = { Authorization: `Bearer ${credentials.apiKey}` };
     }
 

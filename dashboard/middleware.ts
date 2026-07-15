@@ -1,9 +1,31 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { API_BASE_URL, NS_API_KEY } from "./lib/api-config";
 
 const basePath = process.env.BASE_PATH || "";
 const SESSION_COOKIE_NAME = "simplens_session";
-const NS_API_KEY = process.env.NS_API_KEY || "";
+
+const localApiPaths = [
+    "/api/auth/",
+    "/api/runtime-config",
+    "/api/webhook"
+];
+
+function isLocalApiRoute(pathname: string): boolean {
+    return localApiPaths.some((p) => pathname.startsWith(p));
+}
+
+function proxyToBackend(request: NextRequest, pathname: string) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("Authorization", `Bearer ${NS_API_KEY}`);
+
+    const backendUrl = new URL(`${API_BASE_URL}${pathname}${request.nextUrl.search}`);
+    return NextResponse.rewrite(backendUrl, {
+        request: {
+            headers: requestHeaders,
+        },
+    });
+}
 
 // Routes that don't require authentication
 const publicRoutes = [
@@ -260,12 +282,15 @@ export async function middleware(request: NextRequest) {
             const apiKeyAuth = await validateApiKeyFromRequest(request);
             if (apiKeyAuth.isValid) {
                 // Valid API key — allow the request through
-                if (basePath && request.nextUrl.pathname.startsWith(basePath)) {
-                    const url = request.nextUrl.clone();
-                    url.pathname = pathname;
-                    return NextResponse.rewrite(url);
+                if (isLocalApiRoute(pathname)) {
+                    if (basePath && request.nextUrl.pathname.startsWith(basePath)) {
+                        const url = request.nextUrl.clone();
+                        url.pathname = pathname;
+                        return NextResponse.rewrite(url);
+                    }
+                    return NextResponse.next();
                 }
-                return NextResponse.next();
+                return proxyToBackend(request, pathname);
             }
             // Invalid or missing API key on an API route — return 401 JSON instead of redirect
             return NextResponse.json(
@@ -280,7 +305,11 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(loginUrl);
     }
 
-    // STEP 8: If we stripped base path earlier, rewrite the request for Next.js
+    // STEP 8: Proxy non-local API requests or perform normal next.js routing/basePath stripping
+    if (pathname.startsWith("/api/") && !isLocalApiRoute(pathname)) {
+        return proxyToBackend(request, pathname);
+    }
+
     if (basePath && request.nextUrl.pathname.startsWith(basePath)) {
         const url = request.nextUrl.clone();
         url.pathname = pathname;

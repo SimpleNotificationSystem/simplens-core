@@ -27,8 +27,9 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { withBasePath } from "@/lib/utils";
+import { apiClient, notificationService } from "@/lib/api-client";
 
-const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
+const fetcher = <T,>(url: string): Promise<T> => apiClient.get(url) as unknown as Promise<T>;
 
 interface PageProps {
     params: Promise<{ id: string }>;
@@ -69,22 +70,13 @@ export default function EventDetailPage({ params }: PageProps) {
 
         setIsRetrying(true);
         try {
-            const response = await fetch(withBasePath(`/api/notifications/${notification._id}/retry`), {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({}),
-            });
-
-            if (response.ok) {
-                toast.success("Notification queued for retry");
-                mutate();
-                setRetryDialogOpen(false);
-            } else {
-                const data = await response.json();
-                toast.error(data.error || "Failed to retry notification");
-            }
-        } catch {
-            toast.error("Failed to retry notification");
+            await notificationService.retry(notification._id);
+            toast.success("Notification queued for retry");
+            mutate();
+            setRetryDialogOpen(false);
+        } catch (err) {
+            const error = err as Error;
+            toast.error(error.message || "Failed to retry notification");
         } finally {
             setIsRetrying(false);
         }
@@ -95,19 +87,12 @@ export default function EventDetailPage({ params }: PageProps) {
 
         setIsDeleting(true);
         try {
-            const response = await fetch(withBasePath(`/api/notifications/${notification._id}`), {
-                method: "DELETE",
-            });
-
-            if (response.ok) {
-                toast.success("Notification deleted");
-                router.push(withBasePath("/events"));
-            } else {
-                const data = await response.json();
-                toast.error(data.error || "Failed to delete notification");
-            }
-        } catch {
-            toast.error("Failed to delete notification");
+            await notificationService.delete(notification._id);
+            toast.success("Notification deleted");
+            router.push(withBasePath("/events"));
+        } catch (err) {
+            const error = err as Error;
+            toast.error(error.message || "Failed to delete notification");
         } finally {
             setIsDeleting(false);
             setDeleteDialogOpen(false);

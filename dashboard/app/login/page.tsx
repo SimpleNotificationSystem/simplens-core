@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { AlertTriangle, Eye, EyeOff, Loader2, Lock, User } from "lucide-react";
 import { ElegantShape } from "@/components/elegant-shape";
 import { withBasePath } from "@/lib/utils";
+import { authService } from "@/lib/api-client";
 import { useState } from "react";
 
 export default function LoginPage() {
@@ -26,28 +27,15 @@ export default function LoginPage() {
         setIsLoading(true);
 
         try {
-            const response = await fetch(withBasePath("/api/auth/login"), {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ username, password }),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                setError(data.error || "Invalid username or password");
-                setIsLoading(false);
-                return;
-            }
+            const data = await authService.login({ username, password });
             setIsLoading(false);
             // Redirect to dashboard
-            router.push(withBasePath(`/dashboard`));
+            router.push(data.redirectUrl || withBasePath(`/dashboard`));
             router.refresh();
             return;
-        } catch {
-            setError("An error occurred. Please try again.");
+        } catch (err) {
+            const error = err as Error;
+            setError(error.message || "An error occurred. Please try again.");
             setIsLoading(false);
         }
     };

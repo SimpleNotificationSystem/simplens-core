@@ -51,10 +51,15 @@ export interface DashboardStats {
 }
 
 export interface TrendDataPoint {
-  timestamp: string;
-  hour: number;
-  count: number;
+  time: number;
   status: NOTIFICATION_STATUS;
+  count: number;
+}
+
+export interface DashboardTrendsResponse {
+  period: string;
+  startDate: string;
+  data: TrendDataPoint[];
 }
 
 export interface PaginatedResponse<T> {
@@ -191,6 +196,23 @@ export interface AdminChannel {
 export interface AdminChannelFormData {
   channel_type: AdminChannelType;
   name: string;
-  webhook_url: string;
+  config: Record<string, string>;
   alert_filters: AlertFilters;
+  enabled?: boolean;
+}
+
+export interface AdminChannelProviderField {
+  name: string;
+  type: 'string' | 'url' | 'secret';
+  label: string;
+  placeholder?: string;
+  description?: string;
+  required: boolean;
+  pattern?: string;
+}
+
+export interface AdminChannelProviderMeta {
+  channelType: string;
+  displayName: string;
+  credentialFields: AdminChannelProviderField[];
 }

@@ -13,35 +13,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useSWR from "swr";
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { Copy, Check, Code, Zap, AlertCircle } from "lucide-react";
-import { withBasePath } from "@/lib/utils";
-
-// Types
-interface FieldDefinition {
-    name: string;
-    type: string;
-    required: boolean;
-    description?: string;
-}
-
-interface ProviderMetadata {
-    id: string;
-    name: string;
-    displayName: string;
-    description?: string;
-    priority: number;
-    recipientFields: FieldDefinition[];
-    contentFields: FieldDefinition[];
-}
-
-interface ChannelMetadata {
-    providers: ProviderMetadata[];
-    default?: string;
-    fallback?: string;
-}
-
-interface PluginsResponse {
-    channels: Record<string, ChannelMetadata>;
-}
+import { apiClient } from "@/lib/api-client";
+import { FieldDefinition, PluginMetadata as PluginsResponse } from "@/lib/types";
 
 interface ChannelSelection {
     channel: string;
@@ -49,7 +22,7 @@ interface ChannelSelection {
     enabled: boolean;
 }
 
-const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
+const fetcher = <T,>(url: string): Promise<T> => apiClient.get(url) as unknown as Promise<T>;
 
 // Map field type to schema type display - show (optional) for non-required fields
 function getTypeDisplay(field: FieldDefinition): string {
@@ -306,8 +279,16 @@ export default function ApiDesignerPage() {
                                                     </div>
                                                 ))}
                                                 {channelSelections.length === 0 && (
-                                                    <p className="text-sm text-muted-foreground">
-                                                        No plugins installed. Install plugins with: <code className="bg-muted px-1 rounded">npm run plugin:install</code>
+                                                    <p className="text-sm text-muted-foreground flex flex-col items-start gap-2">
+                                                        <span>No plugins installed.</span>
+                                                        <a
+                                                            href="https://www.simplens.in/docs/plugins#installing-plugins"
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-primary hover:underline font-medium text-xs"
+                                                        >
+                                                            View Plugin Installation Guide
+                                                        </a>
                                                     </p>
                                                 )}
                                             </div>

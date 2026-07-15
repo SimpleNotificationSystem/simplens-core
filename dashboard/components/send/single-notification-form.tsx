@@ -14,7 +14,7 @@ import { DynamicField } from "./dynamic-field";
 import { PluginMetadata, ProviderMetadata, NotificationTemplateDetail, NotificationTemplateListItem } from "@/lib/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { withBasePath } from "@/lib/utils";
+import { pluginService, templateService, notificationService } from "@/lib/api-client";
 
 // Generate a UUIDv4
 function generateUUID(): string {
@@ -110,11 +110,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
     useEffect(() => {
         const fetchPlugins = async () => {
             try {
-                const res = await fetch(withBasePath('/api/plugins'));
-                if (!res.ok) {
-                    throw new Error(`Failed to load plugins: ${res.statusText}`);
-                }
-                const data = await res.json();
+                const data = await pluginService.getMetadata();
                 setPlugins(data);
 
                 // Select first channel by default if available
@@ -216,15 +212,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
 
                     setTemplatesLoadingByChannel((prev) => ({ ...prev, [channel]: true }));
                     try {
-                        const response = await fetch(
-                            withBasePath(`/api/templates?package_name=${encodeURIComponent(packageName)}`)
-                        );
-
-                        if (!response.ok) {
-                            throw new Error(`Failed to fetch templates for ${channel}`);
-                        }
-
-                        const data = await response.json();
+                        const data = await templateService.list(packageName);
                         if (!cancelled) {
                             const templates = Array.isArray(data) ? data : [];
                             setTemplatesByChannel((prev) => ({ ...prev, [channel]: templates }));
@@ -277,13 +265,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                     }
 
                     try {
-                        const response = await fetch(withBasePath(`/api/templates/${encodeURIComponent(templateId)}`));
-                        const data = await response.json().catch(() => ({}));
-                        if (!response.ok) {
-                            throw new Error(data.message || data.error || "Failed to load template detail");
-                        }
-
-                        const template = data as NotificationTemplateDetail;
+                        const template = await templateService.get(templateId);
                         const variableNames = extractTemplateVariables(template.content);
 
                         if (!cancelled) {
@@ -337,6 +319,8 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                 client_id: clientId,
                 channel: selectedChannels,
                 recipient: { ...recipientData },
+                //hard-coded the webhook url as the simplest solution. This url may not be correct all the times. Nop issues, the worker just fire and forgets while sending webhook, it does not retires
+                webhook_url: "http://localhost:3002/api/webhook"
             };
 
             if (inputMode === "template") {
@@ -386,17 +370,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                 }
             }
 
-            const response = await fetch(withBasePath("/api/send"), {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || data.error || "Failed to send");
-            }
+            await notificationService.send(payload);
 
             toast.success("Notification sent successfully!");
             onSuccess?.();

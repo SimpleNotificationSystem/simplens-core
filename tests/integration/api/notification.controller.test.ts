@@ -37,7 +37,7 @@ const createTestApp = async () => {
 
   // Import controllers
   const { notification_controller, batch_notification_controller } =
-    await import("../../../src/api/controllers/notification.controllers.js");
+    await import("../../../src/api/controllers/notification.controller.js");
 
   app.post("/api/notification", notification_controller);
   app.post("/api/notification/batch", batch_notification_controller);

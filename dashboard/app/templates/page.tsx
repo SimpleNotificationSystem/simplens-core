@@ -43,6 +43,7 @@ import {
   Trash2,
 } from "lucide-react";
 import {withBasePath } from "@/lib/utils";
+import { apiClient, templateService } from "@/lib/api-client";
 import type {
   PluginMetadata,
   NotificationTemplateDetail,
@@ -51,13 +52,7 @@ import type {
 import { HtmlPreview } from "@/components/send/html-preview";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-const fetcher = (url: string) =>
-  fetch(withBasePath(url)).then((res) => {
-    if (!res.ok) {
-      throw new Error(`Request failed: ${res.status}`);
-    }
-    return res.json();
-  });
+const fetcher = <T,>(url: string): Promise<T> => apiClient.get(url) as unknown as Promise<T>;
 
 export default function TemplatesPage() {
   const router = useRouter();
@@ -147,22 +142,7 @@ export default function TemplatesPage() {
 
     setIsDeleting(true);
     try {
-      const response = await fetch(
-        withBasePath(
-          `/api/templates/${encodeURIComponent(deleteTarget.template_id)}`,
-        ),
-        {
-          method: "DELETE",
-        },
-      );
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(
-          data.message || data.error || "Failed to delete template",
-        );
-      }
-
+      await templateService.delete(deleteTarget.template_id);
       toast.success("Template deleted");
       setDeleteTarget(null);
       await mutateTemplates();
@@ -180,16 +160,8 @@ export default function TemplatesPage() {
     setDetailLoading(true);
     setDetailData(null);
     try {
-      const response = await fetch(
-        withBasePath(`/api/templates/${encodeURIComponent(templateId)}`),
-      );
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(
-          data.message || data.error || "Failed to load template",
-        );
-      }
-      setDetailData(data as NotificationTemplateDetail);
+      const data = await templateService.get(templateId);
+      setDetailData(data);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to load template",

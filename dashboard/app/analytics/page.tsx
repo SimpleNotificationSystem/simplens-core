@@ -19,9 +19,8 @@ import {
     Legend,
 } from "recharts";
 import type { DashboardStats } from "@/lib/types";
-import { withBasePath } from "@/lib/utils";
-
-const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
+import { apiClient } from "@/lib/api-client";
+const fetcher = <T,>(url: string): Promise<T> => apiClient.get(url) as unknown as Promise<T>;
 
 const STATUS_COLORS = {
     pending: "#fbbf24",
