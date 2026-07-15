@@ -7,8 +7,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { UserCredentials } from '../auth.js';
 import { ApiClient } from '../api-client.js';
 import { formatApiResponse, formatToolError } from './response.js';
-
-const objectId = z.string().regex(/^[a-fA-F0-9]{24}$/);
+import { objectIdSchema } from './schemas.js';
 
 export function registerResolveAlertsRetryTools(server: McpServer, getCredentials: () => UserCredentials) {
     // 10. resolve_alert_with_retry
@@ -17,7 +16,7 @@ export function registerResolveAlertsRetryTools(server: McpServer, getCredential
         {
             description: 'Resolve a system alert AND retry the failed notification job. Optionally appends a warning to the template content.',
             inputSchema: {
-                alert_id: objectId.describe('The MongoDB ObjectId of the alert to resolve'),
+                alert_id: objectIdSchema.describe('The MongoDB ObjectId of the alert to resolve'),
                 appendWarning: z.boolean().optional().describe('Whether to append "Ignore if already received" warning to the message (default: false)')
             },
         },

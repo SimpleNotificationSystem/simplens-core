@@ -119,8 +119,9 @@ describe('MCP Server Integration Tests', () => {
         }));
 
         expect(response.isError).toBeUndefined();
-        expect(response.content[0].type).toBe('text');
-        expect(JSON.parse(response.content[0].text as string)).toEqual([{ name: 'smtp', channel: 'email' }]);
+        const content = response.content[0] as { type: string; text: string };
+        expect(content.type).toBe('text');
+        expect(JSON.parse(content.text)).toEqual([{ name: 'smtp', channel: 'email' }]);
     });
 
     it('should route create_template tool call to POST /api/templates/create', async () => {
@@ -153,7 +154,8 @@ describe('MCP Server Integration Tests', () => {
         }));
 
         expect(response.isError).toBeUndefined();
-        expect(JSON.parse(response.content[0].text as string)).toEqual({ success: true, id: 'temp-123' });
+        const content = response.content[0] as { text: string };
+        expect(JSON.parse(content.text)).toEqual({ success: true, id: 'temp-123' });
     });
 
     it('should route delete_alert tool call to DELETE /api/alerts/:id', async () => {
@@ -179,6 +181,7 @@ describe('MCP Server Integration Tests', () => {
         }));
 
         expect(response.isError).toBeUndefined();
-        expect(JSON.parse(response.content[0].text as string)).toEqual({ success: true });
+        const content = response.content[0] as { text: string };
+        expect(JSON.parse(content.text)).toEqual({ success: true });
     });
 });

@@ -8,7 +8,7 @@ import type { UserCredentials } from '../auth.js';
 import { ApiClient } from '../api-client.js';
 import { formatApiResponse, formatToolError } from './response.js';
 
-const objectId = z.string().regex(/^[a-fA-F0-9]{24}$/);
+import { objectIdSchema } from './schemas.js';
 const providerType = z.enum(['discord', 'telegram', 'email', 'slack']);
 
 export function registerAdminChannelsTools(server: McpServer, getCredentials: () => UserCredentials) {
@@ -130,7 +130,7 @@ export function registerAdminChannelsTools(server: McpServer, getCredentials: ()
         {
             description: 'Get a single admin alert channel configuration by MongoDB ID (excluding encrypted credentials).',
             inputSchema: {
-                id: objectId.describe('The MongoDB ID of the channel')
+                id: objectIdSchema.describe('The MongoDB ID of the channel')
             },
         },
         async (params) => {
@@ -151,7 +151,7 @@ export function registerAdminChannelsTools(server: McpServer, getCredentials: ()
         {
             description: 'Update an admin alert channel configuration.',
             inputSchema: {
-                id: objectId.describe('The MongoDB ID of the channel to update'),
+                id: objectIdSchema.describe('The MongoDB ID of the channel to update'),
                 name: z.string().optional().describe('Updated channel label'),
                 enabled: z.boolean().optional().describe('Toggle channel enablement'),
                 config: z.record(z.string(), z.string()).optional().describe('New credentials (validates automatically)'),
@@ -183,7 +183,7 @@ export function registerAdminChannelsTools(server: McpServer, getCredentials: ()
         {
             description: 'Delete an admin alert channel.',
             inputSchema: {
-                id: objectId.describe('The MongoDB ID of the channel to delete')
+                id: objectIdSchema.describe('The MongoDB ID of the channel to delete')
             },
         },
         async (params) => {

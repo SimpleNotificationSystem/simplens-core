@@ -8,7 +8,7 @@ import type { UserCredentials } from '../auth.js';
 import { ApiClient } from '../api-client.js';
 import { formatApiResponse, formatToolError } from './response.js';
 
-const objectId = z.string().regex(/^[a-fA-F0-9]{24}$/);
+import { objectIdSchema, paginationSchemas } from './schemas.js';
 
 export function registerNotificationsManagementTools(server: McpServer, getCredentials: () => UserCredentials) {
     // 6. list_notifications
@@ -17,8 +17,7 @@ export function registerNotificationsManagementTools(server: McpServer, getCrede
         {
             description: 'List notifications with advanced filtering, sorting, and pagination. (Use find_failures for failed-only alerts).',
             inputSchema: {
-                page: z.number().int().min(1).optional().describe('Page number (default: 1)'),
-                limit: z.number().int().min(1).max(100).optional().describe('Results per page (default: 20)'),
+                ...paginationSchemas,
                 status: z.string().optional().describe('Filter by status (e.g. "pending", "processing", "sent", "failed")'),
                 channel: z.string().optional().describe('Filter by channel (e.g. "email", "sms")'),
                 search: z.string().optional().describe('Search by request ID, client ID, or client name'),
@@ -63,7 +62,7 @@ export function registerNotificationsManagementTools(server: McpServer, getCrede
         {
             description: 'Retrieve full status, configuration, and error logs for a single notification by its internal MongoDB ID.',
             inputSchema: {
-                id: objectId.describe('The 24-character hexadecimal MongoDB ID of the notification')
+                id: objectIdSchema.describe('The 24-character hexadecimal MongoDB ID of the notification')
             },
         },
         async (params) => {
@@ -84,7 +83,7 @@ export function registerNotificationsManagementTools(server: McpServer, getCrede
         {
             description: 'Delete a notification log from the database.',
             inputSchema: {
-                id: objectId.describe('The 24-character hexadecimal MongoDB ID of the notification to delete')
+                id: objectIdSchema.describe('The 24-character hexadecimal MongoDB ID of the notification to delete')
             },
         },
         async (params) => {

@@ -265,10 +265,6 @@ export class ApiClient {
         });
     }
 
-    /** Alias for deleteAlert */
-    async resolveAlert(alertId: string): Promise<ApiResponse> {
-        return this.deleteAlert(alertId);
-    }
 
     /** POST /api/alerts/:id/resolve - Resolve alert with retry */
     async resolveAlertWithRetry(alertId: string, appendWarning?: boolean): Promise<ApiResponse> {
@@ -374,8 +370,4 @@ export class ApiClient {
     }
 }
 
-// Keep backward compatibility exports
-export const CoreApiClient = ApiClient;
-export type CoreApiClient = ApiClient;
-export const DashboardApiClient = ApiClient;
-export type DashboardApiClient = ApiClient;
+
