@@ -89,11 +89,12 @@ export const getDashboardTrends = async (req: Request, res: Response): Promise<v
 
     const startDate = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
 
-    // Aggregate by hour for 24h, by day for 7d/30d
-    const groupBy = period === '24h'
-      ? { $hour: '$created_at' }
-      : { $dayOfYear: '$created_at' };
-
+    // Aggregate by hour for 24h, by day for 7d/30d (use timestamp buckets to avoid merging different dates)
+    const bucketDateExpr = period === '24h'
+      ? { $dateTrunc: { date: '$created_at', unit: 'hour' } }
+      : { $dateTrunc: { date: '$created_at', unit: 'day' } };
+    const groupBy = { $toLong: bucketDateExpr };
+    
     const trends = await notification_model.aggregate([
       {
         $match: {
