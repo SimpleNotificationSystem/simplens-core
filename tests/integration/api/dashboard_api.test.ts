@@ -358,7 +358,8 @@ describe('Dashboard APIs Integration Tests', () => {
         webhook_url: 'http://cb.com',
         status: 'failed',
         retry_count: 1,
-        save: vi.fn().mockResolvedValue(true)
+        save: vi.fn().mockResolvedValue(true),
+        markModified: vi.fn()
       };
 
       mockAlertFindById.mockResolvedValueOnce(mockAlert);

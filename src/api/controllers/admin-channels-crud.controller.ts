@@ -51,14 +51,19 @@ export const createAdminChannel = async (req: Request, res: Response): Promise<v
     const errors: string[] = [];
 
     for (const field of schema) {
-      const value = config[field.name];
-      if (field.required && (!value || value.trim() === '')) {
+      const value = config[field.name] as unknown;
+       if (value != null && typeof value !== 'string') {
+         errors.push(`${field.label} must be a string`);
+         continue;
+       }
+       const valueStr = value as string | undefined;
+       if (field.required && (!valueStr || valueStr.trim() === '')) {
         errors.push(`${field.label} is required`);
         continue;
       }
-      if (value && field.pattern) {
+      if (valueStr && field.pattern) {
         const regex = new RegExp(field.pattern);
-        if (!regex.test(value)) {
+        if (!regex.test(valueStr)) {
           errors.push(`${field.label} has invalid format`);
         }
       }
@@ -163,14 +168,19 @@ export const updateAdminChannel = async (req: Request, res: Response): Promise<v
       const errors: string[] = [];
 
       for (const field of schema) {
-        const value = body.config[field.name];
-        if (field.required && (!value || value.trim() === '')) {
+        const value = body.config[field.name] as unknown;
+        if (value != null && typeof value !== 'string') {
+           errors.push(`${field.label} must be a string`);
+           continue;
+        }
+        const valueStr = value as string | undefined;
+        if (field.required && (!valueStr || valueStr.trim() === '')) {
           errors.push(`${field.label} is required`);
           continue;
         }
-        if (value && field.pattern) {
+        if (valueStr && field.pattern) {
           const regex = new RegExp(field.pattern);
-          if (!regex.test(value)) {
+          if (!regex.test(valueStr)) {
             errors.push(`${field.label} has invalid format`);
           }
         }
