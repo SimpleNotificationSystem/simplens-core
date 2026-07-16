@@ -5,20 +5,13 @@
  * Instantiated with user credentials, discarded after the response.
  */
 
+import axios from 'axios';
 import type { UserCredentials } from './auth.js';
 
 export interface ApiResponse<T = unknown> {
     ok: boolean;
     status: number;
     data: T;
-}
-
-function isLikelyJson(contentType: string | null, bodyText: string): boolean {
-    if (contentType && contentType.toLowerCase().includes('application/json')) {
-        return true;
-    }
-    const trimmed = bodyText.trim();
-    return trimmed.startsWith('{') || trimmed.startsWith('[');
 }
 
 async function request<T = unknown>(
@@ -41,42 +34,32 @@ async function request<T = unknown>(
     }
     const url = new URL(cleanPath, cleanBaseUrl);
 
+    const params: Record<string, string> = {};
     if (options.params) {
         for (const [key, value] of Object.entries(options.params)) {
             if (value !== undefined && value !== null && value !== '') {
-                url.searchParams.set(key, String(value));
+                params[key] = String(value);
             }
         }
     }
 
-    const response = await fetch(url.toString(), {
+    const response = await axios({
+        url: url.toString(),
         method: options.method || 'GET',
         headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             ...options.headers,
         },
-        body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+        data: options.body,
+        params,
+        validateStatus: () => true,
     });
 
-    const text = await response.text();
-    let data: T | string | null;
-    if (!text) {
-        data = null;
-    } else if (isLikelyJson(response.headers.get('content-type'), text)) {
-        try {
-            data = JSON.parse(text) as T;
-        } catch {
-            data = text;
-        }
-    } else {
-        data = text;
-    }
-
     return {
-        ok: response.ok,
+        ok: response.status >= 200 && response.status < 300,
         status: response.status,
-        data: data as T,
+        data: (response.data === undefined ? null : response.data) as T,
     };
 }
 

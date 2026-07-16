@@ -19,7 +19,7 @@ Install dependencies with `npm install` and `npm install --prefix dashboard`.
 ## Coding Style & Naming Conventions
 Use TypeScript with strict typing and existing `@src/*` path aliases. Match current style: 2-space indentation, camelCase for variables and functions, PascalCase for types, classes, and React components, and filenames such as `notification.controller.test.ts`.
 
-Plan changes before writing code. Follow low-level design principles: single responsibility, clear interfaces, useful dependency inversion, and explicit error handling. Do not duplicate logic; extract shared behavior into focused utilities, services, or test helpers.
+Plan changes before writing code. Follow low-level design principles: single responsibility, clear interfaces, useful dependency inversion, and explicit error handling. Do not duplicate logic; extract shared behavior into focused utilities, services, or test helpers. Always use `axios` instead of the plain `fetch` API in this project.
 
 ## Testing Guidelines
 Vitest is the test runner. Integration tests also use `supertest`, `mongodb-memory-server`, and Redis mocks. Name test files with `.test.ts`, for example `tests/unit/plugins/loader.test.ts`.
