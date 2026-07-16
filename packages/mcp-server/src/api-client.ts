@@ -282,7 +282,7 @@ export class ApiClient {
     async getDashboardTrends(range?: string): Promise<ApiResponse> {
         return request(this.baseUrl, 'api/dashboard/trends', {
             headers: this.authHeader,
-            params: range ? { range } : undefined,
+            params: range ? { period: range } : undefined,
         });
     }
 

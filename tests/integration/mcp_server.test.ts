@@ -5,6 +5,24 @@ import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { JSONRPCRequest, JSONRPCResponse, JSONRPCNotification } from '@modelcontextprotocol/sdk/types.js';
 import { McpServer as SdkMcpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
+const { mockAxios } = vi.hoisted(() => {
+    return {
+        mockAxios: vi.fn(),
+    };
+});
+
+// Mock axios for both root and sub-package resolutions
+vi.mock('axios', () => {
+    return {
+        default: mockAxios,
+    };
+});
+vi.mock('../../packages/mcp-server/node_modules/axios', () => {
+    return {
+        default: mockAxios,
+    };
+});
+
 // Loopback transport for in-memory client-server MCP communication
 class LoopbackTransport implements Transport {
     private other?: LoopbackTransport;
@@ -47,19 +65,15 @@ describe('MCP Server Integration Tests', () => {
         apiKey: 'test-api-key'
     };
 
-    let fetchMock = vi.fn();
-
     beforeEach(async () => {
-        // Stub global fetch
-        fetchMock = vi.fn();
-        vi.stubGlobal('fetch', fetchMock);
+        mockAxios.mockReset();
 
         server = new SdkMcpServer({
             name: 'test-mcp-server',
             version: '1.0.0'
         });
 
-        registerAllTools(server, () => credentials);
+        registerAllTools(server as any, () => credentials);
 
         client = new Client({
             name: 'test-mcp-client',
@@ -81,7 +95,6 @@ describe('MCP Server Integration Tests', () => {
     afterEach(async () => {
         await client.close();
         await server.close();
-        vi.unstubAllGlobals();
     });
 
     it('should register exactly 29 tools', async () => {
@@ -99,11 +112,9 @@ describe('MCP Server Integration Tests', () => {
     });
 
     it('should route list_plugins tool call to GET /api/plugins', async () => {
-        fetchMock.mockResolvedValueOnce({
-            ok: true,
+        mockAxios.mockResolvedValueOnce({
             status: 200,
-            headers: new Headers({ 'content-type': 'application/json' }),
-            text: async () => JSON.stringify([{ name: 'smtp', channel: 'email' }])
+            data: [{ name: 'smtp', channel: 'email' }]
         });
 
         const response = await client.callTool({
@@ -111,7 +122,8 @@ describe('MCP Server Integration Tests', () => {
             arguments: {}
         });
 
-        expect(fetchMock).toHaveBeenCalledWith('http://localhost:3000/api/plugins', expect.objectContaining({
+        expect(mockAxios).toHaveBeenCalledWith(expect.objectContaining({
+            url: 'http://localhost:3000/api/plugins',
             method: 'GET',
             headers: expect.objectContaining({
                 'Authorization': 'Bearer test-api-key'
@@ -125,11 +137,9 @@ describe('MCP Server Integration Tests', () => {
     });
 
     it('should route create_template tool call to POST /api/templates/create', async () => {
-        fetchMock.mockResolvedValueOnce({
-            ok: true,
+        mockAxios.mockResolvedValueOnce({
             status: 201,
-            headers: new Headers({ 'content-type': 'application/json' }),
-            text: async () => JSON.stringify({ success: true, id: 'temp-123' })
+            data: { success: true, id: 'temp-123' }
         });
 
         const templateArgs = {
@@ -145,9 +155,10 @@ describe('MCP Server Integration Tests', () => {
             arguments: templateArgs
         });
 
-        expect(fetchMock).toHaveBeenCalledWith('http://localhost:3000/api/templates/create', expect.objectContaining({
+        expect(mockAxios).toHaveBeenCalledWith(expect.objectContaining({
+            url: 'http://localhost:3000/api/templates/create',
             method: 'POST',
-            body: JSON.stringify(templateArgs),
+            data: templateArgs,
             headers: expect.objectContaining({
                 'Authorization': 'Bearer test-api-key'
             })
@@ -159,11 +170,9 @@ describe('MCP Server Integration Tests', () => {
     });
 
     it('should route delete_alert tool call to DELETE /api/alerts/:id', async () => {
-        fetchMock.mockResolvedValueOnce({
-            ok: true,
+        mockAxios.mockResolvedValueOnce({
             status: 200,
-            headers: new Headers({ 'content-type': 'application/json' }),
-            text: async () => JSON.stringify({ success: true })
+            data: { success: true }
         });
 
         const response = await client.callTool({
@@ -173,7 +182,8 @@ describe('MCP Server Integration Tests', () => {
             }
         });
 
-        expect(fetchMock).toHaveBeenCalledWith('http://localhost:3000/api/alerts/60d5ec48f83c2c2e88a53820', expect.objectContaining({
+        expect(mockAxios).toHaveBeenCalledWith(expect.objectContaining({
+            url: 'http://localhost:3000/api/alerts/60d5ec48f83c2c2e88a53820',
             method: 'DELETE',
             headers: expect.objectContaining({
                 'Authorization': 'Bearer test-api-key'
