@@ -13,8 +13,8 @@ async function main() {
         args: ['dist/index.js', '--stdio'],
         env: {
             ...process.env,
-            NS_API_KEY: process.env.NS_API_KEY || "",
-            SIMPLENS_CORE_URL: process.env.SIMPLENS_CORE_URL || "",
+            NS_API_KEY: process.env.NS_API_KEY || "dummy_api_key_for_stdio_verification",
+            SIMPLENS_CORE_URL: process.env.SIMPLENS_CORE_URL || "http://localhost:3000",
         }
     });
 
