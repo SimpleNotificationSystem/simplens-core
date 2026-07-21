@@ -10,7 +10,7 @@
   },
   "scripts": {
     "build": "tsc && npm run build:copy",
-    "build:copy": "xcopy /E /I /Y src\\templates dist\\templates",
+    "build:copy": "node -e \"require('fs').cpSync('src/templates', 'dist/templates', { recursive: true })\"",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
