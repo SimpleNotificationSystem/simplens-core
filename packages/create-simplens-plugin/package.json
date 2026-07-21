@@ -13,8 +13,8 @@
     "build:copy": "node -e \"require('fs').cpSync('src/templates', 'dist/templates', { recursive: true })\"",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --config vitest.config.ts",
+    "test:watch": "vitest --config vitest.config.ts",
     "prepublishOnly": "npm run build",
     "prepare": "husky"
   },

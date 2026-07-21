@@ -22,12 +22,9 @@ vi.mock('ora', () => ({
 }));
 
 vi.mock('chalk', () => ({
-    default: {
-        green: vi.fn((s) => s),
-        cyan: vi.fn((s) => s),
-        yellow: vi.fn((s) => s),
-        bold: vi.fn((s) => s),
-    },
+    default: new Proxy({}, {
+        get: () => (s: unknown) => s,
+    }),
 }));
 
 vi.mock('./utils/git.js', () => ({
