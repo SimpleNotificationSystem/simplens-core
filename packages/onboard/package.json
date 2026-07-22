@@ -4,7 +4,7 @@
   "type": "module",
   "main": "dist/index.js",
   "engines": {
-    "node": ">=22.0.0"
+    "node": "^20.19.0 || >=22.12.0"
   },
   "bin": {
     "simplens-onboard": "./dist/index.js"
