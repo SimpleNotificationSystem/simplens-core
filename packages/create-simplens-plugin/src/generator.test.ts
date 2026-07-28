@@ -21,11 +21,24 @@ vi.mock('ora', () => ({
     })),
 }));
 
-vi.mock('chalk', () => ({
-    default: new Proxy({}, {
-        get: () => (s: unknown) => s,
-    }),
-}));
+vi.mock('chalk', () => {
+    const fn = (s: string) => s;
+    return {
+        default: {
+            green: fn,
+            cyan: fn,
+            yellow: fn,
+            bold: fn,
+            blueBright: fn,
+            cyanBright: fn,
+            greenBright: fn,
+            yellowBright: fn,
+            redBright: fn,
+            gray: fn,
+            white: fn,
+        },
+    };
+});
 
 vi.mock('./utils/git.js', () => ({
     isGitAvailable: vi.fn().mockReturnValue(true),

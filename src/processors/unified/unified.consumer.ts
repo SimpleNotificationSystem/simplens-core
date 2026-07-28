@@ -342,7 +342,7 @@ const processMessage = async (
                 try {
                     await status_outbox_model.create({
                         notification_id: notificationId,
-                        status: 'delivered',
+                        status: NOTIFICATION_STATUS_SF.delivered,
                         processed: false
                     });
                     logger.info(`[${channel}] Created status_outbox fallback for: ${notificationId}`);

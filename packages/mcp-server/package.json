@@ -46,5 +46,9 @@
     "@types/node": "^24.10.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "esbuild": "0.27.2",
+    "@hono/node-server": "^2.0.5"
   }
 }
