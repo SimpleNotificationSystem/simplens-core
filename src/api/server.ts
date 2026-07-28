@@ -34,7 +34,7 @@ app.use(helmet());
 
 app.use(cors({ origin: "*" })); //allows all origins
 
-app.get("/", (req: Request, res: Response) => {
+app.get("/api", (req: Request, res: Response) => {
     res.json({
         info: "Notification Service is running"
     });
@@ -42,7 +42,7 @@ app.get("/", (req: Request, res: Response) => {
 });
 
 // Health check endpoint for Docker/Kubernetes
-app.get("/health", (req: Request, res: Response) => {
+app.get("/api/health", (req: Request, res: Response) => {
     res.status(200).json({
         status: "healthy",
         timestamp: new Date().toISOString()
