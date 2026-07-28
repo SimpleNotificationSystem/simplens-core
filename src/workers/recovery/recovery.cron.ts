@@ -20,6 +20,7 @@ import status_outbox_model from '@src/database/models/status-outbox.models.js';
 import { getIdempotencyStatus } from '@src/processors/shared/idempotency.js';
 import { recoveryLogger as logger } from '@src/workers/utils/logger.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
+import { NOTIFICATION_STATUS_SF } from '@src/types/types.js';
 
 // Health checker function type
 type HealthChecker = () => Promise<boolean>;
@@ -109,7 +110,7 @@ const recoverStuckProcessing = async (): Promise<void> => {
 
                     await status_outbox_model.create([{
                         notification_id: notification._id,
-                        status: 'delivered',
+                        status: NOTIFICATION_STATUS_SF.delivered,
                         processed: false
                     }], { session });
 
@@ -141,7 +142,7 @@ const recoverStuckProcessing = async (): Promise<void> => {
 
                         await status_outbox_model.create([{
                             notification_id: notification._id,
-                            status: 'failed',
+                            status: NOTIFICATION_STATUS_SF.failed,
                             processed: false
                         }], { session });
 

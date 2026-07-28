@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import alert_model from '@src/database/models/alert.models.js';
 import notification_model from '@src/database/models/notification.models.js';
 import outbox_model from '@src/database/models/outbox.models.js';
-import { NOTIFICATION_STATUS, OUTBOX_STATUS, getTopicForChannel } from '@src/types/types.js';
+import { NOTIFICATION_STATUS, OUTBOX_STATUS, getTopicForChannel, ALERT_TYPE } from '@src/types/types.js';
 import mongoose from 'mongoose';
 import { apiLogger as logger } from '@src/workers/utils/logger.js';
 
@@ -26,9 +26,9 @@ export const listAlerts = async (req: Request, res: Response): Promise<void> => 
     const skip = (page - 1) * limit;
 
     // Build query filter
-    const baseFilter: { resolved: boolean; alert_type?: string } = { resolved: false };
+    const baseFilter: { resolved: boolean; alert_type?: ALERT_TYPE } = { resolved: false };
     if (type && type !== 'all') {
-      baseFilter.alert_type = type;
+      baseFilter.alert_type = type as ALERT_TYPE;
     }
 
     // Get filtered count (for pagination)

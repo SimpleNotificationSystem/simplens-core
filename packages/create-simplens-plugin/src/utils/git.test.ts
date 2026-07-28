@@ -16,7 +16,7 @@ vi.mock('fs/promises', () => ({
 
 describe('git utilities', () => {
     beforeEach(() => {
-        vi.clearAllMocks();
+        vi.resetAllMocks();
     });
 
     afterEach(() => {
