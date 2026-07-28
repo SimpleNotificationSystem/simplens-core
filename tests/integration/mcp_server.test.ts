@@ -6,22 +6,28 @@ import { JSONRPCRequest, JSONRPCResponse, JSONRPCNotification } from '@modelcont
 import { McpServer as SdkMcpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 const { mockAxios } = vi.hoisted(() => {
+    const fn = vi.fn();
     return {
-        mockAxios: vi.fn(),
+        mockAxios: Object.assign(fn, { default: fn }),
     };
 });
 
-// Mock axios for both root and sub-package resolutions
-vi.mock('axios', () => {
-    return {
-        default: mockAxios,
-    };
-});
-vi.mock('../../packages/mcp-server/node_modules/axios', () => {
-    return {
-        default: mockAxios,
-    };
-});
+vi.mock('axios', () => ({
+    default: mockAxios,
+    __esModule: true,
+}));
+vi.mock('../../packages/mcp-server/node_modules/axios', () => ({
+    default: mockAxios,
+    __esModule: true,
+}));
+vi.mock('../../packages/mcp-server/node_modules/axios/index.js', () => ({
+    default: mockAxios,
+    __esModule: true,
+}));
+vi.mock('../../packages/mcp-server/node_modules/axios/dist/node/axios.cjs', () => ({
+    default: mockAxios,
+    __esModule: true,
+}));
 
 // Loopback transport for in-memory client-server MCP communication
 class LoopbackTransport implements Transport {
@@ -73,7 +79,7 @@ describe('MCP Server Integration Tests', () => {
             version: '1.0.0'
         });
 
-        registerAllTools(server as any, () => credentials);
+        registerAllTools(server as unknown as Parameters<typeof registerAllTools>[0], () => credentials);
 
         client = new Client({
             name: 'test-mcp-client',
