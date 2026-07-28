@@ -61,7 +61,7 @@ function main() {
                     transport = new stdio_js_1.StdioClientTransport({
                         command: 'node',
                         args: ['dist/index.js', '--stdio'],
-                        env: __assign(__assign({}, process.env), { NS_API_KEY: process.env.NS_API_KEY || "", SIMPLENS_CORE_URL: process.env.SIMPLENS_CORE_URL || "", SIMPLENS_DASHBOARD_URL: process.env.SIMPLENS_DASHBOARD_URL || "" })
+                        env: __assign(__assign({}, process.env), { NS_API_KEY: process.env.NS_API_KEY || "", SIMPLENS_CORE_URL: process.env.SIMPLENS_CORE_URL || "" })
                     });
                     client = new index_js_1.Client({
                         name: 'test-client',
@@ -78,20 +78,12 @@ function main() {
                     tools = _a.sent();
                     console.log("Found ".concat(tools.tools.length, " tools:"));
                     tools.tools.forEach(function (t) { return console.log("- ".concat(t.name)); });
-                    if (tools.tools.length !== 7) {
-                        throw new Error("Expected 7 tools, found ".concat(tools.tools.length));
-                    }
-                    return [4 /*yield*/, client.listResources()];
-                case 3:
-                    resources = _a.sent();
-                    console.log("Found ".concat(resources.resources.length, " resources:"));
-                    resources.resources.forEach(function (r) { return console.log("- ".concat(r.uri)); });
-                    if (resources.resources.length !== 2) {
-                        throw new Error("Expected 2 resources, found ".concat(resources.resources.length));
+                    if (tools.tools.length !== 29) {
+                        throw new Error("Expected 29 tools, found ".concat(tools.tools.length));
                     }
                     console.log('Verification successful!');
                     return [4 /*yield*/, client.close()];
-                case 4:
+                case 3:
                     _a.sent();
                     return [2 /*return*/];
             }

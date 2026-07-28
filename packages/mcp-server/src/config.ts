@@ -15,8 +15,6 @@ export const serverConfig = {
         ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
         : ['*'],
 
-    // Stdio-mode credentials (only used with --stdio flag)
     SIMPLENS_API_KEY: process.env.NS_API_KEY || '',
     SIMPLENS_CORE_URL: process.env.SIMPLENS_CORE_URL || 'http://localhost:3000',
-    SIMPLENS_DASHBOARD_URL: process.env.SIMPLENS_DASHBOARD_URL || 'http://localhost:3002',
 };
