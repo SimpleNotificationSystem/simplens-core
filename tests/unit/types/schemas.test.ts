@@ -160,7 +160,31 @@ describe('Notification Request Schema', () => {
             };
 
             const result = safeValidateNotificationRequest(validRequest);
-            expect(result.success).toBe(false);
+            expect(result.success).toBe(true);
+        });
+
+        it('should accept template_id and provider arrays with null values', () => {
+            const validRequest = {
+                request_id: randomUUID(),
+                client_id: randomUUID(),
+                channel: ['email', 'sms'],
+                provider: [null, 'mock'],
+                template_id: [null, 'sms-template'],
+                recipient: {
+                    user_id: 'user-123',
+                    email: 'test@example.com',
+                },
+                content: {
+                    email: {
+                        subject: 'Test',
+                        message: 'Test',
+                    },
+                },
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const result = safeValidateNotificationRequest(validRequest);
+            expect(result.success).toBe(true);
         });
 
         it('should accept provider as array matching channel length', () => {
@@ -302,9 +326,30 @@ describe('Batch Notification Request Schema', () => {
                 ],
                 webhook_url: 'https://webhook.example.com/callback',
             };
-
             const result = safeValidateBatchNotificationRequest(invalidRequest);
             expect(result.success).toBe(false);
+        });
+
+        it('should accept template_id and provider arrays with null values in batch request', () => {
+            const validRequest = {
+                client_id: randomUUID(),
+                channel: ['email', 'mock'],
+                provider: [null, 'mock'],
+                template_id: [null, 'mock-template'],
+                content: {
+                    email: {
+                        subject: 'Batch Test',
+                        message: 'Hello {{name}}',
+                    },
+                },
+                recipients: [
+                    { request_id: randomUUID(), user_id: 'user-1', email: 'user1@example.com' },
+                ],
+                webhook_url: 'https://webhook.example.com/callback',
+            };
+
+            const result = safeValidateBatchNotificationRequest(validRequest);
+            expect(result.success).toBe(true);
         });
     });
 });

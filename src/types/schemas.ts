@@ -33,8 +33,9 @@ export const UUIDV4Schema = z.custom<UUID>(
 
 export const variablesSchema = z.record(z.string(), z.string());
 
-const hasNonEmptyTemplateIds = (templateIds?: string[]) =>
-  Array.isArray(templateIds) && templateIds.length > 0;
+const hasNonEmptyTemplateIds = (
+  templateIds?: (string | null | undefined)[],
+) => Array.isArray(templateIds) && templateIds.some((id) => Boolean(id));
 
 const hasNonEmptyContent = (
   content?: Record<string, Record<string, string>>,
@@ -277,9 +278,11 @@ export const baseNotificationRequestSchema = z
     request_id: UUIDV4Schema,
     client_id: UUIDV4Schema,
     client_name: z.string().optional(),
-    template_id: z.array(z.string()).optional(),
+    template_id: z.array(z.string().nullable().optional()).optional(),
     channel: z.array(z.string()).min(1, "At least one channel is required."),
-    provider: z.array(z.string()).optional(),
+    provider: z
+      .union([z.string(), z.array(z.string().nullable().optional())])
+      .optional(),
     recipient: z.record(z.string(), z.unknown()),
     content: z.record(z.string(), z.record(z.string(), z.string())).optional(),
     variables: variablesSchema.optional(),
@@ -310,7 +313,7 @@ export const baseBatchNotificationRequestSchema = z
     client_id: UUIDV4Schema,
     client_name: z.string().optional(),
     channel: z.array(z.string()).min(1, "At least one channel is required."),
-    template_id: z.array(z.string()).optional(),
+    template_id: z.array(z.string().nullable().optional()).optional(),
     provider: z
       .union([z.string(), z.array(z.string().nullable().optional())])
       .optional(),
