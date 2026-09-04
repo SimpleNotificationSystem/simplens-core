@@ -19,7 +19,9 @@ import {
     validatePrerequisites,
     validatePublicDomain,
     validateEmailAddress,
+    detectOS,
 } from './validators.js';
+import { generateControlScript } from './scripts.js';
 import {
     promptInfraServicesWithBasePath,
     generateInfraCompose,
@@ -468,11 +470,15 @@ async function main() {
             log.info('Skipping infrastructure setup (use --infra to enable).');
         }
 
-        // Step 3: Always write app docker-compose
-        log.step('Step 3/6 — Application Compose Setup');
+        // Step 3: Always write app docker-compose and control script
+        log.step('Step 3/6 — Application Compose & Control Script Setup');
         await writeAppCompose(targetDir, {
             includeNginx: false,
             includeSsl: false,
+        });
+        const controlScriptFilename = await generateControlScript(targetDir, {
+            os: detectOS(),
+            hasInfra: shouldSetupInfra,
         });
 
         // Step 4: Environment configuration
@@ -631,12 +637,16 @@ async function main() {
                 note(numberedSteps, 'SSL Setup — Run these commands in order');
             } else {
                 log.info('Services not started. You can start them later with:');
-                const commands: string[] = [];
-                if (selectedInfraServices.length > 0) {
-                    commands.push('docker compose -f docker-compose.infra.yaml up -d');
-                }
-                commands.push('docker compose up -d');
-                printCommandHints('Manual startup commands', commands);
+                const isWin = detectOS() === 'windows';
+                const runCmd = isWin ? `.\\${controlScriptFilename}` : `./${controlScriptFilename}`;
+                const commands: string[] = [
+                    runCmd,
+                    `${runCmd} --infra`,
+                    `${runCmd} --app`,
+                    `${runCmd} --stop`,
+                    `${runCmd} --stop -v`,
+                ];
+                printCommandHints(`Service Control (${controlScriptFilename})`, commands);
             }
         }
 
