@@ -19,7 +19,7 @@ body:json {
     "provider": ["{{process.env.PROVIDER}}"],
     "recipient": {
       "user_id": "user1234",
-      "email": "{{TO_EMAIL}}"
+      "email": "{{process.env.TO_EMAIL}}"
     },
     "content":{
       "email": {
@@ -36,10 +36,6 @@ body:json {
     },
     "webhook_url": "http://localhost:4000/webhook"
   }
-}
-
-vars:pre-request {
-  TO_EMAIL: streamnowservice@gmail.com
 }
 
 settings {
