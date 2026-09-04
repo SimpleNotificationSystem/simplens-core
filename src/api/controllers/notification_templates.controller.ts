@@ -14,6 +14,7 @@ import {
 } from "@src/types/schemas.js";
 import { PluginRegistry } from "@src/plugins/index.js";
 import { MongoServerError } from "mongodb";
+import mongoose from "mongoose";
 
 const normalizeTemplateVariablesInString = (value: string): string => {
   const normalizedDollarBraces = value.replace(
@@ -134,13 +135,21 @@ export const createTemplate = async (
       return;
     }
 
+    const rawTemplateId = validationResult.data.template_id?.trim();
+    const template_id =
+      rawTemplateId && rawTemplateId.length > 0
+        ? rawTemplateId
+        : new mongoose.Types.ObjectId().toString();
+
     await notification_template_model.insertOne({
       ...validationResult.data,
+      template_id,
       content: normalizedContent,
     });
-    logger.success("Successfully added template to db");
+    logger.success(`Successfully added template to db with template_id: ${template_id}`);
     res.status(201).json({
       message: "Template created successfully",
+      template_id,
     });
     return;
   } catch (err: unknown) {

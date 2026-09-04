@@ -365,7 +365,7 @@ Notification Template Request Schema
 */
 export const notificationTemplateRequestSchema = z.object({
   name: z.string(),
-  template_id: z.string(),
+  template_id: z.string().optional(),
   description: z.string().optional(),
   content: z.record(z.string(), z.unknown()),
   package: z.string(),

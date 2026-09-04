@@ -157,6 +157,54 @@ describe("Notification Templates Controller", () => {
       );
     });
 
+    it("should auto-generate template_id when not provided in request", async () => {
+      const { PluginRegistry } = await import("../../../src/plugins/index.js");
+      (PluginRegistry.get as ReturnType<typeof vi.fn>).mockReturnValue({
+        getContentSchema: vi.fn().mockReturnValue({
+          safeParse: vi.fn().mockReturnValue({ success: true }),
+        }),
+      });
+
+      const notification_template_model = (
+        await import("../../../src/database/models/notification-template.models.js")
+      ).default;
+      (
+        notification_template_model.insertOne as ReturnType<typeof vi.fn>
+      ).mockResolvedValue({
+        _id: "template-id-auto",
+        name: "Auto ID Template",
+        package: "gmail",
+      });
+
+      const templateRequest = {
+        name: "Auto ID Template",
+        description: "Template without explicit template_id",
+        package: "gmail",
+        content: {
+          subject: "Auto ID Subject",
+          message: "Hello {{name}}",
+        },
+      };
+
+      const response = await request(app)
+        .post("/api/templates")
+        .set("Authorization", "Bearer test-api-key")
+        .send(templateRequest);
+
+      expect(response.status).toBe(201);
+      expect(response.body.message).toBe("Template created successfully");
+      expect(response.body.template_id).toBeDefined();
+      expect(typeof response.body.template_id).toBe("string");
+      expect(response.body.template_id).toMatch(/^[0-9a-fA-F]{24}$/);
+      expect(notification_template_model.insertOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          template_id: response.body.template_id,
+          name: "Auto ID Template",
+          package: "gmail",
+        }),
+      );
+    });
+
     it("should normalize variable formats before storing template content", async () => {
       const { PluginRegistry } = await import("../../../src/plugins/index.js");
       (PluginRegistry.get as ReturnType<typeof vi.fn>).mockReturnValue({

@@ -141,7 +141,7 @@ export interface NotificationTemplateDetail extends NotificationTemplateListItem
 
 export interface NotificationTemplateCreatePayload {
   name: string;
-  template_id: string;
+  template_id?: string;
   description?: string;
   package: string;
   content: Record<string, unknown>;

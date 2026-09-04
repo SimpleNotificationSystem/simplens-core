@@ -239,10 +239,6 @@ function TemplateEditorContent() {
       setError("Name is required.");
       return;
     }
-    if (mode === "create" && !form.template_id.trim()) {
-      setError("Template ID is required.");
-      return;
-    }
 
     const schema = packageSchemas[form.package] ?? [];
     const missingFields = schema
@@ -271,7 +267,9 @@ function TemplateEditorContent() {
         mode === "create"
           ? {
               name: form.name.trim(),
-              template_id: form.template_id.trim(),
+              ...(form.template_id.trim()
+                ? { template_id: form.template_id.trim() }
+                : {}),
               description: form.description.trim() || undefined,
               package: form.package,
               content: form.content,
@@ -721,20 +719,16 @@ function TemplateEditorContent() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Template ID</Label>
-              <Input
-                value={form.template_id}
-                disabled={mode === "edit"}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    template_id: e.target.value,
-                  }))
-                }
-                placeholder="welcome_template"
-              />
-            </div>
+            {mode === "edit" && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Template ID</Label>
+                <Input
+                  value={form.template_id}
+                  disabled
+                  className="bg-muted/50 font-mono text-muted-foreground"
+                />
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label className="text-xs">Name</Label>
               <Input

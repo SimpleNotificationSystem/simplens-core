@@ -16,7 +16,7 @@ export function registerTemplateTools(server: McpServer, getCredentials: () => U
             description: 'Create a new notification template. Guides AI to define the content template for a specific plugin package.',
             inputSchema: {
                 name: z.string().describe('Human-readable name of the template'),
-                template_id: z.string().describe('Unique string identifier (slug) for the template'),
+                template_id: z.string().optional().describe('Optional unique string identifier for the template. If omitted, SimpleNS and MongoDB will automatically generate a unique ID.'),
                 description: z.string().optional().describe('Optional explanation of the template\'s purpose'),
                 content: z.record(z.string(), z.unknown()).describe('Template content structure matching the package schema (e.g. HTML/Subject). Double curly braces {{variable}} can be used for placeholders.'),
                 package: z.string().describe('Package name of the provider this template targets (e.g., "@simplens/smtp")')
