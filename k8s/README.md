@@ -195,18 +195,3 @@ kubectl rollout restart deployment/simplens-infra -n simplens
 ```
 
 ---
-
-## 7. Chaos & Resilience Testing
-
-Simulate real-world production outages against your running Kubernetes pods (individual container kills and pod evictions) while under active notification load:
-
-```powershell
-# Run all 4 chaos waves with 300 background requests:
-./k8s/scripts/win/k8s-chaos.ps1
-
-# Or test a specific wave:
-./k8s/scripts/win/k8s-chaos.ps1 -Wave app       # Kills worker, notification-processor, delayed-processor
-./k8s/scripts/win/k8s-chaos.ps1 -Wave infra     # Disrupts Redis and Kafka
-./k8s/scripts/win/k8s-chaos.ps1 -Wave pod       # Force-deletes the app-local pod
-./k8s/scripts/win/k8s-chaos.ps1 -Wave cascade   # Simultaneous app + infra crashes
-```
