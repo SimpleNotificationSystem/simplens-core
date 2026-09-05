@@ -13,7 +13,8 @@ param(
     [ValidateSet("master", "development", "local", "all", "status")]
     [string]$Env = "status",
 
-    [switch]$PullLatest
+    [switch]$PullLatest,
+    [switch]$NoCache
 )
 
 $Namespace = "simplens"
@@ -51,6 +52,8 @@ switch ($Env) {
         kubectl scale deployment app-local -n $Namespace --replicas=0
         if ($PullLatest) {
             kubectl rollout restart deployment app-master -n $Namespace
+            Write-Host "Waiting for app-master rollout to complete..." -ForegroundColor Cyan
+            kubectl rollout status deployment app-master -n $Namespace --timeout=120s
         }
         Write-Host "[OK] Switched to 'master' environment!" -ForegroundColor Green
         Write-Host "  API:       http://localhost:30100" -ForegroundColor White
@@ -66,6 +69,8 @@ switch ($Env) {
         kubectl scale deployment app-local -n $Namespace --replicas=0
         if ($PullLatest) {
             kubectl rollout restart deployment app-development -n $Namespace
+            Write-Host "Waiting for app-development rollout to complete..." -ForegroundColor Cyan
+            kubectl rollout status deployment app-development -n $Namespace --timeout=120s
         }
         Write-Host "[OK] Switched to 'development' environment!" -ForegroundColor Green
         Write-Host "  API:       http://localhost:30200" -ForegroundColor White
@@ -74,14 +79,19 @@ switch ($Env) {
     "local" {
         if ($PullLatest) {
             Write-Host "`n[Build] Rebuilding local images..." -ForegroundColor Cyan
-            & "$ScriptDir/build-local.ps1"
+            $buildArgs = @()
+            if ($NoCache) { $buildArgs += "-NoCache" }
+            & "$ScriptDir/build-local.ps1" @buildArgs
         }
         Write-Host "Activating 'local' environment (locally built image)..." -ForegroundColor Yellow
         kubectl scale deployment app-master -n $Namespace --replicas=0
         kubectl scale deployment app-development -n $Namespace --replicas=0
         kubectl scale deployment app-local -n $Namespace --replicas=1
         if ($PullLatest) {
+            Write-Host "Restarting deployment app-local..." -ForegroundColor Cyan
             kubectl rollout restart deployment app-local -n $Namespace
+            Write-Host "Waiting for app-local rollout to complete..." -ForegroundColor Cyan
+            kubectl rollout status deployment app-local -n $Namespace --timeout=120s
         }
         Write-Host "[OK] Switched to 'local' environment!" -ForegroundColor Green
         Write-Host "  API:       http://localhost:30300" -ForegroundColor White

@@ -4,14 +4,26 @@ Run SimpleNS in a local Kubernetes cluster (Docker Desktop or Kind) with testing
 
 ---
 
-## 1. Quick Start in 3 Steps
+## 1. Quick Start in 4 Steps
+
+### Step 0: Create the Kind Cluster (One-time Setup)
+Ensure you have `kind` installed (`winget install Kubernetes.kind` or `choco install kind`), then create the cluster:
+```powershell
+kind create cluster --name simplens --config k8s/kind-config.yaml
+```
+
+---
 
 ### Step 1: Build Local Images
 Build the Docker images for your local code:
 ```powershell
 ./k8s/scripts/win/build-local.ps1
 ```
-*(If you are using a Kind cluster named `simplens`, add `-LoadKind`: `./k8s/scripts/win/build-local.ps1 -LoadKind`)*
+> **Note:** The script automatically detects the running Kind cluster (from your kubectl context or Kind cluster list), loads `simplens-core:local` and `simplens-dashboard:local` into Kind, and prunes dangling `<none>:<none>` images to prevent duplicate image clutter in Docker Desktop.
+> If you need a clean rebuild without Docker cache, pass `-NoCache`:
+> ```powershell
+> ./k8s/scripts/win/build-local.ps1 -NoCache
+> ```
 
 ---
 
@@ -34,28 +46,52 @@ In a separate terminal tab, start the port forwarder:
 ```powershell
 ./k8s/scripts/win/port-forward.ps1
 ```
+*(The script automatically cleans up previous port-forward processes and avoids port conflicts with Kind NodePorts).*
 
 Now open your browser:
 
 | Service | Browser URL | Credentials / Notes |
 | :--- | :--- | :--- |
-| **SimpleNS Dashboard** | [http://localhost:3002](http://localhost:3002) *(or :30302)* | Admin web interface |
-| **API Health Check** | [http://localhost:3000/api/health](http://localhost:3000/api/health) | Returns `{"status":"ok"}` |
-| **Kafka UI** | [http://localhost:8080](http://localhost:8080) | Topic & message explorer |
-| **Grafana** | [http://localhost:3001](http://localhost:3001) | User: `admin` / Password: `admin` |
+| **SimpleNS Dashboard** | [http://localhost:3002](http://localhost:3002) *(or NodePort :30302)* | Admin web interface |
+| **API Health Check** | [http://localhost:3000/api/health](http://localhost:3000/api/health) *(or NodePort :30300)* | Returns `{"status":"ok"}` |
+| **Kafka UI** | [http://localhost:8080](http://localhost:8080) *(or NodePort :30080)* | Topic & message explorer |
+| **Grafana** | [http://localhost:3001](http://localhost:3001) *(or NodePort :30001)* | User: `admin` / Password: `admin` |
 
 *(Keep this terminal open while testing. Press `Ctrl + C` to stop port forwarding).*
 
 ---
 
-## 2. Helper Scripts Reference
+## 2. Iterating on Local Code (Hot Rebuilding)
+
+Whenever you make code changes and want to update the running local pod:
+```powershell
+./k8s/scripts/win/switch-env.ps1 -Env local -PullLatest
+```
+This single command will:
+1. Rebuild the local Docker images from your current source code.
+2. Load the updated images into your Kind cluster.
+3. Clean up dangling images so duplicates don't accumulate.
+4. Trigger a rolling restart of `app-local` and wait for the new pod rollout to complete before returning.
+
+> **Tip:** If updating Dashboard UI components, do a hard refresh in the browser (`Ctrl + Shift + R` or `Ctrl + F5`) to bypass cached Next.js static bundles.
+
+---
+
+## 3. Helper Scripts Reference
 
 All scripts live in `k8s/scripts/win/` and are designed to be simple:
 
 ### `build-local.ps1`
-Builds `simplens-core:local` and `simplens-dashboard:local` from your current source code.
+Builds `simplens-core:local` and `simplens-dashboard:local` from your current source code, loads them into Kind, and prunes dangling images.
 ```powershell
+# Standard build:
 ./k8s/scripts/win/build-local.ps1
+
+# Clean build without Docker cache:
+./k8s/scripts/win/build-local.ps1 -NoCache
+
+# Explicit cluster target if multiple exist:
+./k8s/scripts/win/build-local.ps1 -ClusterName simplens
 ```
 
 ---
@@ -76,7 +112,7 @@ Applies all manifests, sets up storage, reads `.env`, starts the infra pod, and 
 ---
 
 ### `port-forward.ps1`
-Tunnels ports from the Kubernetes cluster to your Windows machine (`localhost`).
+Tunnels ports from the Kubernetes cluster to your Windows machine (`localhost`). Automatically terminates stale `kubectl port-forward` processes and detects active NodePorts to prevent port collisions.
 ```powershell
 # Forwards ports for ALL currently running environments + Kafka UI + Grafana:
 ./k8s/scripts/win/port-forward.ps1
@@ -97,6 +133,12 @@ Switch which application environment is actively processing notifications.
 # Switch to Local build (uses existing build):
 ./k8s/scripts/win/switch-env.ps1 -Env local
 
+# Rebuild local code, load into Kind, restart pod, and wait for readiness:
+./k8s/scripts/win/switch-env.ps1 -Env local -PullLatest
+
+# Rebuild without Docker cache:
+./k8s/scripts/win/switch-env.ps1 -Env local -PullLatest -NoCache
+
 # Switch to Development (uses cached image):
 ./k8s/scripts/win/switch-env.ps1 -Env development
 
@@ -110,7 +152,7 @@ Switch which application environment is actively processing notifications.
 
 ---
 
-## 3. Port Allocations Reference
+## 4. Port Allocations Reference
 
 When running `./k8s/scripts/win/port-forward.ps1`, ports are mapped as follows:
 
@@ -120,11 +162,11 @@ When running `./k8s/scripts/win/port-forward.ps1`, ports are mapped as follows:
 | **Master** | `http://localhost:30102` | `http://localhost:30100` | Latest release from `master` branch |
 | **Development** | `http://localhost:30202` | `http://localhost:30200` | Latest build from `development` branch |
 | **Kafka UI** | `http://localhost:8080` | — | Inspect Kafka topics & consumers |
-| **Grafana** | `http://localhost:3001` | — | Observability & Loki logs |
+| **Grafana** | [http://localhost:3001](http://localhost:3001) | — | Observability & Loki logs |
 
 ---
 
-## 4. How Environment Variables Work (`.env`)
+## 5. How Environment Variables Work (`.env`)
 
 You do not need to manually copy environment variables into Kubernetes manifests:
 1. `deploy-all.ps1` reads your root `.env` file (or `.env.example` as fallback).
@@ -134,7 +176,7 @@ You do not need to manually copy environment variables into Kubernetes manifests
 
 ---
 
-## 5. Useful Debugging Commands
+## 6. Useful Debugging Commands
 
 ```powershell
 # See all pods and their status:
