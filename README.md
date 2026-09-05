@@ -20,6 +20,7 @@
 <p align="center">
   <a href="#key-features">Features</a> •
   <a href="#architecture">Architecture</a> •
+  <a href="#api-first-architecture--routes">API Server</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#admin-dashboard">Dashboard</a> •
   <a href="https://simplens.in">Website</a> •
@@ -92,11 +93,20 @@ npx -y @simlpens/mcp --stdio
 
 | Component | Description |
 |-----------|-------------|
-| **API Server** | REST API for notification ingestion (`/api/notification`, `/api/notification/batch`) |
+| **API Server** | Central REST API engine providing ingestion, notification history, templates, alerts, metrics, and plugin schemas |
 | **Background Worker** | Polls outbox, publishes to Kafka, consumes status updates |
 | **Unified Processor** | Plugin-based notification delivery with rate limiting |
 | **Delayed Processor** | Handles scheduled notifications via Redis ZSET queue |
 | **Recovery Service** | Detects stuck notifications and reschedules them |
+| **Admin Dashboard** | Decoupled Next.js client UI that interfaces exclusively through the API Server |
+
+### Decoupled API-First Architecture
+
+SimpleNS is built around a strictly **decoupled, API-first model**:
+
+- **Self-Sufficient API Server**: The API Server is the single source of truth for all notification operations, database persistence (MongoDB), outbox streaming (Kafka), analytics, and plugin metadata. It can run 100% headless in production without the dashboard.
+- **Thin Dashboard Client**: The Next.js Admin Dashboard **holds no backend business logic or direct database connections**. Every user action—querying events, editing templates, resolving alerts, and configuring channels—is dispatched directly to the API Server via standard REST endpoints.
+- **Client Agnostic**: Because all capabilities are exposed via the API Server, you can drive SimpleNS through the official dashboard, your own custom internal tools, automation scripts (via our [Bruno API Collection](./api-docs)), or AI agents (via the native MCP server).
 
 ### Plugin System
 
@@ -181,13 +191,13 @@ The installer will automatically pull Docker images, configure your environment,
 ### Verify Installation
 
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:3000/api/health
 ```
 
 Expected response:
 ```json
 {
-  "status": "ok",
+  "status": "healthy",
   "timestamp": "2024-01-01T00:00:00.000Z"
 }
 ```
@@ -252,22 +262,65 @@ npx @simplens/config-gen list --official
 
 ---
 
+## API-First Architecture & Routes
+
+SimpleNS provides a comprehensive, authenticated REST API that powers both external clients and the Admin Dashboard. Because the core engine is decoupled from the UI, every action possible in the dashboard can be automated or integrated via REST endpoints.
+
+| Category | Route | Method | Description |
+|---|---|---|---|
+| **System** | `/api` | `GET` | API Server status |
+| | `/api/health` | `GET` | Health check probe (Docker / K8s) |
+| **Notifications** | `/api/notification` | `POST` | Dispatch single notification |
+| | `/api/notification/batch` | `POST` | Dispatch batch notification |
+| | `/api/notification` | `GET` | Notification endpoint health |
+| **Management** | `/api/notifications` | `GET` | Search & filter notification history |
+| | `/api/notifications/recent` | `GET` | Activity feed of latest notifications |
+| | `/api/notifications/:id` | `GET` | Fetch single notification details |
+| | `/api/notifications/:id/retry` | `POST` | Reset failed notification for retry |
+| | `/api/notifications/:id` | `DELETE` | Delete notification record |
+| **Templates** | `/api/templates/create` | `POST` | Create reusable notification template |
+| | `/api/templates` | `GET` | List all templates (or filter by package) |
+| | `/api/templates/:template_id` | `GET` | Fetch template by ID |
+| | `/api/templates/:template_id` | `PUT` | Update notification template |
+| | `/api/templates/:template_id` | `DELETE` | Delete notification template |
+| **Plugins** | `/api/plugins` | `GET` | Dynamic plugin metadata & schemas |
+| **Alerts** | `/api/alerts` | `GET` | List system alerts |
+| | `/api/alerts/:id/resolve` | `POST` | Resolve alert and retry notification |
+| | `/api/alerts/bulk-resolve` | `POST` | Bulk resolve alerts and retry |
+| | `/api/alerts/:id` | `DELETE` | Dismiss alert without retrying |
+| **Dashboard** | `/api/dashboard/stats` | `GET` | Notification counts by status & channel |
+| | `/api/dashboard/trends` | `GET` | Historical time-series trend data |
+| **Admin Channels** | `/api/admin-channels/providers` | `GET` | Available alerting channel providers |
+| | `/api/admin-channels/validate` | `POST` | Validate channel configuration schema |
+| | `/api/admin-channels/test` | `POST` | Test live webhook or bot connection |
+| | `/api/admin-channels` | `GET` / `POST` | List or create admin alert channels |
+| | `/api/admin-channels/:id` | `GET` / `PATCH` / `DELETE` | Manage individual admin alert channels |
+
+> 📖 **Interactive API Collection**: A complete [Bruno](https://www.usebruno.com/) collection is available in [`/api-docs`](./api-docs) with preconfigured environments and sample requests for all endpoints.
+
+---
+
 ## Admin Dashboard
 
 ![Admin Dashboard](./assets/DashboardUI.png)
 
-The Admin Dashboard provides a modern interface for monitoring and managing notifications:
+The Admin Dashboard is an independent Next.js application built strictly as a **thin presentation client**:
 
-- 🏠 **Dashboard Home** — Overview with status cards showing total, delivered, pending, and failed counts
-- 📡 **Channel Cards** — Visual cards for each configured channel (Email, WhatsApp, etc.) with quick navigation
-- 📋 **Events Explorer** — Paginated event table with filtering, search, and status indicators
-- 🔴 **Failed Events** — Dedicated view for failed notifications with retry capabilities
-- 🚨 **Alerts** — System alerts for orphaned notifications and recovery events requiring attention
-- 📈 **Analytics** — Charts and visualizations for notification status and channel distribution
-- 🔌 **Plugins** — View installed plugins, their channels, and provider configurations
-- 🔧 **Payload Studio** — Interactive schema explorer for building and notification payloads
-- 🔔 **Admin Alert Channels** — Configure external channels (Discord, Telegram, etc.) to receive system alerts
-- 📝 **Notification Templates** — Create, manage, and preview reusable notification templates
+- 💡 **Zero Backend Implementations**: The dashboard contains no database access, worker logic, or business rules. It depends entirely on the SimpleNS Core API Server.
+- 🔌 **API Driven**: Every action—from rendering stats to triggering retries and saving templates—dispatches directly to the REST API routes.
+- 🏢 **Headless Ready**: Because the dashboard is fully decoupled, you can operate SimpleNS headless in backend environments, deploy custom frontends, or interact via CI/CD and AI tools without running the dashboard.
+
+**Key Dashboard Features:**
+- 🏠 **Dashboard Home** — Status overview powered by `/api/dashboard/stats`
+- 📡 **Channel Cards** — Visual status for each configured delivery channel
+- 📋 **Events Explorer** — Paginated event table with live filtering via `/api/notifications`
+- 🔴 **Failed Events** — Dedicated view with one-click retries via `/api/notifications/:id/retry`
+- 🚨 **Alerts** — System health and orphaned recovery alerts via `/api/alerts`
+- 📈 **Analytics** — 24h, 7d, and 30d time-series trends via `/api/dashboard/trends`
+- 🔌 **Plugins** — Dynamic form generation based on runtime schemas from `/api/plugins`
+- 🔧 **Payload Studio** — Interactive schema explorer for constructing valid payloads
+- 🔔 **Admin Alert Channels** — Live test and configure Discord/Telegram alerts via `/api/admin-channels`
+- 📝 **Notification Templates** — Full lifecycle management and live preview via `/api/templates`
 
 ---
 
