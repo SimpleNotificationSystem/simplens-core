@@ -1,0 +1,16 @@
+meta {
+  name: List Admin Channel Providers
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{process.env.BASE_URL}}/api/admin-channels/providers
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

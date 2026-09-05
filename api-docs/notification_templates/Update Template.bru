@@ -1,0 +1,27 @@
+meta {
+  name: Update Template
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{process.env.BASE_URL}}/api/templates/{{process.env.TEMPLATE_ID}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Updated Mock Template",
+    "description": "Updated template for testing mock channel",
+    "content": {
+      "message": "Hi {{name}}, this is an updated message from {{company}}"
+    },
+    "package": "{{process.env.PACKAGE_NAME}}"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -1,13 +1,17 @@
 meta {
   name: Get Templates by Package Name
   type: http
-  seq: 2
+  seq: 3
 }
 
 get {
-  url: {{process.env.BASE_URL}}/api/templates?package_name=simplens-plugin-mock
+  url: {{process.env.BASE_URL}}/api/templates?package_name={{process.env.PACKAGE_NAME}}
   body: none
   auth: inherit
+}
+
+params:query {
+  package_name: {{process.env.PACKAGE_NAME}}
 }
 
 settings {

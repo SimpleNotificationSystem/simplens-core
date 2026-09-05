@@ -1,10 +1,10 @@
 meta {
-  name: Get Template by Id
+  name: Delete Template
   type: http
-  seq: 4
+  seq: 6
 }
 
-get {
+delete {
   url: {{process.env.BASE_URL}}/api/templates/{{process.env.TEMPLATE_ID}}
   body: none
   auth: inherit

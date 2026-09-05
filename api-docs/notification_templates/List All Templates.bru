@@ -1,0 +1,16 @@
+meta {
+  name: List All Templates
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{process.env.BASE_URL}}/api/templates
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

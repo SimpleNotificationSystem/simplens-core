@@ -1,0 +1,25 @@
+meta {
+  name: Test Admin Channel Connection
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{process.env.BASE_URL}}/api/admin-channels/test
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "channel_type": "discord",
+    "config": {
+      "webhook_url": "{{process.env.DISCORD_WEBHOOK_URL}}"
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

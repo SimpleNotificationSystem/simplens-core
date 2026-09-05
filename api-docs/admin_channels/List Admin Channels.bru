@@ -1,11 +1,11 @@
 meta {
-  name: Get Template by Id
+  name: List Admin Channels
   type: http
   seq: 4
 }
 
 get {
-  url: {{process.env.BASE_URL}}/api/templates/{{process.env.TEMPLATE_ID}}
+  url: {{process.env.BASE_URL}}/api/admin-channels
   body: none
   auth: inherit
 }

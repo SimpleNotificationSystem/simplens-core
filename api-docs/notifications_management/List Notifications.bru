@@ -1,0 +1,28 @@
+meta {
+  name: List Notifications
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{process.env.BASE_URL}}/api/notifications?page=1&limit=20
+  body: none
+  auth: inherit
+}
+
+params:query {
+  page: 1
+  limit: 20
+  ~status: delivered
+  ~channel: mock
+  ~provider: mock
+  ~search: 
+  ~from: 
+  ~to: 
+  ~sortBy: created_at_desc
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

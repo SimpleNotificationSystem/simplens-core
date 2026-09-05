@@ -1,0 +1,20 @@
+meta {
+  name: Get Recent Notifications
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{process.env.BASE_URL}}/api/notifications/recent?limit=10
+  body: none
+  auth: inherit
+}
+
+params:query {
+  limit: 10
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

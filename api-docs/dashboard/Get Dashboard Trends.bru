@@ -1,0 +1,20 @@
+meta {
+  name: Get Dashboard Trends
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{process.env.BASE_URL}}/api/dashboard/trends?period=24h
+  body: none
+  auth: inherit
+}
+
+params:query {
+  period: 24h
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
