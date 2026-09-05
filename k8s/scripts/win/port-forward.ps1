@@ -45,7 +45,10 @@ $jobs = @()
 if (-not (Test-PortInUse 8080)) {
     $jobs += Start-Job -ScriptBlock {
         param($ns)
-        kubectl port-forward -n $ns svc/kafka-ui 8080:8080
+        while ($true) {
+            kubectl port-forward -n $ns svc/kafka-ui 8080:8080 2>$null
+            Start-Sleep -Milliseconds 800
+        }
     } -ArgumentList $Namespace
 }
 
@@ -53,7 +56,10 @@ if (-not (Test-PortInUse 8080)) {
 if (-not (Test-PortInUse 3001)) {
     $jobs += Start-Job -ScriptBlock {
         param($ns)
-        kubectl port-forward -n $ns svc/grafana 3001:3000
+        while ($true) {
+            kubectl port-forward -n $ns svc/grafana 3001:3000 2>$null
+            Start-Sleep -Milliseconds 800
+        }
     } -ArgumentList $Namespace
 }
 
@@ -75,10 +81,13 @@ if (($Env -eq "all" -or $Env -eq "local") -and (Is-Running "app-local")) {
         $pStr = $localPorts -join " "
         $jobs += Start-Job -ScriptBlock {
             param($ns, $p)
-            Invoke-Expression "kubectl port-forward -n $ns svc/app-local $p"
+            while ($true) {
+                Invoke-Expression "kubectl port-forward -n $ns svc/app-local $p 2>`$null"
+                Start-Sleep -Milliseconds 800
+            }
         } -ArgumentList $Namespace, $pStr
     }
-    Write-Host "[+] Local App Access:" -ForegroundColor Green
+    Write-Host "[+] Local App Access (Auto-reconnecting):" -ForegroundColor Green
     Write-Host "    - Dashboard: http://localhost:3002  (NodePort: http://localhost:30302)" -ForegroundColor White
     Write-Host "    - API:       http://localhost:3000  (NodePort: http://localhost:30300)" -ForegroundColor White
 }
@@ -93,10 +102,13 @@ if (($Env -eq "all" -or $Env -eq "master") -and (Is-Running "app-master")) {
         $pStr = $masterPorts -join " "
         $jobs += Start-Job -ScriptBlock {
             param($ns, $p)
-            Invoke-Expression "kubectl port-forward -n $ns svc/app-master $p"
+            while ($true) {
+                Invoke-Expression "kubectl port-forward -n $ns svc/app-master $p 2>`$null"
+                Start-Sleep -Milliseconds 800
+            }
         } -ArgumentList $Namespace, $pStr
     }
-    Write-Host "[+] Master (Prod) App Access:" -ForegroundColor Green
+    Write-Host "[+] Master (Prod) App Access (Auto-reconnecting):" -ForegroundColor Green
     Write-Host "    - Dashboard: http://localhost:30102" -ForegroundColor White
     Write-Host "    - API:       http://localhost:30100" -ForegroundColor White
 }
@@ -111,10 +123,13 @@ if (($Env -eq "all" -or $Env -eq "development") -and (Is-Running "app-developmen
         $pStr = $devPorts -join " "
         $jobs += Start-Job -ScriptBlock {
             param($ns, $p)
-            Invoke-Expression "kubectl port-forward -n $ns svc/app-development $p"
+            while ($true) {
+                Invoke-Expression "kubectl port-forward -n $ns svc/app-development $p 2>`$null"
+                Start-Sleep -Milliseconds 800
+            }
         } -ArgumentList $Namespace, $pStr
     }
-    Write-Host "[+] Development Branch App Access:" -ForegroundColor Green
+    Write-Host "[+] Development Branch App Access (Auto-reconnecting):" -ForegroundColor Green
     Write-Host "    - Dashboard: http://localhost:30202" -ForegroundColor White
     Write-Host "    - API:       http://localhost:30200" -ForegroundColor White
 }
