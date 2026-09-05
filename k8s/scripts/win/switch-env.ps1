@@ -27,11 +27,43 @@ function Show-Status {
     kubectl get deployments -n $Namespace -l "app.kubernetes.io/name in (app-master, app-development, app-local)"
 }
 
+function Sync-ToKind {
+    param([string[]]$Images)
+    if (Get-Command kind -ErrorAction SilentlyContinue) {
+        $rawClusters = (kind get clusters 2>$null)
+        if ($rawClusters) {
+            $clusters = ($rawClusters -split "`r?`n") | Where-Object { $_.Trim() -ne "" } | ForEach-Object { $_.Trim() }
+            $targetCluster = $null
+            $currentContext = (kubectl config current-context 2>$null)
+            if ($currentContext -and $currentContext -like "kind-*") {
+                $contextCluster = $currentContext.Substring(5)
+                if ($clusters -contains $contextCluster) {
+                    $targetCluster = $contextCluster
+                }
+            }
+            if (-not $targetCluster) {
+                if ($clusters -contains "simplens") {
+                    $targetCluster = "simplens"
+                } elseif ($clusters.Count -eq 1) {
+                    $targetCluster = $clusters[0]
+                }
+            }
+            if ($targetCluster) {
+                foreach ($img in $Images) {
+                    Write-Host "[Kind] Loading image '$img' into cluster '$targetCluster'..." -ForegroundColor Cyan
+                    kind load docker-image $img --name $targetCluster
+                }
+            }
+        }
+    }
+}
+
 function Pull-DevelopmentImages {
     Write-Host "`n[Pull] Pulling latest development images from GHCR..." -ForegroundColor Cyan
     docker pull ghcr.io/simplenotificationsystem/simplens-core:development
     docker pull ghcr.io/simplenotificationsystem/simplens-dashboard:development
     Write-Host "[OK] Latest development images pulled." -ForegroundColor Green
+    Sync-ToKind @("ghcr.io/simplenotificationsystem/simplens-core:development", "ghcr.io/simplenotificationsystem/simplens-dashboard:development")
 }
 
 function Pull-MasterImages {
@@ -39,6 +71,7 @@ function Pull-MasterImages {
     docker pull ghcr.io/simplenotificationsystem/simplens-core:latest
     docker pull ghcr.io/simplenotificationsystem/simplens-dashboard:latest
     Write-Host "[OK] Latest master images pulled." -ForegroundColor Green
+    Sync-ToKind @("ghcr.io/simplenotificationsystem/simplens-core:latest", "ghcr.io/simplenotificationsystem/simplens-dashboard:latest")
 }
 
 switch ($Env) {
