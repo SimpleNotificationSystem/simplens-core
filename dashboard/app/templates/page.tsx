@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   CalendarDays,
+  Copy,
   FileText,
   Pencil,
   Plus,
@@ -286,13 +287,47 @@ export default function TemplatesPage() {
                         </div>
                       </div>
 
-                      {/* Template ID badge */}
-                      <Badge
-                        variant="secondary"
-                        className="w-fit font-mono text-xs"
-                      >
-                        {template.template_id}
-                      </Badge>
+                      {/* Template metadata: Template Id & Package */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                              Template Id:
+                            </span>
+                            <Badge
+                              variant="secondary"
+                              className="font-mono text-xs truncate"
+                            >
+                              {template.template_id}
+                            </Badge>
+                          </div>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(template.template_id);
+                              toast.success("Template ID copied to clipboard");
+                            }}
+                            title="Copy Template ID"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                        <div className="flex items-center gap-1.5 overflow-hidden">
+                          <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                            Package:
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className="text-xs truncate"
+                          >
+                            {template.package}
+                          </Badge>
+                        </div>
+                      </div>
 
                       {/* Description */}
                       <p className="line-clamp-2 min-h-10 text-sm text-muted-foreground">
@@ -332,13 +367,36 @@ export default function TemplatesPage() {
                   : (detailData?.name ?? "Template")}
               </DialogTitle>
               {detailData && (
-                <DialogDescription className="flex flex-wrap items-center gap-1.5">
-                  <Badge variant="secondary" className="font-mono text-xs">
-                    {detailData.template_id}
-                  </Badge>
-                  <Badge variant="outline" className="text-xs">
-                    {detailData.package}
-                  </Badge>
+                <DialogDescription className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Template Id:
+                    </span>
+                    <Badge variant="secondary" className="font-mono text-xs">
+                      {detailData.template_id}
+                    </Badge>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        navigator.clipboard.writeText(detailData.template_id);
+                        toast.success("Template ID copied to clipboard");
+                      }}
+                      title="Copy Template ID"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Package:
+                    </span>
+                    <Badge variant="outline" className="text-xs">
+                      {detailData.package}
+                    </Badge>
+                  </div>
                   {detailData.created_at && (
                     <span className="text-xs text-muted-foreground">
                       Created {format(new Date(detailData.created_at), "PPp")}

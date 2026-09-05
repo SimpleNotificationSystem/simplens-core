@@ -29,7 +29,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { ArrowLeft, Code, Eye, Maximize2, Save, X } from "lucide-react";
+import { ArrowLeft, Code, Copy, Eye, Maximize2, Save, X } from "lucide-react";
 import { withBasePath } from "@/lib/utils";
 import { HtmlPreview } from "@/components/send/html-preview";
 import type {
@@ -130,9 +130,25 @@ function TemplateEditorContent() {
   );
 
   const ensureContentShape = useCallback(
-    (packageName: string, input: Record<string, unknown>) => {
+    (
+      packageName: string,
+      input: Record<string, unknown>,
+      pruneExtras = false,
+    ) => {
       const schema = packageSchemas[packageName] ?? [];
-      const next = { ...input };
+      const schemaKeys = new Set(schema.map((f) => f.name));
+      const next: Record<string, unknown> = {};
+
+      if (!pruneExtras) {
+        Object.assign(next, input);
+      } else {
+        Object.keys(input).forEach((k) => {
+          if (schemaKeys.has(k)) {
+            next[k] = input[k];
+          }
+        });
+      }
+
       schema.forEach((field) => {
         if (next[field.name] !== undefined) return;
         next[field.name] = field.type === "boolean" ? false : "";
@@ -142,9 +158,12 @@ function TemplateEditorContent() {
     [packageSchemas],
   );
 
-  // Merged fields: schema + extras already in content
+  // Merged fields: schema + extras already in content (only in edit mode)
   const fields = useMemo(() => {
     const schema = packageSchemas[form.package] ?? [];
+    if (mode === "create") {
+      return schema;
+    }
     const extras = Object.keys(form.content)
       .filter((key) => !schema.some((f) => f.name === key))
       .map<FieldDefinition>((key) => ({
@@ -154,7 +173,7 @@ function TemplateEditorContent() {
         description: "Existing template field",
       }));
     return [...schema, ...extras];
-  }, [packageSchemas, form.package, form.content]);
+  }, [packageSchemas, form.package, form.content, mode]);
 
   // Variable detection
   const extractVariables = (value: unknown): string[] => {
@@ -225,9 +244,9 @@ function TemplateEditorContent() {
     if (!form.package) return;
     setForm((prev) => ({
       ...prev,
-      content: ensureContentShape(prev.package, prev.content),
+      content: ensureContentShape(prev.package, prev.content, mode === "create"),
     }));
-  }, [form.package, packageSchemas, ensureContentShape]);
+  }, [form.package, packageSchemas, ensureContentShape, mode]);
 
   // ── Save handler ──
   const handleSave = async () => {
@@ -502,6 +521,32 @@ function TemplateEditorContent() {
         </div>
         <Separator />
 
+        {form.template_id && (
+          <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+            <div className="flex items-center gap-2 overflow-hidden">
+              <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                Template Id:
+              </span>
+              <Badge variant="secondary" className="font-mono text-xs truncate">
+                {form.template_id}
+              </Badge>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                navigator.clipboard.writeText(form.template_id);
+                toast.success("Template ID copied to clipboard");
+              }}
+              title="Copy Template ID"
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )}
+
         {fields.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
             Select a package to see a preview.
@@ -570,7 +615,32 @@ function TemplateEditorContent() {
         <div className="fixed inset-0 z-9999 flex flex-col bg-background">
           {/* Header bar */}
           <div className="flex items-center justify-between border-b px-6 py-3">
-            <h2 className="text-sm font-semibold">Live Preview</h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-sm font-semibold">Live Preview</h2>
+              {form.template_id && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Template Id:
+                  </span>
+                  <Badge variant="secondary" className="font-mono text-xs">
+                    {form.template_id}
+                  </Badge>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      navigator.clipboard.writeText(form.template_id);
+                      toast.success("Template ID copied to clipboard");
+                    }}
+                    title="Copy Template ID"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )}
+            </div>
             <Button
               variant="ghost"
               size="icon"
@@ -693,19 +763,22 @@ function TemplateEditorContent() {
 
         {/* Metadata row */}
         <Card>
-          <CardContent className="grid gap-4 p-4 md:grid-cols-4">
+          <CardContent
+            className={`grid gap-4 p-4 grid-cols-1 ${mode === "edit" ? "md:grid-cols-4" : "md:grid-cols-3"}`}
+          >
             <div className="space-y-1.5">
               <Label className="text-xs">Package</Label>
               <Select
                 value={form.package}
                 disabled={mode === "edit"}
-                onValueChange={(value) =>
+                onValueChange={(value) => {
+                  setMonacoFields(new Set());
                   setForm((prev) => ({
                     ...prev,
                     package: value,
-                    content: ensureContentShape(value, prev.content),
-                  }))
-                }
+                    content: ensureContentShape(value, prev.content, true),
+                  }));
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Choose package" />
@@ -721,12 +794,27 @@ function TemplateEditorContent() {
             </div>
             {mode === "edit" && (
               <div className="space-y-1.5">
-                <Label className="text-xs">Template ID</Label>
-                <Input
-                  value={form.template_id}
-                  disabled
-                  className="bg-muted/50 font-mono text-muted-foreground"
-                />
+                <Label className="text-xs">Template Id</Label>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    value={form.template_id}
+                    disabled
+                    className="bg-muted/50 font-mono text-muted-foreground"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                    onClick={() => {
+                      navigator.clipboard.writeText(form.template_id);
+                      toast.success("Template ID copied to clipboard");
+                    }}
+                    title="Copy Template ID"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             )}
             <div className="space-y-1.5">
