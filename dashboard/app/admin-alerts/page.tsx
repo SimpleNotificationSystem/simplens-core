@@ -22,8 +22,8 @@ import { useState } from "react";
 import { AddChannelDialog } from "@/components/admin-alerts/add-channel-dialog";
 import type { AdminChannel } from "@/lib/types";
 import { CHANNEL_ICONS } from "@/components/admin-alerts/add-channel-dialog";
-import { withBasePath } from "@/lib/utils";
-const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
+import { apiClient, adminChannelService } from "@/lib/api-client";
+const fetcher = <T,>(url: string): Promise<T> => apiClient.get(url) as unknown as Promise<T>;
 
 const ALERT_TYPE_LABELS: Record<string, string> = {
     failed_notifications: "Failed Notifications",
@@ -43,11 +43,7 @@ export default function AdminAlertsPage() {
 
     const handleToggle = async (id: string, enabled: boolean) => {
         try {
-            await fetch(withBasePath(`/api/admin-channels/${id}`), {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ enabled }),
-            });
+            await adminChannelService.update(id, { enabled });
             mutate();
         } catch (error) {
             console.error("Failed to toggle channel:", error);
@@ -56,7 +52,7 @@ export default function AdminAlertsPage() {
 
     const handleDelete = async (id: string) => {
         try {
-            await fetch(withBasePath(`/api/admin-channels/${id}`), { method: "DELETE" });
+            await adminChannelService.delete(id);
             mutate();
         } catch (error) {
             console.error("Failed to delete channel:", error);

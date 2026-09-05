@@ -28,25 +28,18 @@ WAVE_PAUSE=${2:-30}
 SCRIPTS_DIR=$(cd "$(dirname "$0")/.." && pwd)
 PROJECT_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 
-# Container names - Application Services (updated for unified notification-processor)
-# Note: Recovery service is intentionally excluded to keep it running during chaos tests
-APP_CONTAINERS=(
-    "simplens-core-worker-1"
-    "simplens-core-notification-processor-1"
-    "simplens-core-delayed-processor-1"
-)
+# Determine active compose file
+COMPOSE_FILE="$PROJECT_ROOT/docker-compose.dev.yaml"
+if [ ! -f "$COMPOSE_FILE" ]; then
+    COMPOSE_FILE="$PROJECT_ROOT/docker-compose.yaml"
+fi
 
+# Application and Infrastructure Services
+# Recovery service is intentionally excluded from kills to keep it monitoring and recovering
 APP_SERVICES=(
     "worker"
     "notification-processor"
     "delayed-processor"
-)
-
-# Container names - Infrastructure Services
-INFRA_CONTAINERS=(
-    "mongo"
-    "redis"
-    "kafka"
 )
 
 INFRA_SERVICES=(
@@ -55,7 +48,9 @@ INFRA_SERVICES=(
     "kafka"
 )
 
-# All containers combined
+# Service identifiers used across chaos waves
+APP_CONTAINERS=("${APP_SERVICES[@]}")
+INFRA_CONTAINERS=("${INFRA_SERVICES[@]}")
 CONTAINERS=("${APP_CONTAINERS[@]}" "${INFRA_CONTAINERS[@]}")
 SERVICES=("${APP_SERVICES[@]}" "${INFRA_SERVICES[@]}")
 
@@ -101,12 +96,18 @@ log_recover() {
     echo -e "${GREEN}[RECOVER]${NC} ✅ $1"
 }
 
-# Kill a container silently
+# Kill a service or container cleanly
 kill_container() {
-    docker kill "$1" 2>/dev/null || true
+    local target="$1"
+    # Try docker compose kill by service name first
+    if docker compose -f "$COMPOSE_FILE" kill "$target" 2>/dev/null; then
+        return 0
+    fi
+    # Fallback to direct container kill by name/id
+    docker kill "$target" 2>/dev/null || true
 }
 
-# Kill multiple containers
+# Kill multiple containers/services
 kill_containers() {
     for container in "$@"; do
         kill_container "$container"
@@ -117,14 +118,14 @@ kill_containers() {
 # Restart all application services
 restart_all_app_services() {
     log_recover "Restarting all application services..."
-    docker compose -f "$PROJECT_ROOT/docker-compose.dev.yaml" up -d "${APP_SERVICES[@]}"
+    docker compose -f "$COMPOSE_FILE" up -d "${APP_SERVICES[@]}"
     sleep 3
 }
 
 # Restart all infrastructure services
 restart_all_infra_services() {
     log_recover "Restarting all infrastructure services..."
-    docker compose -f "$PROJECT_ROOT/docker-compose.dev.yaml" up -d "${INFRA_SERVICES[@]}"
+    docker compose -f "$COMPOSE_FILE" up -d "${INFRA_SERVICES[@]}"
     sleep 5
     wait_for_infra_health
 }
@@ -132,10 +133,10 @@ restart_all_infra_services() {
 # Restart all services (infra first, then app)
 restart_all_services() {
     log_recover "Restarting all services..."
-    docker compose -f "$PROJECT_ROOT/docker-compose.dev.yaml" up -d "${INFRA_SERVICES[@]}"
+    docker compose -f "$COMPOSE_FILE" up -d "${INFRA_SERVICES[@]}"
     sleep 5
     wait_for_infra_health
-    docker compose -f "$PROJECT_ROOT/docker-compose.dev.yaml" up -d "${APP_SERVICES[@]}"
+    docker compose -f "$COMPOSE_FILE" up -d "${APP_SERVICES[@]}"
     sleep 3
 }
 
@@ -143,7 +144,7 @@ restart_all_services() {
 restart_services() {
     for service in "$@"; do
         log_recover "$service"
-        docker compose -f "$PROJECT_ROOT/docker-compose.dev.yaml" up -d "$service"
+        docker compose -f "$COMPOSE_FILE" up -d "$service"
     done
 }
 
@@ -154,23 +155,23 @@ wait_for_infra_health() {
     local waited=0
     
     while [ $waited -lt $max_wait ]; do
-        # Check each service using simpler exit-code based checks
+        # Check each service using exit-code based checks
         local mongo_ok=0
         local redis_ok=0
         local kafka_ok=0
         
-        # MongoDB check
-        if docker exec mongo mongosh --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
+        # MongoDB check (try compose exec first, fallback to docker exec)
+        if docker compose -f "$COMPOSE_FILE" exec -T mongo mongosh --eval "db.adminCommand('ping')" >/dev/null 2>&1 || docker exec mongo mongosh --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
             mongo_ok=1
         fi
         
         # Redis check
-        if docker exec redis redis-cli ping 2>/dev/null | grep -q "PONG"; then
+        if docker compose -f "$COMPOSE_FILE" exec -T redis redis-cli ping 2>/dev/null | grep -q "PONG" || docker exec redis redis-cli ping 2>/dev/null | grep -q "PONG"; then
             redis_ok=1
         fi
         
-        # Kafka check - just verify container is running and responsive
-        if docker exec kafka kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1; then
+        # Kafka check
+        if docker compose -f "$COMPOSE_FILE" exec -T kafka kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1 || docker exec kafka kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1; then
             kafka_ok=1
         fi
         
@@ -191,7 +192,7 @@ start_load() {
     local requests=$1
     log_info "Starting load test with $requests requests..."
     cd "$PROJECT_ROOT"
-    node scripts/load-test.js -n "$requests" -c 50 -ch mock -p mock -m "Chaos test message" -h local &
+    node scripts/load-test.js -n "$requests" -c 50 -ch mock -p mock -m "Chaos test message" -h docker &
     LOAD_PID=$!
     sleep 2  # Give load test time to start
 }
@@ -812,22 +813,22 @@ main() {
     echo "Review the following:"
     echo ""
     echo "1. Recovery Service Logs:"
-    echo "   docker logs -f ns-recovery"
+    echo "   docker compose -f \"$COMPOSE_FILE\" logs -f recovery"
     echo ""
     echo "2. Dashboard Alerts:"
     echo "   http://localhost:3002"
     echo ""
     echo "3. Check for stuck notifications:"
-    echo "   docker exec -it mongo mongosh --eval \"use notification_service; db.notifications.countDocuments({status: 'processing'})\""
+    echo "   docker compose -f \"$COMPOSE_FILE\" exec -T mongo mongosh --eval \"use notification_service; db.notifications.countDocuments({status: 'processing'})\""
     echo ""
     echo "4. Check Kafka consumer lag:"
-    echo "   docker exec -it kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --all-groups"
+    echo "   docker compose -f \"$COMPOSE_FILE\" exec -T kafka kafka-broker-api-versions.sh --bootstrap-server localhost:9092"
     echo ""
     echo "5. Check Redis connectivity:"
-    echo "   docker exec -it redis redis-cli ping"
+    echo "   docker compose -f \"$COMPOSE_FILE\" exec -T redis redis-cli ping"
     echo ""
     echo "6. Check MongoDB replica set status:"
-    echo "   docker exec -it mongo mongosh --eval \"rs.status()\""
+    echo "   docker compose -f \"$COMPOSE_FILE\" exec -T mongo mongosh --eval \"rs.status()\""
     echo ""
     
     log_info "Final service restart..."

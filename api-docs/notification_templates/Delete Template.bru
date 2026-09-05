@@ -1,0 +1,16 @@
+meta {
+  name: Delete Template
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{process.env.BASE_URL}}/api/templates/{{process.env.TEMPLATE_ID}}
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

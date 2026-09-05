@@ -10,7 +10,8 @@ const notification_template_schema = new mongoose.Schema<notification_template>(
         template_id: {
             type: String,
             required: true,
-            unique: true
+            unique: true,
+            default: () => new mongoose.Types.ObjectId().toString(),
         },
         description: {
             type: String

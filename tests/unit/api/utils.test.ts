@@ -428,6 +428,65 @@ describe("API Utility Functions", () => {
       expect(notification_template_model.find).toHaveBeenCalledTimes(1);
     });
 
+    it("should handle single request with literal null in template_id and provider arrays", async () => {
+      const notification_template_model = (
+        await import("../../../src/database/models/notification-template.models.js")
+      ).default;
+      (
+        notification_template_model.find as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([
+        {
+          template_id: "sms-template-1",
+          content: {
+            message: "SMS from template",
+          },
+        },
+      ]);
+
+      const { convert_notification_request_to_notification_schema } =
+        await import("../../../src/api/utils/utils.js");
+
+      const request: notification_request = {
+        request_id:
+          randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+        client_id:
+          randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+        channel: ["email", "sms"],
+        provider: [null, "twilio"],
+        template_id: [null, "sms-template-1"],
+        recipient: {
+          user_id: "user-123",
+          email: "test@example.com",
+          phone: "+1234567890",
+        },
+        content: {
+          email: {
+            subject: "Direct Email",
+            message: "Direct message",
+          },
+        },
+        webhook_url: "https://webhook.example.com/callback",
+      };
+
+      const notifications =
+        await convert_notification_request_to_notification_schema(request);
+
+      expect(notifications).toHaveLength(2);
+      const emailNotif = notifications.find((n) => n.channel === "email");
+      const smsNotif = notifications.find((n) => n.channel === "sms");
+
+      expect(emailNotif?.provider).toBeUndefined();
+      expect(emailNotif?.content).toEqual({
+        subject: "Direct Email",
+        message: "Direct message",
+      });
+
+      expect(smsNotif?.provider).toBe("twilio");
+      expect(smsNotif?.content).toEqual({
+        message: "SMS from template",
+      });
+    });
+
     it("should handle batch request with partial template_id array", async () => {
       const notification_template_model = (
         await import("../../../src/database/models/notification-template.models.js")

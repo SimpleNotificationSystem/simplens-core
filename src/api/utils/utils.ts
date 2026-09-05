@@ -25,7 +25,7 @@ import { SimpleNSProvider } from "@src/plugins/interfaces/provider.types.js";
 import { ZodError } from "zod";
 
 const preloadTemplatesByIds = async (
-  templateIds?: string[],
+  templateIds?: (string | null | undefined)[],
 ): Promise<Map<string, Record<string, unknown>>> => {
   const templateMap = new Map<string, Record<string, unknown>>();
 

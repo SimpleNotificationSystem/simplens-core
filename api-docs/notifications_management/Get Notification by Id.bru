@@ -1,0 +1,16 @@
+meta {
+  name: Get Notification by Id
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{process.env.BASE_URL}}/api/notifications/{{process.env.NOTIFICATION_ID}}
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

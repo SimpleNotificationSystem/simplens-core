@@ -1,0 +1,16 @@
+meta {
+  name: Get Dashboard Stats
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{process.env.BASE_URL}}/api/dashboard/stats
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

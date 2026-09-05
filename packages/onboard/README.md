@@ -169,9 +169,36 @@ The CLI will display a security notice with all credentials that need to be upda
 
 - `docker-compose.infra.yaml` - Infrastructure services (if `--infra` used)
 - `docker-compose.yaml` - Application services
+- `simplens.ps1` or `simplens.sh` - OS-specific control script to start, stop, and manage SimpleNS services
 - `.env` - Environment variables and credentials
 - `simplens.config.yaml` - Plugin configuration
 - `nginx.conf` - Generated reverse proxy config (HTTP/HTTPS based on options)
+
+## Service Control Script
+
+Onboarding automatically generates an OS-specific control script in the setup directory (`simplens.ps1` for Windows, `simplens.sh` for Linux/macOS) with automatic Docker Compose fallback support (`docker compose` -> `docker-compose`):
+
+```bash
+# Start both infra and app services
+./simplens.sh          # Linux/macOS
+.\simplens.ps1         # Windows
+
+# Start only infrastructure services
+./simplens.sh --infra  # Linux/macOS
+.\simplens.ps1 --infra # Windows
+
+# Start only application services
+./simplens.sh --app    # Linux/macOS
+.\simplens.ps1 --app   # Windows
+
+# Stop services
+./simplens.sh --stop   # Linux/macOS
+.\simplens.ps1 --stop  # Windows
+
+# Stop services and remove volumes
+./simplens.sh --stop -v
+.\simplens.ps1 --stop -v
+```
 
 ## Service URLs
 

@@ -6,7 +6,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { UserCredentials } from '../auth.js';
-import { CoreApiClient } from '../api-client.js';
+import { ApiClient } from '../api-client.js';
 import { formatApiResponse, formatToolError } from './response.js';
 
 export function registerSendBatchNotification(server: McpServer, getCredentials: () => UserCredentials) {
@@ -77,7 +77,7 @@ export function registerSendBatchNotification(server: McpServer, getCredentials:
         async (params) => {
             try {
                 const credentials = getCredentials();
-                const client = new CoreApiClient(credentials);
+                const client = new ApiClient(credentials);
                 const result = await client.sendBatchNotification(params);
                 return formatApiResponse(result);
             } catch (error) {

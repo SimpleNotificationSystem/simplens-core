@@ -14,7 +14,8 @@ import { DynamicField } from "./dynamic-field";
 import { PluginMetadata, ProviderMetadata, NotificationTemplateDetail, NotificationTemplateListItem } from "@/lib/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { withBasePath } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { pluginService, templateService, notificationService } from "@/lib/api-client";
 
 // Generate a UUIDv4
 function generateUUID(): string {
@@ -40,7 +41,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
     // Selection
     const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
     const [selectedProviders, setSelectedProviders] = useState<Record<string, string>>({}); // channel -> providerId
-    const [inputMode, setInputMode] = useState<"content" | "template">("content");
+    const [contentModeByChannel, setContentModeByChannel] = useState<Record<string, "content" | "template">>({});
 
     // Form Data
     const [requestId, setRequestId] = useState(generateUUID());
@@ -110,11 +111,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
     useEffect(() => {
         const fetchPlugins = async () => {
             try {
-                const res = await fetch(withBasePath('/api/plugins'));
-                if (!res.ok) {
-                    throw new Error(`Failed to load plugins: ${res.statusText}`);
-                }
-                const data = await res.json();
+                const data = await pluginService.getMetadata();
                 setPlugins(data);
 
                 // Select first channel by default if available
@@ -216,15 +213,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
 
                     setTemplatesLoadingByChannel((prev) => ({ ...prev, [channel]: true }));
                     try {
-                        const response = await fetch(
-                            withBasePath(`/api/templates?package_name=${encodeURIComponent(packageName)}`)
-                        );
-
-                        if (!response.ok) {
-                            throw new Error(`Failed to fetch templates for ${channel}`);
-                        }
-
-                        const data = await response.json();
+                        const data = await templateService.list(packageName);
                         if (!cancelled) {
                             const templates = Array.isArray(data) ? data : [];
                             setTemplatesByChannel((prev) => ({ ...prev, [channel]: templates }));
@@ -258,7 +247,11 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
     }, [plugins, selectedChannels, selectedProviders]);
 
     useEffect(() => {
-        if (inputMode !== "template") {
+        const activeTemplateChannels = selectedChannels.filter(
+            (channel) => (contentModeByChannel[channel] || "content") === "template"
+        );
+
+        if (activeTemplateChannels.length === 0) {
             return;
         }
 
@@ -266,7 +259,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
 
         const fetchTemplateDetails = async () => {
             await Promise.all(
-                selectedChannels.map(async (channel) => {
+                activeTemplateChannels.map(async (channel) => {
                     const templateId = selectedTemplatesByChannel[channel];
                     if (!templateId) {
                         if (!cancelled) {
@@ -277,13 +270,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                     }
 
                     try {
-                        const response = await fetch(withBasePath(`/api/templates/${encodeURIComponent(templateId)}`));
-                        const data = await response.json().catch(() => ({}));
-                        if (!response.ok) {
-                            throw new Error(data.message || data.error || "Failed to load template detail");
-                        }
-
-                        const template = data as NotificationTemplateDetail;
+                        const template = await templateService.get(templateId);
                         const variableNames = extractTemplateVariables(template.content);
 
                         if (!cancelled) {
@@ -313,7 +300,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
         return () => {
             cancelled = true;
         };
-    }, [inputMode, selectedChannels, selectedTemplatesByChannel]);
+    }, [contentModeByChannel, selectedChannels, selectedTemplatesByChannel]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -337,34 +324,55 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                 client_id: clientId,
                 channel: selectedChannels,
                 recipient: { ...recipientData },
+                //hard-coded the webhook url as the simplest solution. This url may not be correct all the times. Nop issues, the worker just fire and forgets while sending webhook, it does not retires
+                webhook_url: "http://localhost:3002/api/webhook"
             };
 
-            if (inputMode === "template") {
-                const missingTemplate = selectedChannels.find((channel) => !selectedTemplatesByChannel[channel]);
+            const hasAnyTemplate = selectedChannels.some(
+                (channel) => (contentModeByChannel[channel] || "content") === "template"
+            );
+
+            if (hasAnyTemplate) {
+                const missingTemplate = selectedChannels.find(
+                    (channel) =>
+                        (contentModeByChannel[channel] || "content") === "template" &&
+                        !selectedTemplatesByChannel[channel]
+                );
                 if (missingTemplate) {
                     toast.error(`Select a template for ${missingTemplate}`);
                     setIsLoading(false);
                     return;
                 }
 
-                payload.template_id = selectedChannels.map((channel) => selectedTemplatesByChannel[channel]);
+                payload.template_id = selectedChannels.map((channel) =>
+                    (contentModeByChannel[channel] || "content") === "template"
+                        ? selectedTemplatesByChannel[channel]
+                        : null
+                );
 
                 const mergedVariables: Record<string, string> = {};
                 selectedChannels.forEach((channel) => {
-                    const channelVariables = templateVariablesByChannel[channel] || {};
-                    Object.entries(channelVariables).forEach(([key, value]) => {
-                        if (typeof value === "string" && value.trim().length > 0) {
-                            mergedVariables[key] = value;
-                        }
-                    });
+                    if ((contentModeByChannel[channel] || "content") === "template") {
+                        const channelVariables = templateVariablesByChannel[channel] || {};
+                        Object.entries(channelVariables).forEach(([key, value]) => {
+                            if (typeof value === "string" && value.trim().length > 0) {
+                                mergedVariables[key] = value;
+                            }
+                        });
+                    }
                 });
 
                 if (Object.keys(mergedVariables).length > 0) {
                     payload.variables = mergedVariables;
                 }
-            } else {
+            }
+
+            const manualChannels = selectedChannels.filter(
+                (channel) => (contentModeByChannel[channel] || "content") === "content"
+            );
+            if (manualChannels.length > 0) {
                 payload.content = {};
-                selectedChannels.forEach(channel => {
+                manualChannels.forEach((channel) => {
                     const channelContent = contentData[channel] || {};
                     payload.content[channel] = channelContent;
                 });
@@ -386,17 +394,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                 }
             }
 
-            const response = await fetch(withBasePath("/api/send"), {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || data.error || "Failed to send");
-            }
+            await notificationService.send(payload);
 
             toast.success("Notification sent successfully!");
             onSuccess?.();
@@ -407,6 +405,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
             setContentData({});
             setScheduledDate(undefined);
             setSelectedTemplatesByChannel({});
+            setTemplateVariablesByChannel({});
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to send notification");
         } finally {
@@ -501,24 +500,6 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                     </CardContent>
                 </Card>
 
-                <Card>
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-sm font-medium">Content Input Mode</CardTitle>
-                        <CardDescription>Choose manual content or provider template.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Select value={inputMode} onValueChange={(value) => setInputMode(value as "content" | "template")}>
-                            <SelectTrigger className="max-w-sm">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="content">Write content manually</SelectItem>
-                                <SelectItem value="template">Choose template</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </CardContent>
-                </Card>
-
                 {/* Recipient */}
                 <Card>
                     <CardHeader className="pb-3">
@@ -580,100 +561,112 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                     </CardContent>
                 </Card>
 
-                {inputMode === "template" ? (
-                    selectedChannels.map((channel) => {
-                        const provider = getActiveProvider(channel);
-                        const templates = templatesByChannel[channel] ?? [];
-                        const isLoadingTemplates = templatesLoadingByChannel[channel];
-                        const variableNames = templateVariableNamesByChannel[channel] ?? [];
-                        const templateDetail = templateDetailsByChannel[channel];
-                        const previewHtml = getTemplatePreviewHtml(templateDetail?.content);
+                {selectedChannels.map((channel) => {
+                    const provider = getActiveProvider(channel);
+                    if (!provider) return null;
 
-                        return (
-                            <Card key={channel}>
-                                <CardHeader className="pb-3">
-                                    <CardTitle className="text-sm font-medium capitalize">{channel} Template</CardTitle>
-                                    <CardDescription>
-                                        Provider: {provider?.displayName ?? "-"} ({provider?.name ?? "package unavailable"})
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-2">
-                                    <Label>Template</Label>
-                                    <Select
-                                        value={selectedTemplatesByChannel[channel] || ""}
-                                        onValueChange={(value) =>
-                                            setSelectedTemplatesByChannel((prev) => ({ ...prev, [channel]: value }))
+                    const mode = contentModeByChannel[channel] || "content";
+                    const templates = templatesByChannel[channel] ?? [];
+                    const isLoadingTemplates = templatesLoadingByChannel[channel];
+                    const variableNames = templateVariableNamesByChannel[channel] ?? [];
+                    const templateDetail = templateDetailsByChannel[channel];
+                    const previewHtml = getTemplatePreviewHtml(templateDetail?.content);
+
+                    return (
+                        <Card key={channel}>
+                            <CardHeader className="pb-3">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                    <div>
+                                        <CardTitle className="text-sm font-medium capitalize">{channel} Content</CardTitle>
+                                        <CardDescription>
+                                            Provider: {provider.displayName} ({selectedProviders[channel] || provider.id})
+                                        </CardDescription>
+                                    </div>
+                                    <Tabs
+                                        value={mode}
+                                        onValueChange={(val) =>
+                                            setContentModeByChannel((prev) => ({
+                                                ...prev,
+                                                [channel]: val as "content" | "template",
+                                            }))
                                         }
                                     >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder={isLoadingTemplates ? "Loading templates..." : "Select template"} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {templates.map((template) => (
-                                                <SelectItem key={template.template_id} value={template.template_id}>
-                                                    {template.name} ({template.template_id})
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-
-                                    {selectedTemplatesByChannel[channel] && (
-                                        <div className="space-y-3 rounded-md border p-3">
-                                            <Label className="text-xs text-muted-foreground">Template Variables</Label>
-
-                                            {variableNames.length === 0 ? (
-                                                <p className="text-xs text-muted-foreground">No variables found in this template.</p>
-                                            ) : (
-                                                <div className="grid gap-2 md:grid-cols-2">
-                                                    {variableNames.map((variableName) => (
-                                                        <div key={variableName} className="space-y-1">
-                                                            <Label className="text-xs">{`{{${variableName}}}`}</Label>
-                                                            <Input
-                                                                value={templateVariablesByChannel[channel]?.[variableName] ?? ""}
-                                                                onChange={(event) => {
-                                                                    const value = event.target.value;
-                                                                    setTemplateVariablesByChannel((prev) => ({
-                                                                        ...prev,
-                                                                        [channel]: {
-                                                                            ...(prev[channel] || {}),
-                                                                            [variableName]: value,
-                                                                        },
-                                                                    }));
-                                                                }}
-                                                                placeholder={`Value for ${variableName}`}
-                                                            />
-                                                        </div>
+                                        <TabsList className="h-8">
+                                            <TabsTrigger value="content" className="text-xs px-3 py-1">
+                                                Manual Content
+                                            </TabsTrigger>
+                                            <TabsTrigger value="template" className="text-xs px-3 py-1">
+                                                Template
+                                            </TabsTrigger>
+                                        </TabsList>
+                                    </Tabs>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                {mode === "template" ? (
+                                    <div className="space-y-3">
+                                        <div className="space-y-2">
+                                            <Label>Template</Label>
+                                            <Select
+                                                value={selectedTemplatesByChannel[channel] || ""}
+                                                onValueChange={(value) =>
+                                                    setSelectedTemplatesByChannel((prev) => ({ ...prev, [channel]: value }))
+                                                }
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder={isLoadingTemplates ? "Loading templates..." : "Select template"} />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {templates.map((template) => (
+                                                        <SelectItem key={template.template_id} value={template.template_id}>
+                                                            {template.name} ({template.template_id})
+                                                        </SelectItem>
                                                     ))}
-                                                </div>
-                                            )}
-
-                                            {previewHtml && (
-                                                <div className="space-y-1">
-                                                    <Label className="text-xs text-muted-foreground">Preview</Label>
-                                                    <HtmlPreview html={previewHtml} variables={templateVariablesByChannel[channel] || {}} />
-                                                </div>
-                                            )}
+                                                </SelectContent>
+                                            </Select>
                                         </div>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        );
-                    })
-                ) : (
-                    selectedChannels.map(channel => {
-                        const provider = getActiveProvider(channel);
-                        if (!provider) return null;
 
-                        return (
-                            <Card key={channel}>
-                                <CardHeader className="pb-3">
-                                    <CardTitle className="text-sm font-medium capitalize">{channel} Content</CardTitle>
-                                    <CardDescription>
-                                        Provider: {provider.displayName} ({selectedProviders[channel]})
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    {provider.contentFields.map(field => (
+                                        {selectedTemplatesByChannel[channel] && (
+                                            <div className="space-y-3 rounded-md border p-3">
+                                                <Label className="text-xs text-muted-foreground">Template Variables</Label>
+
+                                                {variableNames.length === 0 ? (
+                                                    <p className="text-xs text-muted-foreground">No variables found in this template.</p>
+                                                ) : (
+                                                    <div className="grid gap-2 md:grid-cols-2">
+                                                        {variableNames.map((variableName) => (
+                                                            <div key={variableName} className="space-y-1">
+                                                                <Label className="text-xs">{`{{${variableName}}}`}</Label>
+                                                                <Input
+                                                                    value={templateVariablesByChannel[channel]?.[variableName] ?? ""}
+                                                                    onChange={(event) => {
+                                                                        const value = event.target.value;
+                                                                        setTemplateVariablesByChannel((prev) => ({
+                                                                            ...prev,
+                                                                            [channel]: {
+                                                                                ...(prev[channel] || {}),
+                                                                                [variableName]: value,
+                                                                            },
+                                                                        }));
+                                                                    }}
+                                                                    placeholder={`Value for ${variableName}`}
+                                                                />
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {previewHtml && (
+                                                    <div className="space-y-1">
+                                                        <Label className="text-xs text-muted-foreground">Preview</Label>
+                                                        <HtmlPreview html={previewHtml} variables={templateVariablesByChannel[channel] || {}} />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    provider.contentFields.map((field) => (
                                         <div key={field.name} className="space-y-2">
                                             <DynamicField
                                                 field={field}
@@ -681,7 +674,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                                                 onChange={(val) => updateContentData(channel, field.name, val)}
                                             />
 
-                                            {(field.name === 'message' || field.name === 'body') &&
+                                            {(field.name === "message" || field.name === "body") &&
                                                 contentData[channel]?.[field.name] && (
                                                     <div className="mt-2">
                                                         <Label className="text-xs text-muted-foreground mb-1 block">Preview</Label>
@@ -689,12 +682,12 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                                                     </div>
                                                 )}
                                         </div>
-                                    ))}
-                                </CardContent>
-                            </Card>
-                        );
-                    })
-                )}
+                                    ))
+                                )}
+                            </CardContent>
+                        </Card>
+                    );
+                })}
 
                 {/* Schedule */}
                 <Card>

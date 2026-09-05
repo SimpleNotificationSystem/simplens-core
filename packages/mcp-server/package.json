@@ -1,6 +1,6 @@
 {
   "name": "@simplens/mcp",
-  "version": "1.0.3",
+  "version": "1.1.2",
   "description": "Remote MCP server for SimpleNS notification orchestration engine",
   "type": "module",
   "main": "dist/index.js",
@@ -19,7 +19,8 @@
     "prepublishOnly": "npm run build",
     "start": "node dist/index.js",
     "stdio": "node dist/index.js --stdio",
-    "dev": "tsx watch src/index.ts"
+    "dev": "tsx watch src/index.ts",
+    "test": "npm run build && tsx tests/verify-stdio.ts"
   },
   "keywords": [
     "mcp",
@@ -30,12 +31,13 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
+    "axios": "^1.18.1",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.4",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
-    "zod": "^4.1.13",
-    "dotenv": "^17.2.4"
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
@@ -44,5 +46,9 @@
     "@types/node": "^24.10.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "esbuild": "0.27.2",
+    "@hono/node-server": "^2.0.5"
   }
 }

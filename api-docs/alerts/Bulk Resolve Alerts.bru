@@ -1,0 +1,23 @@
+meta {
+  name: Bulk Resolve Alerts
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{process.env.BASE_URL}}/api/alerts/bulk-resolve
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "appendWarning": false,
+    "limit": 50
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

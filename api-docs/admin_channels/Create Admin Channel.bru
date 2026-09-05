@@ -1,0 +1,33 @@
+meta {
+  name: Create Admin Channel
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{process.env.BASE_URL}}/api/admin-channels
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "channel_type": "discord",
+    "name": "Discord Alerts Channel",
+    "config": {
+      "webhook_url": "{{process.env.DISCORD_WEBHOOK_URL}}"
+    },
+    "alert_filters": {
+      "failed_notifications": true,
+      "service_health": true,
+      "stuck_processing": true,
+      "orphaned_pending": true,
+      "ghost_delivery": false
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

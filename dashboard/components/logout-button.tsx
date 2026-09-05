@@ -4,21 +4,16 @@ import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { SidebarMenuButton } from "@/components/ui/sidebar";
 import { withBasePath } from "@/lib/utils";
+import { authService } from "@/lib/api-client";
 
 export function LogoutButton() {
     const router = useRouter();
 
     const handleLogout = async () => {
         try {
-            const response = await fetch(
-                withBasePath("/api/auth/logout"),
-                { method: "POST" }
-            );
-
-            if (response.ok) {
-                router.push(withBasePath(`/login`));
-                router.refresh();
-            }
+            await authService.logout();
+            router.push(withBasePath(`/login`));
+            router.refresh();
         } catch (error) {
             console.error("Logout failed:", error);
             // Force redirect even on error

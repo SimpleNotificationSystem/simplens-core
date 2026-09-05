@@ -39,8 +39,8 @@ import { SidebarThemeToggle } from "@/components/theme-toggle";
 import { LogoutButton } from "@/components/logout-button";
 import type { DashboardStats } from "@/lib/types";
 import { withBasePath } from "@/lib/utils";
-
-const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
+import { apiClient } from "@/lib/api-client";
+const fetcher = <T,>(url: string): Promise<T> => apiClient.get(url) as unknown as Promise<T>;
 
 interface NavItem {
     title: string;

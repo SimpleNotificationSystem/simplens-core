@@ -1,0 +1,30 @@
+meta {
+  name: Update Admin Channel
+  type: http
+  seq: 7
+}
+
+patch {
+  url: {{process.env.BASE_URL}}/api/admin-channels/{{process.env.ADMIN_CHANNEL_ID}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Updated Discord Alerts Channel",
+    "enabled": true,
+    "alert_filters": {
+      "failed_notifications": true,
+      "service_health": true,
+      "stuck_processing": true,
+      "orphaned_pending": true,
+      "ghost_delivery": true
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

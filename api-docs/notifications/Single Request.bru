@@ -14,12 +14,12 @@ body:json {
   {
     "request_id": "908604ba-2902-4e1e-be16-c05d1b371e21",
     "client_id": "59777441-3545-4507-8e0d-2d3a2ffd71c1",
-    "template_id": ["email-temp-1"],
-    "channel": ["{{process.env.CHANNEL}}", "mock"],
+    "template_id": ["{{process.env.TEMPLATE_ID}}"],
+    "channel": ["{{process.env.CHANNEL}}"],
     "provider": ["{{process.env.PROVIDER}}"],
     "recipient": {
       "user_id": "user1234",
-      "email": "{{TO_EMAIL}}"
+      "email": "{{process.env.TO_EMAIL}}"
     },
     "content":{
       "email": {
@@ -36,10 +36,6 @@ body:json {
     },
     "webhook_url": "http://localhost:4000/webhook"
   }
-}
-
-vars:pre-request {
-  TO_EMAIL: streamnowservice@gmail.com
 }
 
 settings {

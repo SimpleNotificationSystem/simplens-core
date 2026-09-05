@@ -1,0 +1,16 @@
+meta {
+  name: Get Admin Channel by Id
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{process.env.BASE_URL}}/api/admin-channels/{{process.env.ADMIN_CHANNEL_ID}}
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

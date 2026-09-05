@@ -10,36 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import useSWR from "swr";
 import { Puzzle, RefreshCw, Mail, MessageCircle, TestTube2, Zap, User, FileText } from "lucide-react";
 import { useMemo, useState } from "react";
-import { withBasePath } from "@/lib/utils";
+import { apiClient } from "@/lib/api-client";
+import { ProviderMetadata, PluginMetadata as PluginsResponse } from "@/lib/types";
 
-interface FieldDefinition {
-    name: string;
-    type: string;
-    required: boolean;
-    description?: string;
-}
-
-interface ProviderMetadata {
-    id: string;
-    name: string;
-    displayName: string;
-    description?: string;
-    priority: number;
-    recipientFields: FieldDefinition[];
-    contentFields: FieldDefinition[];
-}
-
-interface ChannelMetadata {
-    providers: ProviderMetadata[];
-    default?: string;
-    fallback?: string;
-}
-
-interface PluginsResponse {
-    channels: Record<string, ChannelMetadata>;
-}
-
-const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
+const fetcher = <T,>(url: string): Promise<T> => apiClient.get(url) as unknown as Promise<T>;
 
 // Channel-specific colors and icons
 const channelConfig: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string }> = {
@@ -308,9 +282,16 @@ export default function PluginsPage() {
                             <p className="text-muted-foreground max-w-sm mx-auto mb-4">
                                 Get started by installing your first notification plugin.
                             </p>
-                            <code className="bg-muted px-3 py-1.5 rounded text-sm">
-                                npm run plugin:install &lt;package-name&gt;
-                            </code>
+                            <div className="mt-4">
+                                <a
+                                    href="https://www.simplens.in/docs/plugins#installing-plugins"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 h-9 px-4 py-2"
+                                >
+                                    View Plugin Installation Guide
+                                </a>
+                            </div>
                         </CardContent>
                     </Card>
                 )}

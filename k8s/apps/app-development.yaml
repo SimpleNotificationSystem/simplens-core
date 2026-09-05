@@ -1,0 +1,236 @@
+# ==============================================================================
+# SimpleNS Development Environment (GHCR Development Branch Images)
+# Single Pod containing 6 containers: API, Worker, Unified Processor,
+# Delayed Processor, Recovery Service, and Next.js Dashboard.
+# ==============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-development
+  namespace: simplens
+  labels:
+    app.kubernetes.io/name: app-development
+    app.kubernetes.io/env: development
+spec:
+  replicas: 0 # Start scaled down to prevent Kafka queue conflict until switched
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: app-development
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: app-development
+        app.kubernetes.io/env: development
+    spec:
+      containers:
+        # ============================================
+        # 1. API Server
+        # ============================================
+        - name: api
+          image: ghcr.io/simplenotificationsystem/simplens-core:development
+          imagePullPolicy: IfNotPresent
+          command: ["node", "dist/api/server.js"]
+          ports:
+            - containerPort: 3000
+              name: http-api
+          envFrom:
+            - secretRef:
+                name: app-env
+          env:
+            - name: NODE_ENV
+              value: "development"
+            - name: PORT
+              value: "3000"
+            - name: MONGO_URI
+              value: "mongodb://mongo:27017/simplens_development?replicaSet=rs0"
+            - name: REDIS_URL
+              value: "redis://redis:6379/1"
+            - name: BROKERS
+              value: "kafka:9093"
+            - name: LOKI_URL
+              value: "http://loki:3100"
+            - name: SIMPLENS_CONFIG_PATH
+              value: "/app/simplens.config.yaml"
+          volumeMounts:
+            - name: simplens-config-vol
+              mountPath: /app/simplens.config.yaml
+              subPath: simplens.config.yaml
+            - name: plugin-data
+              mountPath: /app/.plugins
+            - name: logs-data
+              mountPath: /app/logs
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+
+        # ============================================
+        # 2. Outbox Worker
+        # ============================================
+        - name: worker
+          image: ghcr.io/simplenotificationsystem/simplens-core:development
+          imagePullPolicy: IfNotPresent
+          command: ["node", "dist/workers/worker.js"]
+          envFrom:
+            - secretRef:
+                name: app-env
+          env:
+            - name: NODE_ENV
+              value: "development"
+            - name: MONGO_URI
+              value: "mongodb://mongo:27017/simplens_development?replicaSet=rs0"
+            - name: REDIS_URL
+              value: "redis://redis:6379/1"
+            - name: BROKERS
+              value: "kafka:9093"
+            - name: LOKI_URL
+              value: "http://loki:3100"
+          volumeMounts:
+            - name: logs-data
+              mountPath: /app/logs
+
+        # ============================================
+        # 3. Unified Notification Processor
+        # ============================================
+        - name: notification-processor
+          image: ghcr.io/simplenotificationsystem/simplens-core:development
+          imagePullPolicy: IfNotPresent
+          command: ["node", "dist/processors/unified/unified.processor.js"]
+          envFrom:
+            - secretRef:
+                name: app-env
+          env:
+            - name: NODE_ENV
+              value: "development"
+            - name: MONGO_URI
+              value: "mongodb://mongo:27017/simplens_development?replicaSet=rs0"
+            - name: REDIS_URL
+              value: "redis://redis:6379/1"
+            - name: BROKERS
+              value: "kafka:9093"
+            - name: SIMPLENS_CONFIG_PATH
+              value: "/app/simplens.config.yaml"
+            - name: PROCESSOR_CHANNEL
+              value: "all"
+            - name: LOKI_URL
+              value: "http://loki:3100"
+          volumeMounts:
+            - name: simplens-config-vol
+              mountPath: /app/simplens.config.yaml
+              subPath: simplens.config.yaml
+            - name: plugin-data
+              mountPath: /app/.plugins
+            - name: logs-data
+              mountPath: /app/logs
+
+        # ============================================
+        # 4. Delayed Queue Processor
+        # ============================================
+        - name: delayed-processor
+          image: ghcr.io/simplenotificationsystem/simplens-core:development
+          imagePullPolicy: IfNotPresent
+          command: ["node", "dist/processors/delayed/delayed.processor.js"]
+          envFrom:
+            - secretRef:
+                name: app-env
+          env:
+            - name: NODE_ENV
+              value: "development"
+            - name: MONGO_URI
+              value: "mongodb://mongo:27017/simplens_development?replicaSet=rs0"
+            - name: REDIS_URL
+              value: "redis://redis:6379/1"
+            - name: BROKERS
+              value: "kafka:9093"
+            - name: LOKI_URL
+              value: "http://loki:3100"
+          volumeMounts:
+            - name: logs-data
+              mountPath: /app/logs
+
+        # ============================================
+        # 5. Recovery Service (Stuck notification recovery & cron)
+        # ============================================
+        - name: recovery
+          image: ghcr.io/simplenotificationsystem/simplens-core:development
+          imagePullPolicy: IfNotPresent
+          command: ["node", "dist/workers/recovery/recovery.service.js"]
+          envFrom:
+            - secretRef:
+                name: app-env
+          env:
+            - name: NODE_ENV
+              value: "development"
+            - name: MONGO_URI
+              value: "mongodb://mongo:27017/simplens_development?replicaSet=rs0"
+            - name: REDIS_URL
+              value: "redis://redis:6379/1"
+            - name: LOKI_URL
+              value: "http://loki:3100"
+          volumeMounts:
+            - name: logs-data
+              mountPath: /app/logs
+
+        # ============================================
+        # 6. Admin Dashboard (Next.js)
+        # ============================================
+        - name: dashboard
+          image: ghcr.io/simplenotificationsystem/simplens-dashboard:development
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3002
+              name: http-dash
+          envFrom:
+            - secretRef:
+                name: app-env
+          env:
+            - name: NODE_ENV
+              value: "development"
+            - name: PORT
+              value: "3002"
+            - name: MONGO_URI
+              value: "mongodb://mongo:27017/simplens_development?replicaSet=rs0"
+            - name: API_BASE_URL
+              value: "http://localhost:3000"
+            - name: WEBHOOK_HOST
+              value: "localhost"
+            - name: WEBHOOK_PORT
+              value: "3002"
+            - name: HTTPS_COOKIE
+              value: "false"
+
+      volumes:
+        - name: simplens-config-vol
+          configMap:
+            name: simplens-config
+        - name: plugin-data
+          emptyDir: {}
+        - name: logs-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-development
+  namespace: simplens
+  labels:
+    app.kubernetes.io/name: app-development
+    app.kubernetes.io/env: development
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: app-development
+  ports:
+    - name: http-api
+      port: 3000
+      targetPort: 3000
+      nodePort: 30200
+    - name: http-dashboard
+      port: 3002
+      targetPort: 3002
+      nodePort: 30202

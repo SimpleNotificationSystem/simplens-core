@@ -39,7 +39,8 @@ import type { PaginatedResponse, Notification } from "@/lib/types";
 import Link from "next/link";
 import { toast } from "sonner";
 import { withBasePath } from "@/lib/utils";
-const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
+import { apiClient, notificationService } from "@/lib/api-client";
+const fetcher = <T,>(url: string): Promise<T> => apiClient.get(url) as unknown as Promise<T>;
 
 export default function FailedPage() {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -80,16 +81,8 @@ export default function FailedPage() {
 
         for (const id of selectedIds) {
             try {
-                const response = await fetch(withBasePath(`/api/notifications/${id}/retry`), {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({}),
-                });
-                if (response.ok) {
-                    successCount++;
-                } else {
-                    failCount++;
-                }
+                await notificationService.retry(id);
+                successCount++;
             } catch {
                 failCount++;
             }

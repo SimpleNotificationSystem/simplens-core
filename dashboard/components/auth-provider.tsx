@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { withBasePath } from "@/lib/utils";
+import { authService } from "@/lib/api-client";
 
 interface User {
     id: string;
@@ -26,8 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const refreshSession = useCallback(async () => {
         try {
-            const response = await fetch(withBasePath(`/api/auth/session`));
-            const data = await response.json();
+            const data = await authService.getSession();
 
             if (data.authenticated && data.user) {
                 setUser(data.user);
@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const logout = useCallback(async () => {
         try {
-            await fetch(withBasePath(`/api/auth/logout`), { method: "POST" });
+            await authService.logout();
             setUser(null);
             router.push(withBasePath(`/login`));
             router.refresh();

@@ -1,11 +1,11 @@
 meta {
   name: Get Template by Id
   type: http
-  seq: 3
+  seq: 4
 }
 
 get {
-  url: {{process.env.BASE_URL}}/api/templates/temp-1
+  url: {{process.env.BASE_URL}}/api/templates/{{process.env.TEMPLATE_ID}}
   body: none
   auth: inherit
 }

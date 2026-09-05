@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/dialog";
 
 import { Alert as AlertType, ALERT_TYPE } from "@/lib/types";
+import { alertService } from "@/lib/api-client";
 import { withBasePath } from "@/lib/utils";
 
 interface AlertWithNotification extends AlertType {
@@ -80,8 +81,7 @@ export default function AlertsPage() {
 
     const fetchAlerts = useCallback(async (pageNum = 1, append = false, type = "all") => {
         try {
-            const response = await fetch(withBasePath(`/api/alerts?page=${pageNum}&limit=50&type=${type}`));
-            const data = await response.json();
+            const data = await alertService.list(pageNum, 50, type);
 
             if (append) {
                 setAlerts(prev => [...prev, ...(data.alerts || [])]);
@@ -131,17 +131,12 @@ export default function AlertsPage() {
 
         setBulkLoading(true);
         try {
-            const response = await fetch(withBasePath("/api/alerts/bulk-resolve"), {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    appendWarning: appendWarningOption,
-                    limit: 100
-                }),
+            const data = await alertService.bulkResolve({
+                appendWarning: appendWarningOption,
+                limit: 100
             });
 
-            if (response.ok) {
-                const data = await response.json();
+            if (data) {
                 // Refresh the list after bulk action
                 setPage(1);
                 await fetchAlerts(1, false);
@@ -161,15 +156,9 @@ export default function AlertsPage() {
     const handleRetry = async (alertId: string, appendWarning: boolean) => {
         setActionLoading(alertId);
         try {
-            const response = await fetch(withBasePath(`/api/alerts/${alertId}/resolve`), {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    appendWarning
-                }),
-            });
+            const data = await alertService.resolve(alertId, { appendWarning });
 
-            if (response.ok) {
+            if (data) {
                 setAlerts((prev) => prev.filter((a) => a._id !== alertId));
                 setTotalCount((prev) => Math.max(0, prev - 1));
                 toast.success("Alert resolved and notification retried");
@@ -186,11 +175,9 @@ export default function AlertsPage() {
     const handleDismiss = async (alertId: string) => {
         setActionLoading(alertId);
         try {
-            const response = await fetch(withBasePath(`/api/alerts/${alertId}`), {
-                method: "DELETE",
-            });
+            const data = await alertService.delete(alertId);
 
-            if (response.ok) {
+            if (data) {
                 setAlerts((prev) => prev.filter((a) => a._id !== alertId));
                 setTotalCount((prev) => Math.max(0, prev - 1));
             }

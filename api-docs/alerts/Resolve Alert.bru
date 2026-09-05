@@ -1,0 +1,22 @@
+meta {
+  name: Resolve Alert
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{process.env.BASE_URL}}/api/alerts/{{process.env.ALERT_ID}}/resolve
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "appendWarning": false
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

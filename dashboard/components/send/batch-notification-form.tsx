@@ -14,7 +14,8 @@ import { DynamicField } from "./dynamic-field";
 import { PluginMetadata, FieldDefinition, NotificationTemplateDetail, NotificationTemplateListItem } from "@/lib/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { withBasePath } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { pluginService, templateService, notificationService } from "@/lib/api-client";
 
 // Generate a UUIDv4
 function generateUUID(): string {
@@ -61,7 +62,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
     // Selection
     const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
     const [selectedProviders, setSelectedProviders] = useState<Record<string, string>>({});
-    const [inputMode, setInputMode] = useState<"content" | "template">("content");
+    const [contentModeByChannel, setContentModeByChannel] = useState<Record<string, "content" | "template">>({});
 
     // Dynamic Data
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -166,9 +167,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
     useEffect(() => {
         const fetchPlugins = async () => {
             try {
-                const res = await fetch(withBasePath('/api/plugins'));
-                if (!res.ok) throw new Error(`Failed to load plugins: ${res.statusText}`);
-                const data = await res.json();
+                const data = await pluginService.getMetadata();
                 setPlugins(data);
 
                 // Select first channel by default
@@ -271,15 +270,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
 
                     setTemplatesLoadingByChannel((prev) => ({ ...prev, [channel]: true }));
                     try {
-                        const response = await fetch(
-                            withBasePath(`/api/templates?package_name=${encodeURIComponent(packageName)}`)
-                        );
-
-                        if (!response.ok) {
-                            throw new Error(`Failed to fetch templates for ${channel}`);
-                        }
-
-                        const data = await response.json();
+                        const data = await templateService.list(packageName);
                         if (!cancelled) {
                             const templates = Array.isArray(data) ? data : [];
                             setTemplatesByChannel((prev) => ({ ...prev, [channel]: templates }));
@@ -313,7 +304,11 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
     }, [plugins, selectedChannels, selectedProviders]);
 
     useEffect(() => {
-        if (inputMode !== "template") {
+        const activeTemplateChannels = selectedChannels.filter(
+            (channel) => (contentModeByChannel[channel] || "content") === "template"
+        );
+
+        if (activeTemplateChannels.length === 0) {
             return;
         }
 
@@ -321,7 +316,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
 
         const fetchTemplateDetails = async () => {
             await Promise.all(
-                selectedChannels.map(async (channel) => {
+                activeTemplateChannels.map(async (channel) => {
                     const templateId = selectedTemplatesByChannel[channel];
                     if (!templateId) {
                         if (!cancelled) {
@@ -332,14 +327,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                     }
 
                     try {
-                        const response = await fetch(withBasePath(`/api/templates/${encodeURIComponent(templateId)}`));
-                        const data = await response.json().catch(() => ({}));
-
-                        if (!response.ok) {
-                            throw new Error(data.message || data.error || "Failed to load template detail");
-                        }
-
-                        const template = data as NotificationTemplateDetail;
+                        const template = await templateService.get(templateId);
                         const variableNames = extractTemplateVariables(template.content);
 
                         if (!cancelled) {
@@ -361,7 +349,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
         return () => {
             cancelled = true;
         };
-    }, [inputMode, selectedChannels, selectedTemplatesByChannel]);
+    }, [contentModeByChannel, selectedChannels, selectedTemplatesByChannel]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -412,20 +400,39 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                 client_id: clientId,
                 channel: selectedChannels,
                 recipients: processedRecipients,
+                //hard-coded the webhook url as the simplest solution. This url may not be correct all the times. Nop issues, the worker just fire and forgets while sending webhook, it does not retires
+                webhook_url: "http://localhost:3002/api/webhook"
             };
 
-            if (inputMode === "template") {
-                const missingTemplate = selectedChannels.find((channel) => !selectedTemplatesByChannel[channel]);
+            const hasAnyTemplate = selectedChannels.some(
+                (channel) => (contentModeByChannel[channel] || "content") === "template"
+            );
+
+            if (hasAnyTemplate) {
+                const missingTemplate = selectedChannels.find(
+                    (channel) =>
+                        (contentModeByChannel[channel] || "content") === "template" &&
+                        !selectedTemplatesByChannel[channel]
+                );
                 if (missingTemplate) {
                     toast.error(`Select a template for ${missingTemplate}`);
                     setIsLoading(false);
                     return;
                 }
 
-                payload.template_id = selectedChannels.map((channel) => selectedTemplatesByChannel[channel]);
-            } else {
+                payload.template_id = selectedChannels.map((channel) =>
+                    (contentModeByChannel[channel] || "content") === "template"
+                        ? selectedTemplatesByChannel[channel]
+                        : null
+                );
+            }
+
+            const manualChannels = selectedChannels.filter(
+                (channel) => (contentModeByChannel[channel] || "content") === "content"
+            );
+            if (manualChannels.length > 0) {
                 payload.content = {};
-                selectedChannels.forEach(channel => {
+                manualChannels.forEach((channel) => {
                     payload.content[channel] = contentData[channel] || {};
                 });
             }
@@ -446,17 +453,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                 }
             }
 
-            const response = await fetch(withBasePath("/api/send"), {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || data.error || "Failed to send");
-            }
+            await notificationService.sendBatch(payload);
 
             toast.success(`Batch notification sent to ${recipients.length} recipients!`);
             onSuccess?.();
@@ -496,6 +493,17 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
             });
         }
     });
+
+    const hasTemplateChannel = selectedChannels.some(
+        (channel) => (contentModeByChannel[channel] || "content") === "template"
+    );
+    const activeTemplateVariableNames = Array.from(
+        new Set(
+            selectedChannels
+                .filter((channel) => (contentModeByChannel[channel] || "content") === "template")
+                .flatMap((channel) => templateVariableNamesByChannel[channel] || [])
+        )
+    ).sort((left, right) => left.localeCompare(right));
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6 w-full">
@@ -548,24 +556,6 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                 </CardContent>
             </Card>
 
-            <Card>
-                <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium">Content Input Mode</CardTitle>
-                    <CardDescription>Choose manual content or provider template.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Select value={inputMode} onValueChange={(value) => setInputMode(value as "content" | "template")}>
-                        <SelectTrigger className="max-w-sm">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="content">Write content manually</SelectItem>
-                            <SelectItem value="template">Choose template</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </CardContent>
-            </Card>
-
             {/* Recipients */}
             <Card>
                 <CardHeader className="pb-3">
@@ -615,38 +605,36 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                             </div>
 
                             {/* Variables */}
-                            {inputMode === "template" ? (
+                            {hasTemplateChannel ? (
                                 <div className="space-y-2">
                                     <Label className="text-xs text-muted-foreground">Template Variables</Label>
-                                    {Array.from(
-                                        new Set(
-                                            selectedChannels.flatMap((channel) => templateVariableNamesByChannel[channel] || [])
-                                        )
-                                    ).length === 0 ? (
-                                        <p className="text-xs text-muted-foreground">No variables detected in selected templates.</p>
+                                    {activeTemplateVariableNames.length === 0 ? (
+                                        <div className="space-y-1">
+                                            <p className="text-xs text-muted-foreground">No variables detected in selected templates.</p>
+                                            <Input
+                                                placeholder='Variables (optional JSON): {"name": "Alice"}'
+                                                value={recipient.variables}
+                                                onChange={(e) => updateRecipient(recipient.id, "variables", e.target.value)}
+                                                className="font-mono text-xs"
+                                            />
+                                        </div>
                                     ) : (
                                         <div className="grid gap-2 md:grid-cols-2">
-                                            {Array.from(
-                                                new Set(
-                                                    selectedChannels.flatMap((channel) => templateVariableNamesByChannel[channel] || [])
-                                                )
-                                            )
-                                                .sort((left, right) => left.localeCompare(right))
-                                                .map((variableName) => {
-                                                    const variables = parseRecipientVariables(recipient.variables || "{}");
-                                                    return (
-                                                        <div key={`${recipient.id}-${variableName}`} className="space-y-1">
-                                                            <Label className="text-xs">{`{{${variableName}}}`}</Label>
-                                                            <Input
-                                                                value={variables[variableName] || ""}
-                                                                onChange={(event) =>
-                                                                    updateRecipientTemplateVariable(recipient.id, variableName, event.target.value)
-                                                                }
-                                                                placeholder={`Value for ${variableName}`}
-                                                            />
-                                                        </div>
-                                                    );
-                                                })}
+                                            {activeTemplateVariableNames.map((variableName) => {
+                                                const variables = parseRecipientVariables(recipient.variables || "{}");
+                                                return (
+                                                    <div key={`${recipient.id}-${variableName}`} className="space-y-1">
+                                                        <Label className="text-xs">{`{{${variableName}}}`}</Label>
+                                                        <Input
+                                                            value={variables[variableName] || ""}
+                                                            onChange={(event) =>
+                                                                updateRecipientTemplateVariable(recipient.id, variableName, event.target.value)
+                                                            }
+                                                            placeholder={`Value for ${variableName}`}
+                                                        />
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </div>
@@ -663,41 +651,69 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                 </CardContent>
             </Card>
 
-            {inputMode === "template" ? (
-                <>
-                    {selectedChannels.map((channel) => {
-                        const provider = getActiveProvider(channel);
-                        const templates = templatesByChannel[channel] ?? [];
-                        const isLoadingTemplates = templatesLoadingByChannel[channel];
-                        const previewHtml = getTemplatePreviewHtml(templateDetailsByChannel[channel]?.content);
+            {selectedChannels.map((channel) => {
+                const provider = getActiveProvider(channel);
+                if (!provider) return null;
 
-                        return (
-                            <Card key={channel}>
-                                <CardHeader className="pb-3">
-                                    <CardTitle className="text-sm font-medium capitalize">{channel} Template</CardTitle>
+                const mode = contentModeByChannel[channel] || "content";
+                const templates = templatesByChannel[channel] ?? [];
+                const isLoadingTemplates = templatesLoadingByChannel[channel];
+                const previewHtml = getTemplatePreviewHtml(templateDetailsByChannel[channel]?.content);
+
+                return (
+                    <Card key={channel}>
+                        <CardHeader className="pb-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <div>
+                                    <CardTitle className="text-sm font-medium capitalize">{channel} Content</CardTitle>
                                     <CardDescription>
-                                        Provider: {provider?.displayName ?? "-"} ({provider?.name ?? "package unavailable"})
+                                        Provider: {provider.displayName} ({selectedProviders[channel] || provider.id})
+                                        {mode === "content" && " — Use {{variable}} for personalization"}
                                     </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-2">
-                                    <Label>Template</Label>
-                                    <Select
-                                        value={selectedTemplatesByChannel[channel] || ""}
-                                        onValueChange={(value) =>
-                                            setSelectedTemplatesByChannel((prev) => ({ ...prev, [channel]: value }))
-                                        }
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder={isLoadingTemplates ? "Loading templates..." : "Select template"} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {templates.map((template) => (
-                                                <SelectItem key={template.template_id} value={template.template_id}>
-                                                    {template.name} ({template.template_id})
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                </div>
+                                <Tabs
+                                    value={mode}
+                                    onValueChange={(val) =>
+                                        setContentModeByChannel((prev) => ({
+                                            ...prev,
+                                            [channel]: val as "content" | "template",
+                                        }))
+                                    }
+                                >
+                                    <TabsList className="h-8">
+                                        <TabsTrigger value="content" className="text-xs px-3 py-1">
+                                            Manual Content
+                                        </TabsTrigger>
+                                        <TabsTrigger value="template" className="text-xs px-3 py-1">
+                                            Template
+                                        </TabsTrigger>
+                                    </TabsList>
+                                </Tabs>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            {mode === "template" ? (
+                                <div className="space-y-3">
+                                    <div className="space-y-2">
+                                        <Label>Template</Label>
+                                        <Select
+                                            value={selectedTemplatesByChannel[channel] || ""}
+                                            onValueChange={(value) =>
+                                                setSelectedTemplatesByChannel((prev) => ({ ...prev, [channel]: value }))
+                                            }
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder={isLoadingTemplates ? "Loading templates..." : "Select template"} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {templates.map((template) => (
+                                                    <SelectItem key={template.template_id} value={template.template_id}>
+                                                        {template.name} ({template.template_id})
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
 
                                     {selectedTemplatesByChannel[channel] && previewHtml && (
                                         <div className="space-y-1 pt-2">
@@ -710,42 +726,29 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                                             />
                                         </div>
                                     )}
-                                </CardContent>
-                            </Card>
-                        );
-                    })}
-                </>
-            ) : (
-                selectedChannels.map(channel => {
-                    const provider = getActiveProvider(channel);
-                    if (!provider) return null;
-                    return (
-                        <Card key={channel}>
-                            <CardHeader className="pb-3">
-                                <CardTitle className="text-sm font-medium capitalize">{channel} Content</CardTitle>
-                                <CardDescription>Provider: {provider.displayName} ({selectedProviders[channel]}) — Use {"{{variable}}"} for personalization</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {provider.contentFields.map(field => (
+                                </div>
+                            ) : (
+                                provider.contentFields.map((field) => (
                                     <div key={field.name} className="space-y-2">
                                         <DynamicField
                                             field={field}
                                             value={contentData[channel]?.[field.name]}
                                             onChange={(val) => updateContentData(channel, field.name, val)}
                                         />
-                                        {(field.name === 'message' || field.name === 'body') && contentData[channel]?.[field.name] && (
-                                            <div className="mt-2">
-                                                <Label className="text-xs text-muted-foreground mb-1 block">Preview (with variables from first recipient)</Label>
-                                                <HtmlPreview html={contentData[channel]?.[field.name]} variables={previewVariables} />
-                                            </div>
-                                        )}
+                                        {(field.name === "message" || field.name === "body") &&
+                                            contentData[channel]?.[field.name] && (
+                                                <div className="mt-2">
+                                                    <Label className="text-xs text-muted-foreground mb-1 block">Preview (with variables from first recipient)</Label>
+                                                    <HtmlPreview html={contentData[channel]?.[field.name]} variables={previewVariables} />
+                                                </div>
+                                            )}
                                     </div>
-                                ))}
-                            </CardContent>
-                        </Card>
-                    );
-                })
-            )}
+                                ))
+                            )}
+                        </CardContent>
+                    </Card>
+                );
+            })}
 
             {/* Schedule */}
             <Card>

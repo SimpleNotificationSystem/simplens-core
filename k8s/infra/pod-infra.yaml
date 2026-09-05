@@ -1,0 +1,201 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simplens-infra
+  namespace: simplens
+  labels:
+    app.kubernetes.io/name: simplens-infra
+    app.kubernetes.io/component: infrastructure
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: simplens-infra
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: simplens-infra
+        app.kubernetes.io/component: infrastructure
+    spec:
+      hostAliases:
+        - ip: "127.0.0.1"
+          hostnames:
+            - "mongo"
+            - "kafka"
+            - "redis"
+            - "loki"
+      containers:
+        # ============================================
+        # 1. MongoDB (7.0 with replica set rs0)
+        # ============================================
+        - name: mongo
+          image: mongo:7.0
+          command:
+            - mongod
+            - --replSet
+            - rs0
+            - --bind_ip_all
+            - --port
+            - "27017"
+          ports:
+            - containerPort: 27017
+              name: mongo
+          volumeMounts:
+            - name: mongo-data
+              mountPath: /data/db
+            - name: mongo-config
+              mountPath: /data/configdb
+          readinessProbe:
+            exec:
+              command:
+                - mongosh
+                - --port
+                - "27017"
+                - --quiet
+                - --eval
+                - "try { if (rs.status().ok === 1) quit(0); } catch(e) {} try { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}); quit(0); } catch(err) { quit(1); }"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 10
+            failureThreshold: 10
+
+        # ============================================
+        # 2. Apache Kafka (native KRaft mode)
+        # ============================================
+        - name: kafka
+          image: apache/kafka-native
+          ports:
+            - containerPort: 9091
+              name: controller
+            - containerPort: 9092
+              name: host
+            - containerPort: 9093
+              name: internal
+          env:
+            - name: KAFKA_LISTENERS
+              value: "CONTROLLER://localhost:9091,INTERNAL://0.0.0.0:9093,HOST://0.0.0.0:9092"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "INTERNAL://kafka:9093,HOST://localhost:9092"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,HOST:PLAINTEXT"
+            - name: KAFKA_NODE_ID
+              value: "1"
+            - name: KAFKA_PROCESS_ROLES
+              value: "broker,controller"
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: "CONTROLLER"
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: "1@localhost:9091"
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: "INTERNAL"
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "false"
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /var/lib/kafka/data
+
+        # ============================================
+        # 3. Kafka UI (Management dashboard)
+        # ============================================
+        - name: kafka-ui
+          image: kafbat/kafka-ui:main
+          ports:
+            - containerPort: 8080
+              name: http-kafkaui
+          env:
+            - name: DYNAMIC_CONFIG_ENABLED
+              value: "true"
+            - name: KAFKA_CLUSTERS_0_NAME
+              value: "local"
+            - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
+              value: "localhost:9093"
+
+        # ============================================
+        # 4. Redis (7-alpine with appendonly)
+        # ============================================
+        - name: redis
+          image: redis:7-alpine
+          command:
+            - redis-server
+            - --appendonly
+            - "yes"
+          ports:
+            - containerPort: 6379
+              name: redis
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+
+        # ============================================
+        # 5. Loki (Log aggregation)
+        # ============================================
+        - name: loki
+          image: grafana/loki:2.9.0
+          args:
+            - -config.file=/etc/loki/local-config.yaml
+          ports:
+            - containerPort: 3100
+              name: http-loki
+          volumeMounts:
+            - name: loki-data
+              mountPath: /loki
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3100
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+
+        # ============================================
+        # 6. Grafana (Dashboard & observability)
+        # ============================================
+        - name: grafana
+          image: grafana/grafana:10.2.0
+          ports:
+            - containerPort: 3000
+              name: http-grafana
+          env:
+            - name: GF_PATHS_PROVISIONING
+              value: "/etc/grafana/provisioning"
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: "Admin"
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "admin"
+          volumeMounts:
+            - name: grafana-data
+              mountPath: /var/lib/grafana
+
+      volumes:
+        - name: mongo-data
+          persistentVolumeClaim:
+            claimName: mongo-data
+        - name: mongo-config
+          persistentVolumeClaim:
+            claimName: mongo-config
+        - name: kafka-data
+          persistentVolumeClaim:
+            claimName: kafka-data
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: redis-data
+        - name: loki-data
+          persistentVolumeClaim:
+            claimName: loki-data
+        - name: grafana-data
+          persistentVolumeClaim:
+            claimName: grafana-data

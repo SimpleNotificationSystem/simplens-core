@@ -12,6 +12,8 @@ declare global {
   interface Window {
     __RUNTIME_CONFIG__?: {
       basePath: string;
+      webhookHost?: string;
+      webhookPort?: string;
     };
   }
 }

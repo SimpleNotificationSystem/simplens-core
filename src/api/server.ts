@@ -7,6 +7,9 @@ import notification_router from './routes/notification.routes.js';
 import plugins_router from './routes/plugins.routes.js';
 import admin_channels_router from './routes/admin-channels.routes.js';
 import notification_templates_router from '@src/api/routes/notification_templates.routes.js';
+import notifications_management_router from './routes/notifications-management.routes.js';
+import alerts_router from './routes/alerts.routes.js';
+import dashboard_router from './routes/dashboard.routes.js';
 import { auth_middleware } from './middlewares/auth_middleware.js';
 import http from 'http';
 import helmet from 'helmet';
@@ -31,7 +34,7 @@ app.use(helmet());
 
 app.use(cors({ origin: "*" })); //allows all origins
 
-app.get("/", (req: Request, res: Response) => {
+app.get("/api", (req: Request, res: Response) => {
     res.json({
         info: "Notification Service is running"
     });
@@ -39,7 +42,7 @@ app.get("/", (req: Request, res: Response) => {
 });
 
 // Health check endpoint for Docker/Kubernetes
-app.get("/health", (req: Request, res: Response) => {
+app.get("/api/health", (req: Request, res: Response) => {
     res.status(200).json({
         status: "healthy",
         timestamp: new Date().toISOString()
@@ -48,8 +51,11 @@ app.get("/health", (req: Request, res: Response) => {
 });
 
 app.use('/api/notification', auth_middleware, notification_router);
-app.use('/api/plugins', plugins_router);
-app.use('/api/admin-channels', admin_channels_router);
+app.use('/api/notifications', auth_middleware, notifications_management_router);
+app.use('/api/alerts', auth_middleware, alerts_router);
+app.use('/api/dashboard', auth_middleware, dashboard_router);
+app.use('/api/plugins', auth_middleware, plugins_router);
+app.use('/api/admin-channels', auth_middleware, admin_channels_router);
 app.use('/api/templates', auth_middleware, notification_templates_router);
 
 const start_server = async () => {

@@ -37,8 +37,8 @@ import { format } from "date-fns";
 import type { PaginatedResponse, Notification, PluginMetadata } from "@/lib/types";
 import Link from "next/link";
 import { withBasePath } from "@/lib/utils";
-
-const fetcher = (url: string) => fetch(withBasePath(url)).then((res) => res.json());
+import { apiClient } from "@/lib/api-client";
+const fetcher = <T,>(url: string): Promise<T> => apiClient.get(url) as unknown as Promise<T>;
 
 export default function EventsPage() {
     const [page, setPage] = useState(1);
