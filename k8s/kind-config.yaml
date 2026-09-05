@@ -1,0 +1,58 @@
+# ==============================================================================
+# Kind Cluster Configuration with Port Mappings for NodePorts
+# Use this configuration when creating a cluster with:
+#   kind create cluster --name simplens --config k8s/kind-config.yaml
+# ==============================================================================
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      # ============================================
+      # Infrastructure Services
+      # ============================================
+      - containerPort: 30001
+        hostPort: 30001
+        listenAddress: "127.0.0.1" # Grafana (Host: http://localhost:30001)
+      - containerPort: 30080
+        hostPort: 30080
+        listenAddress: "127.0.0.1" # Kafka-UI (Host: http://localhost:30080)
+      - containerPort: 30092
+        hostPort: 30092
+        listenAddress: "127.0.0.1" # Kafka external host listener
+      - containerPort: 30379
+        hostPort: 30379
+        listenAddress: "127.0.0.1" # Redis
+      - containerPort: 30717
+        hostPort: 30717
+        listenAddress: "127.0.0.1" # MongoDB
+
+      # ============================================
+      # App Master (Prod - GHCR Master)
+      # ============================================
+      - containerPort: 30100
+        hostPort: 30100
+        listenAddress: "127.0.0.1" # Master API (Host: http://localhost:30100)
+      - containerPort: 30102
+        hostPort: 30102
+        listenAddress: "127.0.0.1" # Master Dashboard (Host: http://localhost:30102)
+
+      # ============================================
+      # App Development (GHCR Dev Branch)
+      # ============================================
+      - containerPort: 30200
+        hostPort: 30200
+        listenAddress: "127.0.0.1" # Development API (Host: http://localhost:30200)
+      - containerPort: 30202
+        hostPort: 30202
+        listenAddress: "127.0.0.1" # Development Dashboard (Host: http://localhost:30202)
+
+      # ============================================
+      # App Local (Locally Built Image)
+      # ============================================
+      - containerPort: 30300
+        hostPort: 30300
+        listenAddress: "127.0.0.1" # Local API (Host: http://localhost:30300)
+      - containerPort: 30302
+        hostPort: 30302
+        listenAddress: "127.0.0.1" # Local Dashboard (Host: http://localhost:30302)
