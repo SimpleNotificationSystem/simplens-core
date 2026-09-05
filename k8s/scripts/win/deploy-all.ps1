@@ -12,7 +12,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$K8sDir = Split-Path -Parent $ScriptDir
+$K8sDir = Split-Path -Parent (Split-Path -Parent $ScriptDir)
 $RootDir = Split-Path -Parent $K8sDir
 
 Write-Host "==========================================" -ForegroundColor Cyan
@@ -64,12 +64,14 @@ Write-Host "`n==========================================" -ForegroundColor Green
 Write-Host "  Deployment Complete!                     " -ForegroundColor Green
 Write-Host "==========================================" -ForegroundColor Green
 Write-Host "Active App Environment: $ActiveEnv" -ForegroundColor Cyan
-Write-Host "`nAccess URLs (on localhost):" -ForegroundColor White
-Write-Host "  - Active Dashboard:  http://localhost:30302  (Local)" -ForegroundColor White
-Write-Host "  - Active API:        http://localhost:30300  (Local)" -ForegroundColor White
-Write-Host "  - Kafka UI:          http://localhost:30080" -ForegroundColor White
-Write-Host "  - Grafana:           http://localhost:30001  (admin / admin)" -ForegroundColor White
+Write-Host "`nAccess URLs (on localhost via port-forward):" -ForegroundColor White
+Write-Host "  - Active Dashboard:  http://localhost:3002  (or 30302 for Local)" -ForegroundColor White
+Write-Host "  - Active API:        http://localhost:3000  (or 30300 for Local)" -ForegroundColor White
+Write-Host "  - Kafka UI:          http://localhost:8080" -ForegroundColor White
+Write-Host "  - Grafana:           http://localhost:3001  (admin / admin)" -ForegroundColor White
+Write-Host "`nStart port-forwarding by running:" -ForegroundColor DarkGray
+Write-Host "  ./k8s/scripts/win/port-forward.ps1" -ForegroundColor DarkGray
 Write-Host "`nTo switch testing environments, run:" -ForegroundColor DarkGray
-Write-Host "  ./k8s/scripts/switch-env.ps1 -Env master" -ForegroundColor DarkGray
-Write-Host "  ./k8s/scripts/switch-env.ps1 -Env development" -ForegroundColor DarkGray
-Write-Host "  ./k8s/scripts/switch-env.ps1 -Env local" -ForegroundColor DarkGray
+Write-Host "  ./k8s/scripts/win/switch-env.ps1 -Env master" -ForegroundColor DarkGray
+Write-Host "  ./k8s/scripts/win/switch-env.ps1 -Env development" -ForegroundColor DarkGray
+Write-Host "  ./k8s/scripts/win/switch-env.ps1 -Env local" -ForegroundColor DarkGray

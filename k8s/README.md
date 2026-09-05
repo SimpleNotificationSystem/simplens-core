@@ -94,14 +94,15 @@ Switch which application environment is actively processing notifications.
 *(Because all 3 environments connect to the same shared Kafka queue, running one environment at a time prevents queue collisions)*:
 
 ```powershell
-# Switch to Local build:
+# Switch to Local build (uses existing build):
 ./k8s/scripts/win/switch-env.ps1 -Env local
 
-# Switch to Master (Prod GHCR image):
-./k8s/scripts/win/switch-env.ps1 -Env master
-
-# Switch to Development (GHCR image):
+# Switch to Development (uses cached image):
 ./k8s/scripts/win/switch-env.ps1 -Env development
+
+# Pull latest image from GHCR on demand, then switch:
+./k8s/scripts/win/switch-env.ps1 -Env development -PullLatest
+./k8s/scripts/win/switch-env.ps1 -Env master -PullLatest
 
 # Check current pod status:
 ./k8s/scripts/win/switch-env.ps1 -Env status

@@ -15,7 +15,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RootDir = Split-Path -Parent (Split-Path -Parent $ScriptDir)
+$K8sDir = Split-Path -Parent (Split-Path -Parent $ScriptDir)
+$RootDir = Split-Path -Parent $K8sDir
 
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host "  Building Local SimpleNS Docker Images   " -ForegroundColor Cyan
