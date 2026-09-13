@@ -1,0 +1,190 @@
+# ==============================================================================
+# SimpleNS Master Environment (GHCR 'latest' / master branch images)
+# Connects to shared 'simplens-infra' network and 'simplens_master' database.
+# ==============================================================================
+
+name: simplens-master
+
+services:
+  # ============================================
+  # 1. API Server
+  # ============================================
+  api:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    container_name: simplens-api-master
+    ports:
+      - "3000:3000"
+    env_file:
+      - ../.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-3000}
+      MONGO_URI: mongodb://mongo:27017/simplens_master?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      BROKERS: kafka:9093
+      LOKI_URL: http://loki:3100
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SIMPLENS_CONFIG_PATH: ${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}
+    volumes:
+      - logs-data-master:/app/logs
+      - ../simplens.config.yaml:/app/simplens.config.yaml:ro
+    command: [ "node", "dist/api/server.js" ]
+    networks:
+      - simplens-infra
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    labels:
+      simplens.environment: "master"
+
+  # ============================================
+  # 2. Outbox Worker
+  # ============================================
+  worker:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    container_name: simplens-worker-master
+    env_file:
+      - ../.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      MONGO_URI: mongodb://mongo:27017/simplens_master?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      BROKERS: kafka:9093
+      LOKI_URL: http://loki:3100
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - logs-data-master:/app/logs
+    command: [ "node", "dist/workers/worker.js" ]
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - simplens-infra
+    restart: unless-stopped
+    labels:
+      simplens.environment: "master"
+
+  # ============================================
+  # 3. Unified Notification Processor
+  # ============================================
+  notification_processor:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    container_name: simplens-notification-processor-master
+    env_file:
+      - ../.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      MONGO_URI: mongodb://mongo:27017/simplens_master?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      BROKERS: kafka:9093
+      PROCESSOR_CHANNEL: ${PROCESSOR_CHANNEL:-all}
+      SIMPLENS_CONFIG_PATH: ${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}
+      LOKI_URL: http://loki:3100
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - logs-data-master:/app/logs
+      - ../simplens.config.yaml:/app/simplens.config.yaml:ro
+    command: [ "node", "dist/processors/unified/unified.processor.js" ]
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - simplens-infra
+    restart: unless-stopped
+    labels:
+      simplens.environment: "master"
+
+  # ============================================
+  # 4. Delayed Processor (Scheduled Notifications)
+  # ============================================
+  delayed_processor:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    container_name: simplens-delayed-processor-master
+    env_file:
+      - ../.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      MONGO_URI: mongodb://mongo:27017/simplens_master?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      BROKERS: kafka:9093
+      LOKI_URL: http://loki:3100
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - logs-data-master:/app/logs
+    command: [ "node", "dist/processors/delayed/delayed.processor.js" ]
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - simplens-infra
+    restart: unless-stopped
+    labels:
+      simplens.environment: "master"
+
+  # ============================================
+  # 5. Recovery Service (Stuck Notifications & Audits)
+  # ============================================
+  recovery:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    container_name: simplens-recovery-master
+    env_file:
+      - ../.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      MONGO_URI: mongodb://mongo:27017/simplens_master?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      LOKI_URL: http://loki:3100
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - logs-data-master:/app/logs
+    command: [ "node", "dist/workers/recovery/recovery.service.js" ]
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - simplens-infra
+    restart: unless-stopped
+    labels:
+      simplens.environment: "master"
+
+  # ============================================
+  # 6. Admin Dashboard (Next.js)
+  # ============================================
+  dashboard:
+    image: ghcr.io/simplenotificationsystem/simplens-dashboard:latest
+    container_name: simplens-dashboard-master
+    ports:
+      - "3002:3002"
+    env_file:
+      - ../.env
+    environment:
+      NODE_ENV: production
+      PORT: ${DASHBOARD_PORT:-3002}
+      API_BASE_URL: http://api:${PORT:-3000}
+      MONGO_URI: mongodb://mongo:27017/simplens_master?replicaSet=rs0
+      AUTH_SECRET: ${AUTH_SECRET:-change-this-in-production}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      AUTH_TRUST_HOST: "true"
+      WEBHOOK_HOST: dashboard
+      WEBHOOK_PORT: "3002"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - simplens-infra
+    restart: unless-stopped
+    labels:
+      simplens.environment: "master"
+
+volumes:
+  logs-data-master:
+
+networks:
+  simplens-infra:
+    external: true
+    name: simplens-infra

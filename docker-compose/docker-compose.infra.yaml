@@ -1,19 +1,21 @@
-# ============================================
-# INFRA_HOST: Set this in .env to your machine's IP/hostname when running
-#             infrastructure on a separate system from application services.
-#             Default: host.docker.internal (for same-system deployment)
-# ============================================
+# ==============================================================================
+# SimpleNS Shared Infrastructure Services
+# Runs Mongo (Replica Set), Kafka (KRaft), Kafka-UI, Redis, Loki, Grafana
+# Shared across all application environments (local, dev, master).
+# ==============================================================================
+
+name: infra
 
 services:
   # ============================================
-  # Infrastructure Services
+  # 1. MongoDB (Replica Set rs0 for Transactions)
   # ============================================
   mongo:
     image: mongo:7.0
-    container_name: mongo
+    container_name: simplens-infra-mongo
     command: [ "--replSet", "rs0", "--bind_ip_all", "--port", "27017" ]
     ports:
-      - 27017:27017
+      - "27017:27017"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -24,84 +26,98 @@ services:
       start_interval: 1s
       retries: 30
     volumes:
-      - "mongo_data:/data/db"
-      - "mongo_config:/data/configdb"
+      - mongo_data:/data/db
+      - mongo_config:/data/configdb
+    networks:
+      - simplens-infra
+    restart: unless-stopped
 
+  # ============================================
+  # 2. Apache Kafka (KRaft Native Mode)
+  # ============================================
   kafka:
     image: apache/kafka-native
-    container_name: kafka
+    container_name: simplens-infra-kafka
     ports:
       - "9092:9092"
     environment:
-      # Configure listeners for both docker and host communication
       KAFKA_LISTENERS: CONTROLLER://localhost:9091,HOST://0.0.0.0:9092,DOCKER://0.0.0.0:9093
       KAFKA_ADVERTISED_LISTENERS: HOST://${INFRA_HOST:-host.docker.internal}:9092,DOCKER://kafka:9093
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,DOCKER:PLAINTEXT,HOST:PLAINTEXT
-
-      # Settings required for KRaft mode
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9091
-
-      # Listener to use for broker-to-broker communication
       KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER
-
-      # Required for a single node cluster
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-
-      # Disable auto-topic creation - API server will create topics with correct partitions
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     volumes:
-      - "kafka_data:/var/lib/kafka/data"
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - simplens-infra
+    restart: unless-stopped
 
+  # ============================================
+  # 3. Kafka UI (Topic & Consumer Explorer)
+  # ============================================
   kafka-ui:
     image: kafbat/kafka-ui:main
-    container_name: kafka-ui
+    container_name: simplens-infra-kafka-ui
     ports:
-      - 8080:8080
+      - "8081:8080"
     environment:
       DYNAMIC_CONFIG_ENABLED: "true"
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9093
     depends_on:
       - kafka
+    networks:
+      - simplens-infra
+    restart: unless-stopped
 
+  # ============================================
+  # 4. Redis (Idempotency, Queue, Pub/Sub)
+  # ============================================
   redis:
     image: redis:7-alpine
-    container_name: redis
+    container_name: simplens-infra-redis
     ports:
       - "6379:6379"
     command: redis-server --appendonly yes
     volumes:
-      - "redis_data:/data"
+      - redis_data:/data
+    networks:
+      - simplens-infra
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
 
   # ============================================
-  # Observability Services
+  # 5. Observability (Loki & Grafana)
   # ============================================
-
   loki:
     image: grafana/loki:2.9.0
-    container_name: loki
+    container_name: simplens-infra-loki
     ports:
       - "3100:3100"
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
-      - "loki_data:/loki"
+      - loki_data:/loki
+    networks:
+      - simplens-infra
     healthcheck:
       test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   grafana:
     image: grafana/grafana:10.2.0
-    container_name: grafana
+    container_name: simplens-infra-grafana
     ports:
       - "3001:3000"
     environment:
@@ -110,10 +126,13 @@ services:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
-      - "grafana_data:/var/lib/grafana"
+      - grafana_data:/var/lib/grafana
     depends_on:
       loki:
         condition: service_healthy
+    networks:
+      - simplens-infra
+    restart: unless-stopped
 
 volumes:
   mongo_data:
@@ -122,3 +141,8 @@ volumes:
   redis_data:
   loki_data:
   grafana_data:
+
+networks:
+  simplens-infra:
+    name: simplens-infra
+    driver: bridge

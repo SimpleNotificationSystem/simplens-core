@@ -32,4 +32,4 @@ Use short Conventional Commit style messages such as `feat: add email retry poli
 PRs should include a summary, linked issue when applicable, test evidence, and screenshots or GIFs for `dashboard/` UI changes. Husky `pre-push` runs both lint commands.
 
 ## Security & Configuration Tips
-Do not commit secrets. Use `.env.example` as the template for `.env`, and update it when adding configuration. For local full-stack work, prefer `docker-compose.dev.yaml`; for core-only work, start infrastructure with `docker compose -f docker-compose.infra.yaml up -d`.
+Do not commit secrets. Use `.env.example` as the template for `.env`, and update it when adding configuration. For local full-stack work, use `./docker-compose/scripts/switch-env.ps1 -Env local -Rebuild` (or `docker compose -f docker-compose/docker-compose.local.yaml up -d`); for shared infrastructure, use `docker compose -f docker-compose/docker-compose.infra.yaml up -d` (or `./docker-compose/scripts/switch-env.ps1 -Env infra-only`).
