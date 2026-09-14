@@ -243,7 +243,72 @@ export const adminChannelSchema = z.object({
  */
 export const systemConfigSchema = z.object({
     key: z.string(),
-    value: z.string(),
+    value: z.unknown(),
+    created_at: z.coerce.date().optional(),
+    updated_at: z.coerce.date().optional(),
+});
+
+/**
+ * Key-pair envelope encrypted credentials schema
+ */
+export const encryptedCredentialsSchema = z.object({
+    encrypted_data: z.string(),
+    iv: z.string(),
+    auth_tag: z.string(),
+    encrypted_dek: z.string(),
+});
+
+/**
+ * Provider manifest schema for plugins
+ */
+export const providerManifestSchema = z.object({
+    name: z.string(),
+    version: z.string(),
+    channel: z.string(),
+    displayName: z.string(),
+    description: z.string(),
+    author: z.string().optional(),
+    homepage: z.string().optional(),
+    requiredCredentials: z.array(z.string()),
+    optionalConfig: z.array(z.string()).optional(),
+});
+
+/**
+ * Plugin document schema
+ */
+export const pluginSchema = z.object({
+    name: z.string().min(1),
+    version: z.string().min(1),
+    status: z.enum(['installed', 'installing', 'failed']),
+    error: z.string().optional(),
+    manifest: providerManifestSchema,
+    created_at: z.coerce.date().optional(),
+    updated_at: z.coerce.date().optional(),
+});
+
+/**
+ * Provider document schema
+ */
+export const providerSchema = z.object({
+    id: z.string().min(1),
+    plugin_name: z.string().min(1),
+    channel: z.string().min(1),
+    priority: z.number().int().default(0),
+    enabled: z.boolean().default(true),
+    credentials: encryptedCredentialsSchema,
+    options: z.record(z.string(), z.unknown()).optional(),
+    created_at: z.coerce.date().optional(),
+    updated_at: z.coerce.date().optional(),
+});
+
+/**
+ * Channel routing document schema
+ */
+export const channelRoutingSchema = z.object({
+    channel: z.string().min(1),
+    default_provider_id: z.string().min(1),
+    fallback_provider_ids: z.array(z.string()).default([]),
+    partitions: z.number().int().min(1).default(6),
     created_at: z.coerce.date().optional(),
     updated_at: z.coerce.date().optional(),
 });

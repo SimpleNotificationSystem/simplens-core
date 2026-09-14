@@ -526,3 +526,10 @@ export const stopAllConsumers = async (): Promise<void> => {
         await stopUnifiedConsumer(channel);
     }
 };
+
+/**
+ * Get list of currently running consumer channels
+ */
+export const getActiveConsumerChannels = (): string[] => {
+    return Array.from(consumers.keys());
+};

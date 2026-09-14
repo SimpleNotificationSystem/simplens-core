@@ -11,7 +11,8 @@ import { handleSchemaValidationFailure } from '@src/processors/shared/schema-fai
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 
 /**
- * Try fallback provider when primary fails with non-retryable error
+ * Try fallback providers when primary fails with non-retryable error.
+ * Cascades through fallback providers in sequence until one succeeds or all fail.
  */
 async function tryFallback<T extends BaseNotification>(
     channel: string,
@@ -19,80 +20,101 @@ async function tryFallback<T extends BaseNotification>(
     primaryError: DeliveryResult['error'],
     currentProviderId?: string
 ): Promise<DeliveryResult | null> {
-    const fallbackProviderId = PluginRegistry.getFallbackProviderId(channel);
-    if (!fallbackProviderId) {
-        logger.debug(`[ProviderRouter] No fallback provider for ${channel}, returning error`);
+    const fallbackIds = PluginRegistry.getFallbackProviderIds(channel);
+    if (!fallbackIds || fallbackIds.length === 0) {
+        logger.debug(`[ProviderRouter] No fallback providers configured for ${channel}`);
         return null;
     }
 
-    if (currentProviderId && fallbackProviderId === currentProviderId) {
-        logger.debug(`[ProviderRouter] Fallback provider is same as current provider (${currentProviderId}), skipping fallback`);
+    const candidateIds = fallbackIds.filter(id => id !== currentProviderId);
+    if (candidateIds.length === 0) {
+        logger.debug(`[ProviderRouter] Fallback providers match current provider (${currentProviderId}), skipping fallback`);
         return null;
     }
 
-    const fallbackProvider = PluginRegistry.getFallbackProvider(channel);
+    let lastError = primaryError;
 
-    if (!fallbackProvider) {
-        logger.debug(`[ProviderRouter] No fallback provider for ${channel}, returning error`);
-        return null;
-    }
+    for (let i = 0; i < candidateIds.length; i++) {
+        const fallbackId = candidateIds[i];
+        const fallbackProvider = PluginRegistry.get(fallbackId);
+        if (!fallbackProvider) {
+            logger.warn(`[ProviderRouter] Fallback provider '${fallbackId}' not found in registry, continuing cascade`);
+            continue;
+        }
 
-    logger.debug(`[ProviderRouter] Primary provider failed, trying fallback: ${fallbackProvider.manifest.name}`);
+        logger.info(`[ProviderRouter] Trying fallback provider [${i + 1}/${candidateIds.length}]: ${fallbackId} (${fallbackProvider.manifest.displayName})`);
 
-    void AdminAlertService.sendAlert('service_health',
-        `ℹ️ USING FALLBACK PROVIDER\n` +
-        `Channel: ${channel}\n` +
-        `Notification ID: ${notification.notification_id}\n` +
-        `Primary provider error: ${primaryError?.message}\n` +
-        `Fallback provider: ${fallbackProvider.manifest.displayName}\n` +
-        `Action: Check primary provider configuration if this occurs frequently.`,
-        { severity: 'info', notificationId: notification.notification_id, channel });
+        void AdminAlertService.sendAlert('service_health',
+            `ℹ️ USING FALLBACK PROVIDER (${i + 1}/${candidateIds.length})\n` +
+            `Channel: ${channel}\n` +
+            `Notification ID: ${notification.notification_id}\n` +
+            `Previous error: ${lastError?.message}\n` +
+            `Fallback provider: ${fallbackProvider.manifest.displayName} (${fallbackId})\n` +
+            `Action: Check provider configuration if this occurs frequently.`,
+            { severity: 'info', notificationId: notification.notification_id, channel });
 
-    const schema = fallbackProvider.getNotificationSchema();
-    const validationResult = schema.safeParse(notification);
+        const schema = fallbackProvider.getNotificationSchema();
+        const validationResult = schema.safeParse(notification);
 
-    if (!validationResult.success) {
-        logger.error(`[${channel}] Invalid notification schema for fallback provider of channel:${channel} and provider name ${fallbackProvider.manifest.displayName}:`,
-            validationResult.error.issues);
+        if (!validationResult.success) {
+            logger.error(`[${channel}] Invalid notification schema for fallback provider '${fallbackId}':`,
+                validationResult.error.issues);
 
-        await handleSchemaValidationFailure(
-            notification.notification_id,
-            channel,
-            notification,
-            validationResult.error,
-            'fallback provider'
-        );
-        return {
-            success: false,
-            error: {
+            await handleSchemaValidationFailure(
+                notification.notification_id,
+                channel,
+                notification,
+                validationResult.error,
+                `fallback provider ${fallbackId}`
+            );
+            lastError = {
                 code: 'FALLBACK_SCHEMA_VALIDATION_ERROR',
-                message: 'Fallback provider schema validation failed',
+                message: `Fallback provider ${fallbackId} schema validation failed`,
                 retryable: false
+            };
+            continue;
+        }
+
+        try {
+            const fallbackResult = await fallbackProvider.send(notification);
+            if (fallbackResult.success) {
+                logger.success(`[${channel}] Notification delivered via fallback provider: ${fallbackId}`);
+                return {
+                    ...fallbackResult,
+                    messageId: fallbackResult.messageId || `fallback-${fallbackId}`,
+                };
             }
-        };
+
+            lastError = fallbackResult.error || {
+                code: 'FALLBACK_SEND_FAILED',
+                message: `Fallback provider ${fallbackId} send failed without error details`,
+                retryable: false
+            };
+        } catch (sendErr) {
+            logger.error(`[${channel}] Error sending via fallback provider ${fallbackId}:`, sendErr);
+            lastError = {
+                code: 'FALLBACK_EXECUTION_ERROR',
+                message: sendErr instanceof Error ? sendErr.message : String(sendErr),
+                retryable: false
+            };
+        }
     }
 
-    const fallbackResult = await fallbackProvider.send(notification);
-
-    if (fallbackResult.success) {
-        return fallbackResult;
-    }
-
-    // Both failed - return last error
+    // All fallbacks failed in cascade
     void AdminAlertService.sendAlert('failed_notification',
-        `🔴 ALL PROVIDERS FAILED\n` +
+        `🔴 ALL PROVIDERS IN CASCADE FAILED\n` +
         `Channel: ${channel}\n` +
         `Notification ID: ${notification.notification_id}\n` +
-        `Primary provider error: ${primaryError?.message}\n` +
-        `Fallback error: ${fallbackResult.error?.message}\n` +
-        `Action: Verify provider credentials. Check SMTP/API connectivity. Review simplens.config.yaml.`,
+        `Attempted Fallbacks: ${candidateIds.join(', ')}\n` +
+        `Last error: ${lastError?.message}\n` +
+        `Action: Verify all provider credentials and connectivity for channel ${channel}.`,
         { severity: 'critical', notificationId: notification.notification_id, channel });
 
     return {
         success: false,
         error: {
             code: 'ALL_PROVIDERS_FAILED',
-            message: `All providers failed. Last error: ${fallbackResult.error?.message || 'Unknown'}`,
+            message: `All providers in cascade failed. Last error: ${lastError?.message || 'Unknown'}`,
             retryable: false,
         },
     };
@@ -106,13 +128,22 @@ export function resolveFallbackProviderId(
     channel: string,
     currentProviderId?: string
 ): string | undefined {
-    const fallbackProviderId = PluginRegistry.getFallbackProviderId(channel);
+    const fallbackIds = PluginRegistry.getFallbackProviderIds(channel);
+    if (!fallbackIds || fallbackIds.length === 0) return undefined;
+    if (!currentProviderId) return fallbackIds[0];
 
-    if (!fallbackProviderId || fallbackProviderId === currentProviderId) {
-        return undefined;
+    // If currentProviderId is in the cascade, advance to the next fallback provider
+    const currentIndex = fallbackIds.indexOf(currentProviderId);
+    if (currentIndex >= 0 && currentIndex + 1 < fallbackIds.length) {
+        return fallbackIds[currentIndex + 1];
     }
 
-    return fallbackProviderId;
+    // If current was primary, return first fallback
+    if (currentIndex === -1) {
+        return fallbackIds[0];
+    }
+
+    return undefined;
 }
 
 /**

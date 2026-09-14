@@ -22,7 +22,7 @@ export interface RegisteredProvider {
  */
 export interface ChannelConfig {
     default: string;
-    fallback?: string;
+    fallback?: string | string[];
 }
 
 /**
@@ -54,7 +54,7 @@ export interface ProviderMetadata {
 export interface ChannelMetadata {
     providers: ProviderMetadata[];
     default?: string;
-    fallback?: string;
+    fallback?: string | string[];
 }
 
 /**
@@ -157,6 +157,54 @@ class PluginRegistryClass {
     }
 
     /**
+     * Register or replace an existing provider
+     */
+    registerOrReplace(provider: SimpleNSProvider, id: string, priority: number = 0): void {
+        if (this.providers.has(id)) {
+            this.unregister(id);
+        }
+        this.register(provider, id, priority);
+    }
+
+    /**
+     * Unregister a provider by ID
+     */
+    unregister(id: string): boolean {
+        const registered = this.providers.get(id);
+        if (!registered) {
+            return false;
+        }
+
+        const channel = registered.provider.manifest.channel;
+        this.providers.delete(id);
+
+        // Remove from channelProviders list
+        const existing = this.channelProviders.get(channel) || [];
+        const filtered = existing.filter(providerId => providerId !== id);
+        if (filtered.length > 0) {
+            this.channelProviders.set(channel, filtered);
+        } else {
+            this.channelProviders.delete(channel);
+        }
+
+        // Clean up default / fallback if this provider was configured
+        const config = this.channelConfig.get(channel);
+        if (config) {
+            if (config.default === id) {
+                config.default = filtered[0] || '';
+            }
+            if (Array.isArray(config.fallback)) {
+                config.fallback = config.fallback.filter(fId => fId !== id);
+            } else if (config.fallback === id) {
+                config.fallback = filtered[1] || undefined;
+            }
+        }
+
+        logger.info(`Unregistered provider: ${id} from channel: ${channel}`);
+        return true;
+    }
+
+    /**
      * Set channel configuration (default/fallback)
      */
     setChannelConfig(channel: string, config: ChannelConfig): void {
@@ -218,29 +266,46 @@ class PluginRegistryClass {
     }
 
     /**
-     * Get fallback provider for a channel
+     * Get ordered fallback provider IDs for a channel (cascading fallback array)
      */
-    getFallbackProvider(channel: string): SimpleNSProvider | undefined {
+    getFallbackProviderIds(channel: string): string[] {
         const config = this.channelConfig.get(channel);
         if (config?.fallback) {
-            return this.get(config.fallback);
+            if (Array.isArray(config.fallback)) {
+                return config.fallback;
+            }
+            return [config.fallback];
         }
-        // Fall back to second registered provider for channel
-        const providers = this.getProvidersForChannel(channel);
-        return providers[1];
+
+        // Default: return registered provider IDs for channel excluding default provider
+        const defaultId = this.getDefaultProviderId(channel);
+        const ids = this.channelProviders.get(channel) || [];
+        return ids.filter(id => id !== defaultId);
     }
 
     /**
-     * Get fallback provider ID for a channel
+     * Get ordered fallback providers for a channel
+     */
+    getFallbackProviders(channel: string): SimpleNSProvider[] {
+        return this.getFallbackProviderIds(channel)
+            .map(id => this.get(id))
+            .filter((p): p is SimpleNSProvider => p !== undefined);
+    }
+
+    /**
+     * Get first fallback provider for a channel
+     */
+    getFallbackProvider(channel: string): SimpleNSProvider | undefined {
+        const providers = this.getFallbackProviders(channel);
+        return providers[0];
+    }
+
+    /**
+     * Get first fallback provider ID for a channel
      */
     getFallbackProviderId(channel: string): string | undefined {
-        const config = this.channelConfig.get(channel);
-        if (config?.fallback) {
-            return config.fallback;
-        }
-        // Fall back to second registered provider ID for channel
-        const ids = this.channelProviders.get(channel);
-        return ids?.[1];
+        const ids = this.getFallbackProviderIds(channel);
+        return ids[0];
     }
 
     /**

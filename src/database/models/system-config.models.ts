@@ -27,6 +27,8 @@ const system_config_schema = new mongoose.Schema<system_config>(
     }
 );
 
-const system_config_model = mongoose.model<system_config>('SystemConfig', system_config_schema);
+const system_config_model =
+    mongoose.models.SystemConfig ||
+    mongoose.model<system_config>('SystemConfig', system_config_schema);
 
 export default system_config_model;

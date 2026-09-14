@@ -13,6 +13,12 @@ import { parse as parseYaml } from 'yaml';
 import { PluginRegistry, type ChannelConfig } from './registry.js';
 import type { SimpleNSProvider, ProviderConfig } from '../interfaces/provider.types.js';
 import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
+import Plugin from '@src/database/models/plugin.models.js';
+import Provider from '@src/database/models/provider.models.js';
+import ChannelRouting from '@src/database/models/channel-routing.models.js';
+import { ProviderManagerService } from '@src/plugins/services/provider-manager.service.js';
+import { installNpmPackage } from './plugin-fs.js';
+import type { provider_document } from '@src/types/types.js';
 
 // Plugins directory for user-installed plugins
 const PLUGINS_DIR = join(process.cwd(), '.plugins');
@@ -441,4 +447,83 @@ export async function registerProvider(
 
     const priority = (options?.priority as number) || 0;
     PluginRegistry.register(provider, id, priority);
+}
+
+/**
+ * Load all providers and channel routings directly from MongoDB
+ */
+export async function loadProvidersFromDatabase(options: { initialize?: boolean } = {}): Promise<void> {
+    const shouldInitialize = options.initialize !== false;
+    logger.info('Loading provider plugins from MongoDB...');
+
+    // 1. Ensure all installed plugins exist locally
+    try {
+        const installedPlugins = await Plugin.find({ status: 'installed' }).lean();
+        for (const plugin of installedPlugins) {
+            const pluginPath = join(PLUGINS_NODE_MODULES, plugin.name);
+            if (!existsSync(pluginPath)) {
+                logger.info(`Syncing missing plugin package locally: ${plugin.name}@${plugin.version}`);
+                try {
+                    installNpmPackage(plugin.name, plugin.version);
+                } catch (err) {
+                    logger.error(`Failed to install missing package ${plugin.name}:`, err);
+                }
+            }
+        }
+    } catch (dbErr) {
+        logger.error('Error fetching installed plugins from database:', dbErr);
+    }
+
+    // 2. Load all enabled providers
+    try {
+        const providers = await Provider.find({ enabled: true }).lean();
+        logger.info(`Found ${providers.length} enabled provider(s) in MongoDB.`);
+
+        for (const providerDoc of providers) {
+            try {
+                await ProviderManagerService.loadAndRegisterProvider(
+                    providerDoc as unknown as provider_document,
+                    shouldInitialize
+                );
+            } catch (err) {
+                logger.error(`Failed to load provider '${providerDoc.id}':`, err);
+            }
+        }
+    } catch (dbErr) {
+        logger.error('Error fetching providers from database:', dbErr);
+    }
+
+    // 3. Load channel routing
+    try {
+        const routings = await ChannelRouting.find().lean();
+        for (const route of routings) {
+            PluginRegistry.setChannelConfig(route.channel, {
+                default: route.default_provider_id,
+                fallback: route.fallback_provider_ids || [],
+            });
+        }
+    } catch (dbErr) {
+        logger.error('Error fetching channel routings from database:', dbErr);
+    }
+
+    PluginRegistry.setInitialized(true);
+    logger.success(`Loaded ${PluginRegistry.getProviderIds().length} providers from MongoDB.`);
+    logger.info(`Configured channels: ${PluginRegistry.getChannels().join(', ')}`);
+}
+
+/**
+ * Get list of configured channels from MongoDB (falls back to YAML if DB has no routings)
+ */
+export async function getConfiguredChannelsFromDatabase(): Promise<string[]> {
+    try {
+        const routings = await ChannelRouting.find().lean();
+        if (routings && routings.length > 0) {
+            return routings.map((r) => r.channel);
+        }
+    } catch (err) {
+        logger.warn('Could not query ChannelRouting from database:', {
+            error: err instanceof Error ? err.message : String(err)
+        });
+    }
+    return getConfiguredChannels();
 }

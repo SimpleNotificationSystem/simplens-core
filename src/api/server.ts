@@ -5,6 +5,8 @@ import { connectMongoDB } from '@src/config/db.config.js';
 import { exit } from 'process';
 import notification_router from './routes/notification.routes.js';
 import plugins_router from './routes/plugins.routes.js';
+import providers_router from './routes/providers.routes.js';
+import channel_routing_router from './routes/channel-routing.routes.js';
 import admin_channels_router from './routes/admin-channels.routes.js';
 import notification_templates_router from '@src/api/routes/notification_templates.routes.js';
 import notifications_management_router from './routes/notifications-management.routes.js';
@@ -14,10 +16,16 @@ import { auth_middleware } from './middlewares/auth_middleware.js';
 import http from 'http';
 import helmet from 'helmet';
 import cors from 'cors';
-import { createTopics } from '@src/config/kafka.config.js';
+import { createTopics, buildKafkaTopicsFromDatabase } from '@src/config/kafka.config.js';
 import { apiLogger as logger } from '@src/workers/utils/logger.js';
-import { buildKafkaTopics } from '@src/config/kafka.config.js';
-import { loadProvidersFromEnv } from '@src/plugins/index.js';
+import {
+  PluginSyncService,
+  PluginManagerService,
+  ProviderManagerService,
+  ChannelRoutingService,
+  YamlMigrator,
+  loadProvidersFromDatabase,
+} from '@src/plugins/index.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 
 //Import the admin channel provider files here for them to self-register
@@ -55,6 +63,8 @@ app.use('/api/notifications', auth_middleware, notifications_management_router);
 app.use('/api/alerts', auth_middleware, alerts_router);
 app.use('/api/dashboard', auth_middleware, dashboard_router);
 app.use('/api/plugins', auth_middleware, plugins_router);
+app.use('/api/providers', auth_middleware, providers_router);
+app.use('/api/channels/routing', auth_middleware, channel_routing_router);
 app.use('/api/admin-channels', auth_middleware, admin_channels_router);
 app.use('/api/templates', auth_middleware, notification_templates_router);
 
@@ -63,14 +73,21 @@ const start_server = async () => {
         const db = await connectMongoDB();
         logger.success("Successfully connected to MongoDB");
 
-        // Load plugins from simplens.config.yaml
-        // Initialize: false is important here because the API service doesn't need to connect to providers (e.g. SMTP),
-        // it only needs the metadata/schemas to serve the dashboard.
-        logger.info('Loading plugins from configuration (metadata only)...');
-        await loadProvidersFromEnv({ initialize: false });
+        // 1. Initialize Redis subscriber & sync handlers for plugins
+        await PluginSyncService.startSubscriber();
+        PluginManagerService.registerSyncHandlers();
+        ProviderManagerService.registerSyncHandlers();
+        ChannelRoutingService.registerSyncHandlers();
 
-        // Create Kafka topics dynamically from config
-        const topics = buildKafkaTopics();
+        // 2. Check if MongoDB has providers; if empty and YAML exists, migrate it
+        await YamlMigrator.migrateYamlIfNeeded();
+
+        // 3. Load provider plugins from MongoDB (metadata only for API server)
+        logger.info('Loading plugins from MongoDB (metadata only)...');
+        await loadProvidersFromDatabase({ initialize: false });
+
+        // 4. Create Kafka topics dynamically from MongoDB channel routing
+        const topics = await buildKafkaTopicsFromDatabase();
         await createTopics(topics);
 
         const server = http.createServer(app);

@@ -216,3 +216,54 @@ export interface AdminChannelProviderMeta {
   displayName: string;
   credentialFields: AdminChannelProviderField[];
 }
+
+// ============================================================================
+// DYNAMIC PLUGIN & PROVIDER MANAGEMENT TYPES
+// ============================================================================
+
+export interface ProviderManifest {
+  name: string;
+  displayName: string;
+  version: string;
+  channel: string;
+  description: string;
+  author?: string;
+  homepage?: string;
+  requiredCredentials: string[];
+  optionalConfig?: string[];
+}
+
+export interface InstalledPlugin {
+  _id?: string;
+  name: string;
+  version: string;
+  status: 'installed' | 'installing' | 'failed';
+  error?: string;
+  manifest: ProviderManifest;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ProviderDto {
+  _id?: string;
+  id: string;
+  plugin_name: string;
+  channel: string;
+  priority: number;
+  enabled: boolean;
+  options?: Record<string, unknown>;
+  credentials_configured: boolean;
+  decrypted_credentials?: Record<string, string>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ChannelRoutingDto {
+  _id?: string;
+  channel: string;
+  default_provider_id: string;
+  fallback_provider_ids: string[];
+  partitions: number;
+  created_at?: string;
+  updated_at?: string;
+}

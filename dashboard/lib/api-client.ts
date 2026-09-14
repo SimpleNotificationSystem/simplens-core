@@ -19,6 +19,9 @@ import {
   AdminChannel,
   AdminChannelFormData,
   AdminChannelProviderMeta,
+  InstalledPlugin,
+  ProviderDto,
+  ChannelRoutingDto,
 } from './types';
 
 export class ApiError extends Error {
@@ -128,6 +131,57 @@ export const alertService = {
 
 export const pluginService = {
   getMetadata: (): Promise<PluginMetadata> => apiClient.get('/api/plugins'),
+  listInstalled: (): Promise<{ plugins: InstalledPlugin[] }> => apiClient.get('/api/plugins/installed'),
+  install: (packageName: string, version?: string): Promise<{ message: string; plugin: InstalledPlugin }> =>
+    apiClient.post('/api/plugins/install', { package: packageName, version }),
+  changeVersion: (packageName: string, version: string): Promise<{ message: string; plugin: InstalledPlugin }> =>
+    apiClient.put('/api/plugins/version', { package: packageName, version }),
+  uninstall: (packageName: string): Promise<{ message: string }> =>
+    apiClient.delete(`/api/plugins/${encodeURIComponent(packageName)}`),
+};
+
+export const providerService = {
+  list: (): Promise<{ providers: ProviderDto[] }> => apiClient.get('/api/providers'),
+  get: (id: string, includeDecrypted = false): Promise<{ provider: ProviderDto }> =>
+    apiClient.get(`/api/providers/${id}`, { params: { include_decrypted: includeDecrypted } }),
+  create: (payload: {
+    id: string;
+    plugin_name: string;
+    credentials: Record<string, string>;
+    priority?: number;
+    options?: Record<string, unknown>;
+    enabled?: boolean;
+  }): Promise<{ message: string; provider: ProviderDto }> =>
+    apiClient.post('/api/providers', payload),
+  update: (id: string, payload: {
+    credentials?: Record<string, string>;
+    priority?: number;
+    options?: Record<string, unknown>;
+    enabled?: boolean;
+  }): Promise<{ message: string; provider: ProviderDto }> =>
+    apiClient.put(`/api/providers/${id}`, payload),
+  delete: (id: string): Promise<{ message: string }> =>
+    apiClient.delete(`/api/providers/${id}`),
+  test: (payload: {
+    provider_id?: string;
+    plugin_name?: string;
+    credentials?: Record<string, string>;
+    options?: Record<string, unknown>;
+  }): Promise<{ success: boolean; message: string }> =>
+    apiClient.post('/api/providers/test', payload),
+};
+
+export const channelRoutingService = {
+  list: (): Promise<{ routings: ChannelRoutingDto[] }> => apiClient.get('/api/channels/routing'),
+  get: (channel: string): Promise<{ routing: ChannelRoutingDto }> => apiClient.get(`/api/channels/routing/${channel}`),
+  set: (channel: string, payload: {
+    default_provider_id: string;
+    fallback_provider_ids?: string[];
+    partitions?: number;
+  }): Promise<{ message: string; routing: ChannelRoutingDto }> =>
+    apiClient.put(`/api/channels/routing/${channel}`, payload),
+  delete: (channel: string): Promise<{ message: string }> =>
+    apiClient.delete(`/api/channels/routing/${channel}`),
 };
 
 export const adminChannelService = {

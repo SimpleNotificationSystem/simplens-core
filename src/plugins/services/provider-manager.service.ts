@@ -1,0 +1,365 @@
+/**
+ * Provider Manager Service
+ * 
+ * Handles CRUD operations for provider instances, envelope encryption of credentials,
+ * live connection testing, registry loading, and Redis synchronization.
+ */
+
+import Provider from '@src/database/models/provider.models.js';
+import Plugin from '@src/database/models/plugin.models.js';
+import ChannelRouting from '@src/database/models/channel-routing.models.js';
+import {
+  encryptCredentials,
+  decryptCredentials,
+} from '@src/plugins/crypto/keypair-manager.js';
+import { importAndInstantiateProvider } from '@src/plugins/loader/plugin-fs.js';
+import { PluginRegistry } from '@src/plugins/loader/registry.js';
+import { PluginSyncService } from '@src/plugins/sync/plugin-sync.service.js';
+import type { provider_document } from '@src/types/types.js';
+import type { ProviderConfig } from '@src/plugins/interfaces/provider.types.js';
+import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
+
+export interface ProviderResponseDto {
+  _id?: string;
+  id: string;
+  plugin_name: string;
+  channel: string;
+  priority: number;
+  enabled: boolean;
+  options?: Record<string, unknown>;
+  credentials_configured: boolean;
+  created_at?: Date;
+  updated_at?: Date;
+}
+
+export class ProviderManagerService {
+  /**
+   * Create a new provider instance with envelope-encrypted credentials
+   */
+  public static async createProvider(data: {
+    id: string;
+    plugin_name: string;
+    credentials: Record<string, string>;
+    priority?: number;
+    options?: Record<string, unknown>;
+    enabled?: boolean;
+  }): Promise<ProviderResponseDto> {
+    logger.info(`Creating provider '${data.id}' using plugin '${data.plugin_name}'...`);
+
+    const existing = await Provider.findOne({ id: data.id });
+    if (existing) {
+      throw new Error(`Provider with ID '${data.id}' already exists.`);
+    }
+
+    const plugin = await Plugin.findOne({ name: data.plugin_name });
+    if (!plugin) {
+      throw new Error(`Plugin '${data.plugin_name}' is not installed.`);
+    }
+
+    const encryptedCredentials = await encryptCredentials(data.credentials);
+
+    const providerDoc = await Provider.create({
+      id: data.id,
+      plugin_name: data.plugin_name,
+      channel: plugin.manifest.channel,
+      priority: data.priority ?? 0,
+      enabled: data.enabled !== false,
+      credentials: encryptedCredentials,
+      options: data.options || {},
+    });
+
+    // If enabled, load into current process registry
+    if (providerDoc.enabled) {
+      try {
+        await ProviderManagerService.loadAndRegisterProvider(providerDoc.toObject() as provider_document);
+      } catch (err) {
+        logger.warn(`Provider '${data.id}' registered in DB, but failed local initialization:`, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    await PluginSyncService.publish('PROVIDER_UPSERTED', {
+      provider_id: data.id,
+    });
+
+    logger.success(`Provider '${data.id}' created successfully.`);
+
+    return {
+      _id: providerDoc._id.toString(),
+      id: providerDoc.id,
+      plugin_name: providerDoc.plugin_name,
+      channel: providerDoc.channel,
+      priority: providerDoc.priority,
+      enabled: providerDoc.enabled,
+      options: providerDoc.options as Record<string, unknown> | undefined,
+      credentials_configured: true,
+      created_at: providerDoc.created_at,
+      updated_at: providerDoc.updated_at,
+    };
+  }
+
+  /**
+   * Update an existing provider instance
+   */
+  public static async updateProvider(
+    id: string,
+    updates: {
+      credentials?: Record<string, string>;
+      priority?: number;
+      options?: Record<string, unknown>;
+      enabled?: boolean;
+    }
+  ): Promise<ProviderResponseDto> {
+    logger.info(`Updating provider '${id}'...`);
+
+    const providerDoc = await Provider.findOne({ id });
+    if (!providerDoc) {
+      throw new Error(`Provider '${id}' not found.`);
+    }
+
+    if (updates.priority !== undefined) {
+      providerDoc.priority = updates.priority;
+    }
+    if (updates.enabled !== undefined) {
+      providerDoc.enabled = updates.enabled;
+    }
+    if (updates.options !== undefined) {
+      providerDoc.options = updates.options;
+    }
+    if (updates.credentials && Object.keys(updates.credentials).length > 0) {
+      providerDoc.credentials = await encryptCredentials(updates.credentials);
+    }
+
+    await providerDoc.save();
+
+    if (providerDoc.enabled) {
+      try {
+        await ProviderManagerService.loadAndRegisterProvider(providerDoc.toObject() as provider_document);
+      } catch (err) {
+        logger.warn(`Provider '${id}' updated in DB, but failed local reload:`, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    } else {
+      PluginRegistry.unregister(id);
+    }
+
+    await PluginSyncService.publish('PROVIDER_UPSERTED', {
+      provider_id: id,
+    });
+
+    logger.success(`Provider '${id}' updated successfully.`);
+
+    return {
+      _id: providerDoc._id.toString(),
+      id: providerDoc.id,
+      plugin_name: providerDoc.plugin_name,
+      channel: providerDoc.channel,
+      priority: providerDoc.priority,
+      enabled: providerDoc.enabled,
+      options: providerDoc.options as Record<string, unknown> | undefined,
+      credentials_configured: true,
+      created_at: providerDoc.created_at,
+      updated_at: providerDoc.updated_at,
+    };
+  }
+
+  /**
+   * Delete a provider instance. Rejects if used in channel routing.
+   */
+  public static async deleteProvider(id: string): Promise<void> {
+    logger.info(`Deleting provider '${id}'...`);
+
+    const routingUse = await ChannelRouting.findOne({
+      $or: [{ default_provider_id: id }, { fallback_provider_ids: id }],
+    });
+
+    if (routingUse) {
+      throw new Error(
+        `Cannot delete provider '${id}': it is configured in channel '${routingUse.channel}' routing.`
+      );
+    }
+
+    const providerDoc = await Provider.findOne({ id });
+    if (!providerDoc) {
+      throw new Error(`Provider '${id}' not found.`);
+    }
+
+    await Provider.deleteOne({ id });
+    PluginRegistry.unregister(id);
+
+    await PluginSyncService.publish('PROVIDER_DELETED', {
+      provider_id: id,
+    });
+
+    logger.success(`Provider '${id}' deleted successfully.`);
+  }
+
+  /**
+   * List all providers without exposing ciphertext credentials
+   */
+  public static async listProviders(): Promise<ProviderResponseDto[]> {
+    const providers = await Provider.find().sort({ channel: 1, priority: -1 }).lean();
+
+    return providers.map((p) => ({
+      _id: p._id.toString(),
+      id: p.id,
+      plugin_name: p.plugin_name,
+      channel: p.channel,
+      priority: p.priority,
+      enabled: p.enabled,
+      options: p.options as Record<string, unknown> | undefined,
+      credentials_configured: !!p.credentials?.encrypted_data,
+      created_at: p.created_at,
+      updated_at: p.updated_at,
+    }));
+  }
+
+  /**
+   * Get single provider by ID
+   */
+  public static async getProvider(
+    id: string,
+    includeDecrypted = false
+  ): Promise<(ProviderResponseDto & { decrypted_credentials?: Record<string, string> }) | null> {
+    const providerDoc = await Provider.findOne({ id }).lean();
+    if (!providerDoc) return null;
+
+    let decrypted: Record<string, string> | undefined;
+    if (includeDecrypted && providerDoc.credentials) {
+      decrypted = await decryptCredentials(providerDoc.credentials);
+    }
+
+    return {
+      _id: providerDoc._id.toString(),
+      id: providerDoc.id,
+      plugin_name: providerDoc.plugin_name,
+      channel: providerDoc.channel,
+      priority: providerDoc.priority,
+      enabled: providerDoc.enabled,
+      options: providerDoc.options as Record<string, unknown> | undefined,
+      credentials_configured: !!providerDoc.credentials?.encrypted_data,
+      decrypted_credentials: decrypted,
+      created_at: providerDoc.created_at,
+      updated_at: providerDoc.updated_at,
+    };
+  }
+
+  /**
+   * Test live provider connection / credentials
+   */
+  public static async testProviderConnection(data: {
+    provider_id?: string;
+    plugin_name?: string;
+    credentials?: Record<string, string>;
+    options?: Record<string, unknown>;
+  }): Promise<{ success: boolean; message: string }> {
+    let pluginName = data.plugin_name;
+    let credentials = data.credentials;
+    let options = data.options || {};
+
+    if (data.provider_id) {
+      const existing = await Provider.findOne({ id: data.provider_id });
+      if (!existing) {
+        throw new Error(`Provider '${data.provider_id}' not found.`);
+      }
+      pluginName = existing.plugin_name;
+      options = { ...(existing.options as Record<string, unknown>), ...options };
+      if (!credentials || Object.keys(credentials).length === 0) {
+        credentials = await decryptCredentials(existing.credentials);
+      }
+    }
+
+    if (!pluginName) {
+      throw new Error('plugin_name or provider_id is required.');
+    }
+    if (!credentials) {
+      throw new Error('Provider credentials are required.');
+    }
+
+    try {
+      const providerInstance = await importAndInstantiateProvider(pluginName);
+      const config: ProviderConfig = {
+        id: data.provider_id || 'test-connection',
+        credentials,
+        options,
+      };
+
+      await providerInstance.initialize(config);
+      const healthy = await providerInstance.healthCheck();
+
+      if (healthy) {
+        return { success: true, message: 'Provider connection and health check succeeded.' };
+      } else {
+        return { success: false, message: 'Provider health check failed.' };
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, message: `Connection test error: ${message}` };
+    }
+  }
+
+  /**
+   * Load, decrypt credentials, instantiate and register provider into PluginRegistry
+   */
+  public static async loadAndRegisterProvider(
+    providerDoc: provider_document,
+    initialize = true
+  ): Promise<void> {
+    const credentials = await decryptCredentials(providerDoc.credentials);
+    const providerInstance = await importAndInstantiateProvider(providerDoc.plugin_name);
+
+    if (initialize) {
+      const config: ProviderConfig = {
+        id: providerDoc.id,
+        credentials,
+        options: {
+          ...(providerDoc.options as Record<string, unknown>),
+          priority: providerDoc.priority,
+        },
+      };
+
+      await providerInstance.initialize(config);
+
+      const healthy = await providerInstance.healthCheck();
+      if (!healthy) {
+        logger.warn(`Provider '${providerDoc.id}' failed health check on initial load.`);
+      }
+    }
+
+    PluginRegistry.registerOrReplace(providerInstance, providerDoc.id, providerDoc.priority ?? 0);
+    logger.success(`Registered provider '${providerDoc.id}' in PluginRegistry.`);
+  }
+
+  /**
+   * Register remote synchronization handlers with Redis Pub/Sub
+   */
+  public static registerSyncHandlers(): void {
+    PluginSyncService.on('PROVIDER_UPSERTED', async (msg) => {
+      const { provider_id } = msg.payload;
+      if (!provider_id) return;
+
+      logger.info(`Sync: Handling remote PROVIDER_UPSERTED for '${provider_id}'...`);
+      const providerDoc = await Provider.findOne({ id: provider_id });
+
+      if (providerDoc && providerDoc.enabled) {
+        try {
+          await ProviderManagerService.loadAndRegisterProvider(providerDoc.toObject() as provider_document);
+        } catch (err) {
+          logger.error(`Failed to reload synced provider '${provider_id}':`, err);
+        }
+      } else {
+        PluginRegistry.unregister(provider_id);
+      }
+    });
+
+    PluginSyncService.on('PROVIDER_DELETED', async (msg) => {
+      const { provider_id } = msg.payload;
+      if (!provider_id) return;
+
+      logger.info(`Sync: Handling remote PROVIDER_DELETED for '${provider_id}'...`);
+      PluginRegistry.unregister(provider_id);
+    });
+  }
+}

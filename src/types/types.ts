@@ -87,6 +87,12 @@ import {
     ADMIN_CHANNEL_TYPE,
     ADMIN_ALERT_TYPE,
     notificationTemplateSchema,
+    // Plugin & Provider schemas
+    encryptedCredentialsSchema,
+    providerManifestSchema,
+    pluginSchema,
+    providerSchema,
+    channelRoutingSchema,
 } from "./schemas.js";
 
 // ============================================================================
@@ -124,3 +130,13 @@ export type telegram_config = z.infer<typeof telegramConfigSchema>;
 export type AdminChannelType = (typeof ADMIN_CHANNEL_TYPE)[number];
 export type AdminAlertType = (typeof ADMIN_ALERT_TYPE)[number];
 export type notification_template = z.infer<typeof notificationTemplateSchema>;
+
+// ============================================================================
+// PLUGIN & PROVIDER MANAGEMENT TYPES
+// ============================================================================
+
+export type encrypted_credentials = z.infer<typeof encryptedCredentialsSchema>;
+export type provider_manifest = z.infer<typeof providerManifestSchema>;
+export type plugin_document = z.infer<typeof pluginSchema>;
+export type provider_document = z.infer<typeof providerSchema>;
+export type channel_routing_document = z.infer<typeof channelRoutingSchema>;

@@ -22,6 +22,7 @@ vi.mock('../../../src/processors/unified/unified.logger.js', () => ({
         warn: vi.fn(),
         error: vi.fn(),
         debug: vi.fn(),
+        success: vi.fn(),
     },
 }));
 
