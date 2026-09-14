@@ -593,6 +593,11 @@ export function ProvidersTab() {
                     Envelope Encrypted
                   </span>
                 </div>
+                {editingProvider && (
+                  <p className="text-xs text-muted-foreground">
+                    Leave credential fields empty to test with the encrypted credentials already stored for this provider.
+                  </p>
+                )}
 
                 {selectedPlugin?.manifest?.requiredCredentials &&
                 selectedPlugin.manifest.requiredCredentials.length > 0 ? (
@@ -644,17 +649,19 @@ export function ProvidersTab() {
             </div>
 
             <DialogFooter className="flex sm:justify-between items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleTestConnection}
-                disabled={testing || (!editingProvider && !pluginName)}
-                className="gap-1.5 text-xs"
-              >
-                {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <TestTube2 className="h-3.5 w-3.5" />}
-                {testing ? "Testing..." : "Test Connection"}
-              </Button>
+              {editingProvider && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleTestConnection}
+                  disabled={testing}
+                  className="gap-1.5 text-xs"
+                >
+                  {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <TestTube2 className="h-3.5 w-3.5" />}
+                  {testing ? "Testing..." : "Test Connection"}
+                </Button>
+              )}
 
               <div className="flex items-center gap-2">
                 <Button
@@ -683,7 +690,6 @@ export function ProvidersTab() {
             <AlertDialogTitle>Delete Provider</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete {providerToDelete}? This will unregister the instance and remove it from any channel routing. If it is a channel&apos;s primary provider, the first fallback will become primary.
-              Deletion will be blocked if this provider is assigned in channel routing.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

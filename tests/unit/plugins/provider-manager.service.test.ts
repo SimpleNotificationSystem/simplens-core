@@ -172,5 +172,35 @@ describe('ProviderManagerService', () => {
       expect(mockProviderInstance.initialize).toHaveBeenCalled();
       expect(mockProviderInstance.healthCheck).toHaveBeenCalled();
     });
+
+    it('should decrypt stored credentials once and reuse them for blank-credential tests', async () => {
+      const mockProviderInstance = {
+        initialize: vi.fn().mockResolvedValue(undefined),
+        healthCheck: vi.fn().mockResolvedValue(true),
+      };
+      const decryptSpy = vi.spyOn(keypairManager, 'decryptCredentials').mockResolvedValue({
+        EMAIL_USER: 'stored-user',
+        EMAIL_PASS: 'stored-pass',
+      });
+
+      vi.spyOn(Provider, 'findOne').mockResolvedValue({
+        id: 'cached-provider-test',
+        plugin_name: '@simplens/mock',
+        options: { priority: 2 },
+        credentials: { encrypted_data: 'encrypted' },
+      } as any);
+      vi.spyOn(pluginFs, 'importAndInstantiateProvider').mockResolvedValue(mockProviderInstance as any);
+
+      await ProviderManagerService.testProviderConnection({ provider_id: 'cached-provider-test' });
+      await ProviderManagerService.testProviderConnection({ provider_id: 'cached-provider-test' });
+
+      expect(decryptSpy).toHaveBeenCalledTimes(1);
+      expect(mockProviderInstance.initialize).toHaveBeenNthCalledWith(1, expect.objectContaining({
+        credentials: { EMAIL_USER: 'stored-user', EMAIL_PASS: 'stored-pass' },
+      }));
+      expect(mockProviderInstance.initialize).toHaveBeenNthCalledWith(2, expect.objectContaining({
+        credentials: { EMAIL_USER: 'stored-user', EMAIL_PASS: 'stored-pass' },
+      }));
+    });
   });
 });

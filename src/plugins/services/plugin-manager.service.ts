@@ -15,6 +15,7 @@ import {
   extractPackageManifest,
 } from '@src/plugins/loader/plugin-fs.js';
 import { PluginSyncService } from '@src/plugins/sync/plugin-sync.service.js';
+import { ProviderManagerService } from '@src/plugins/services/provider-manager.service.js';
 import type { plugin_document } from '@src/types/types.js';
 import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
 
@@ -141,6 +142,7 @@ export class PluginManagerService {
           }
 
           await Provider.deleteMany({ plugin_name: packageName });
+          ProviderManagerService.clearCachedCredentials(providerIds);
           for (const providerId of providerIds) {
             PluginRegistry.unregister(providerId);
             await PluginSyncService.publish('PROVIDER_DELETED', { provider_id: providerId });

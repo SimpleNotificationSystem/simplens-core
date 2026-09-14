@@ -21,6 +21,38 @@ import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
 export type { ProviderResponseDto } from '@src/types/types.js';
 
 export class ProviderManagerService {
+  private static readonly credentialCacheTtlMs = 5 * 60 * 1000;
+  private static readonly credentialCache = new Map<
+    string,
+    { credentials: Record<string, string>; expiresAt: number }
+  >();
+
+  private static getCachedCredentials(id: string): Record<string, string> | undefined {
+    const cached = ProviderManagerService.credentialCache.get(id);
+    if (!cached || cached.expiresAt <= Date.now()) {
+      ProviderManagerService.credentialCache.delete(id);
+      return undefined;
+    }
+    return cached.credentials;
+  }
+
+  private static cacheCredentials(id: string, credentials: Record<string, string>): void {
+    ProviderManagerService.credentialCache.set(id, {
+      credentials,
+      expiresAt: Date.now() + ProviderManagerService.credentialCacheTtlMs,
+    });
+  }
+
+  private static invalidateCredentialCache(id: string): void {
+    ProviderManagerService.credentialCache.delete(id);
+  }
+
+  public static clearCachedCredentials(providerIds: string[]): void {
+    for (const providerId of providerIds) {
+      ProviderManagerService.invalidateCredentialCache(providerId);
+    }
+  }
+
   /**
    * Create a new provider instance with envelope-encrypted credentials
    */
@@ -110,6 +142,7 @@ export class ProviderManagerService {
     }
     if (updates.credentials && Object.keys(updates.credentials).length > 0) {
       providerDoc.credentials = await encryptCredentials(updates.credentials);
+      ProviderManagerService.invalidateCredentialCache(id);
     }
 
     await providerDoc.save();
@@ -195,6 +228,7 @@ export class ProviderManagerService {
     }
 
     await Provider.deleteOne({ id });
+    ProviderManagerService.invalidateCredentialCache(id);
     PluginRegistry.unregister(id);
 
     await PluginSyncService.publish('PROVIDER_DELETED', {
@@ -273,7 +307,11 @@ export class ProviderManagerService {
       pluginName = existing.plugin_name;
       options = { ...(existing.options as ProviderOptions), ...options };
       if (!credentials || Object.keys(credentials).length === 0) {
-        credentials = await decryptCredentials(existing.credentials);
+        credentials = ProviderManagerService.getCachedCredentials(data.provider_id);
+        if (!credentials) {
+          credentials = await decryptCredentials(existing.credentials);
+          ProviderManagerService.cacheCredentials(data.provider_id, credentials);
+        }
       }
     }
 
@@ -313,7 +351,11 @@ export class ProviderManagerService {
     providerDoc: provider_document,
     initialize = true
   ): Promise<void> {
-    const credentials = await decryptCredentials(providerDoc.credentials);
+    let credentials = ProviderManagerService.getCachedCredentials(providerDoc.id);
+    if (!credentials) {
+      credentials = await decryptCredentials(providerDoc.credentials);
+      ProviderManagerService.cacheCredentials(providerDoc.id, credentials);
+    }
     const providerInstance = await importAndInstantiateProvider(providerDoc.plugin_name);
 
     if (initialize) {

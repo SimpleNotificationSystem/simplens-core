@@ -200,37 +200,37 @@ export function ChannelRoutingTab() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {routings.map((route) => (
             <Card key={route.channel} className="overflow-hidden">
-              <CardContent className="p-6 space-y-4">
+              <CardContent className="p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Badge className="text-sm font-semibold px-3 py-1 uppercase tracking-wider">
+                    <Badge className="text-xs font-semibold px-2.5 py-0.5 uppercase tracking-wider">
                       {route.channel}
                     </Badge>
                   </div>
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-                    <Cpu className="h-3.5 w-3.5 text-primary" />
+                  <div className="flex items-center gap-1 text-[11px] text-muted-foreground font-mono">
+                    <Cpu className="h-3 w-3 text-primary" />
                     <span>{route.partitions || 6} Partitions</span>
                   </div>
                 </div>
 
                 {/* Routing Cascade Chain */}
                 <div className="space-y-2">
-                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                     Cascading Failover Route
                   </div>
-                  <div className="p-3 bg-muted/40 rounded-lg flex items-center gap-2 flex-wrap text-xs">
-                    <Badge variant="default" className="font-mono bg-blue-600 hover:bg-blue-700">
+                  <div className="p-2.5 bg-muted/40 rounded-md flex items-center gap-1.5 flex-wrap text-[11px] min-h-10">
+                    <Badge variant="default" className="font-mono text-[11px] bg-blue-600 hover:bg-blue-700">
                       Primary: {route.default_provider_id}
                     </Badge>
 
                     {route.fallback_provider_ids && route.fallback_provider_ids.length > 0 ? (
                       route.fallback_provider_ids.map((fId, idx) => (
-                        <div key={fId} className="flex items-center gap-2">
-                          <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-                          <Badge variant="secondary" className="font-mono">
+                        <div key={fId} className="flex items-center gap-1.5">
+                          <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                          <Badge variant="secondary" className="font-mono text-[11px]">
                             Fallback {idx + 1}: {fId}
                           </Badge>
                         </div>
@@ -243,20 +243,23 @@ export function ChannelRoutingTab() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-2 pt-2 border-t">
+                <div className="flex items-center justify-end gap-1.5 pt-2 border-t">
                   <Button
                     variant="outline"
-                    size="sm"
-                    className="text-xs gap-1.5"
+                    size="icon"
+                    className="h-8 w-8"
+                    title={`Edit ${route.channel} routing`}
+                    aria-label={`Edit ${route.channel} routing`}
                     onClick={() => handleOpenEdit(route)}
                   >
                     <Edit2 className="h-3.5 w-3.5" />
-                    Edit Routing
                   </Button>
                   <Button
                     variant="outline"
-                    size="sm"
-                    className="text-xs gap-1.5 text-destructive hover:text-destructive"
+                    size="icon"
+                    className="h-8 w-8 text-destructive hover:text-destructive"
+                    title={`Delete ${route.channel} routing`}
+                    aria-label={`Delete ${route.channel} routing`}
                     onClick={() => handleDelete(route)}
                     disabled={deletingChannel === route.channel}
                   >
@@ -265,7 +268,6 @@ export function ChannelRoutingTab() {
                     ) : (
                       <Trash2 className="h-3.5 w-3.5" />
                     )}
-                    Delete Routing
                   </Button>
                 </div>
               </CardContent>

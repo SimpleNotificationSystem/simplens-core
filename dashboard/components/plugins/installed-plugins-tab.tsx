@@ -28,7 +28,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Download, Package, RefreshCw, Trash2, ArrowUpDown, Loader2 } from "lucide-react";
+import { Download, Package, RefreshCw, Trash2, ArrowUpDown, Loader2, ExternalLink, Info } from "lucide-react";
 import { toast } from "sonner";
 
 export function InstalledPluginsTab() {
@@ -50,6 +50,7 @@ export function InstalledPluginsTab() {
   const [uninstallDialogOpen, setUninstallDialogOpen] = useState(false);
   const [pluginToUninstall, setPluginToUninstall] = useState<string | null>(null);
   const [uninstalling, setUninstalling] = useState(false);
+  const [detailsPlugin, setDetailsPlugin] = useState<InstalledPlugin | null>(null);
 
   const handleInstall = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -175,10 +176,10 @@ export function InstalledPluginsTab() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
           {plugins.map((plugin) => (
-            <Card key={plugin.name} className="overflow-hidden relative group">
-              <CardContent className="p-5 space-y-4">
+            <Card key={plugin.name} className="overflow-hidden relative group h-full">
+              <CardContent className="p-5 space-y-4 flex min-h-[250px] h-full flex-col">
                 <div className="flex items-start justify-between gap-2">
                   <div className="space-y-1 min-w-0">
                     <h3 className="font-semibold text-base truncate">{plugin.name}</h3>
@@ -203,20 +204,20 @@ export function InstalledPluginsTab() {
                   </Badge>
                 </div>
 
-                {plugin.manifest?.description && (
-                  <p className="text-xs text-muted-foreground line-clamp-2">
-                    {plugin.manifest.description}
-                  </p>
-                )}
+                <p className="text-xs text-muted-foreground line-clamp-2 min-h-8">
+                  {plugin.manifest?.description || "No description provided."}
+                </p>
 
-                {plugin.manifest?.requiredCredentials && plugin.manifest.requiredCredentials.length > 0 && (
-                  <div className="text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">Credentials required:</span>{" "}
-                    {plugin.manifest.requiredCredentials.join(", ")}
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2 pt-2 border-t">
+                <div className="flex items-center gap-2 pt-2 border-t mt-auto">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs gap-1.5"
+                    onClick={() => setDetailsPlugin(plugin)}
+                  >
+                    <Info className="h-3.5 w-3.5" />
+                    View details
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -247,6 +248,63 @@ export function InstalledPluginsTab() {
           ))}
         </div>
       )}
+
+      <Dialog open={detailsPlugin !== null} onOpenChange={(open) => !open && setDetailsPlugin(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{detailsPlugin?.manifest?.displayName || detailsPlugin?.name}</DialogTitle>
+            <DialogDescription>{detailsPlugin?.name}</DialogDescription>
+          </DialogHeader>
+          {detailsPlugin && (
+            <div className="space-y-4 py-2 text-sm">
+              <p className="text-muted-foreground">
+                {detailsPlugin.manifest?.description || "No description provided."}
+              </p>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <div className="text-muted-foreground">Version</div>
+                  <div className="font-mono">{detailsPlugin.version}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Channel</div>
+                  <div>{detailsPlugin.manifest?.channel || "generic"}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Author</div>
+                  <div>{detailsPlugin.manifest?.author || "Not specified"}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Status</div>
+                  <div>{detailsPlugin.status}</div>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Required credentials</div>
+                <div className="mt-1 text-sm">
+                  {detailsPlugin.manifest?.requiredCredentials?.join(", ") || "None"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Optional configuration</div>
+                <div className="mt-1 text-sm">
+                  {detailsPlugin.manifest?.optionalConfig?.join(", ") || "None"}
+                </div>
+              </div>
+              {detailsPlugin.manifest?.homepage && (
+                <a
+                  href={detailsPlugin.manifest.homepage}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                >
+                  Plugin homepage
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Install Plugin Dialog */}
       <Dialog open={installModalOpen} onOpenChange={setInstallModalOpen}>
