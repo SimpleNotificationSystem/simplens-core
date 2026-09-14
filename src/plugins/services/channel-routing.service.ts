@@ -125,6 +125,11 @@ export class ChannelRoutingService {
     logger.info(`Deleting channel routing for '${channel}'...`);
     await ChannelRouting.deleteOne({ channel });
 
+    PluginRegistry.setChannelConfig(channel, {
+      default: '',
+      fallback: [],
+    });
+
     await PluginSyncService.publish('CHANNEL_ROUTING_UPDATED', {
       channel,
     });
@@ -146,6 +151,11 @@ export class ChannelRoutingService {
         PluginRegistry.setChannelConfig(channel, {
           default: routing.default_provider_id,
           fallback: routing.fallback_provider_ids || [],
+        });
+      } else {
+        PluginRegistry.setChannelConfig(channel, {
+          default: '',
+          fallback: [],
         });
       }
     });

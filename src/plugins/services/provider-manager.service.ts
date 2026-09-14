@@ -146,24 +146,52 @@ export class ProviderManagerService {
   }
 
   /**
-   * Delete a provider instance. Rejects if used in channel routing.
+   * Delete a provider instance and remove it from channel routing.
    */
   public static async deleteProvider(id: string): Promise<void> {
     logger.info(`Deleting provider '${id}'...`);
 
-    const routingUse = await ChannelRouting.findOne({
-      $or: [{ default_provider_id: id }, { fallback_provider_ids: id }],
-    });
-
-    if (routingUse) {
-      throw new Error(
-        `Cannot delete provider '${id}': it is configured in channel '${routingUse.channel}' routing.`
-      );
-    }
-
     const providerDoc = await Provider.findOne({ id });
     if (!providerDoc) {
       throw new Error(`Provider '${id}' not found.`);
+    }
+
+    const routings = await ChannelRouting.find({
+      $or: [{ default_provider_id: id }, { fallback_provider_ids: id }],
+    }).lean();
+
+    for (const routing of routings) {
+      const remainingFallbacks = (routing.fallback_provider_ids || []).filter(
+        (providerId: string) => providerId !== id
+      );
+
+      if (routing.default_provider_id === id) {
+        const [nextDefault, ...fallbacks] = remainingFallbacks;
+        if (nextDefault) {
+          await ChannelRouting.updateOne(
+            { channel: routing.channel },
+            {
+              default_provider_id: nextDefault,
+              fallback_provider_ids: fallbacks,
+            }
+          );
+        } else {
+          await ChannelRouting.deleteOne({ channel: routing.channel });
+        }
+      } else {
+        await ChannelRouting.updateOne(
+          { channel: routing.channel },
+          { fallback_provider_ids: remainingFallbacks }
+        );
+      }
+
+      PluginRegistry.setChannelConfig(routing.channel, {
+        default: remainingFallbacks[0] || '',
+        fallback: remainingFallbacks.slice(1),
+      });
+      await PluginSyncService.publish('CHANNEL_ROUTING_UPDATED', {
+        channel: routing.channel,
+      });
     }
 
     await Provider.deleteOne({ id });

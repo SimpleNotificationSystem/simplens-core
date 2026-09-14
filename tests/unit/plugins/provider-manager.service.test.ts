@@ -97,25 +97,55 @@ describe('ProviderManagerService', () => {
   });
 
   describe('deleteProvider', () => {
-    it('should reject deletion if provider is used in channel routing', async () => {
-      vi.spyOn(ChannelRouting, 'findOne').mockResolvedValue({
-        channel: 'email',
-        default_provider_id: 'gmail-prod',
+    it('should remove the provider from routing and promote the first fallback', async () => {
+      vi.spyOn(Provider, 'findOne').mockResolvedValue({ id: 'gmail-prod' } as any);
+      vi.spyOn(ChannelRouting, 'find').mockReturnValue({
+        lean: vi.fn().mockResolvedValue([
+          {
+            channel: 'email',
+            default_provider_id: 'gmail-prod',
+            fallback_provider_ids: ['smtp-prod', 'backup-prod'],
+          },
+        ]),
       } as any);
+      const updateSpy = vi.spyOn(ChannelRouting, 'updateOne').mockResolvedValue({ acknowledged: true } as any);
+      const deleteRoutingSpy = vi.spyOn(ChannelRouting, 'deleteOne').mockResolvedValue({ deletedCount: 0 } as any);
+      vi.spyOn(Provider, 'deleteOne').mockResolvedValue({ deletedCount: 1 } as any);
+      vi.spyOn(PluginRegistry, 'unregister').mockReturnValue(true);
 
-      await expect(ProviderManagerService.deleteProvider('gmail-prod')).rejects.toThrow(
-        "Cannot delete provider 'gmail-prod': it is configured in channel 'email' routing."
+      await ProviderManagerService.deleteProvider('gmail-prod');
+
+      expect(updateSpy).toHaveBeenCalledWith(
+        { channel: 'email' },
+        {
+          default_provider_id: 'smtp-prod',
+          fallback_provider_ids: ['backup-prod'],
+        }
       );
+      expect(deleteRoutingSpy).not.toHaveBeenCalled();
+      expect(PluginSyncService.publish).toHaveBeenCalledWith('CHANNEL_ROUTING_UPDATED', {
+        channel: 'email',
+      });
     });
 
-    it('should delete from DB and unregister from registry if not in use', async () => {
-      vi.spyOn(ChannelRouting, 'findOne').mockResolvedValue(null);
+    it('should delete the routing when the provider has no fallback replacement', async () => {
       vi.spyOn(Provider, 'findOne').mockResolvedValue({ id: 'mock-unused' } as any);
+      vi.spyOn(ChannelRouting, 'find').mockReturnValue({
+        lean: vi.fn().mockResolvedValue([
+          {
+            channel: 'mock',
+            default_provider_id: 'mock-unused',
+            fallback_provider_ids: [],
+          },
+        ]),
+      } as any);
+      const deleteRoutingSpy = vi.spyOn(ChannelRouting, 'deleteOne').mockResolvedValue({ deletedCount: 1 } as any);
       const deleteSpy = vi.spyOn(Provider, 'deleteOne').mockResolvedValue({ deletedCount: 1 } as any);
       const unregisterSpy = vi.spyOn(PluginRegistry, 'unregister').mockReturnValue(true);
 
       await ProviderManagerService.deleteProvider('mock-unused');
 
+      expect(deleteRoutingSpy).toHaveBeenCalledWith({ channel: 'mock' });
       expect(deleteSpy).toHaveBeenCalledWith({ id: 'mock-unused' });
       expect(unregisterSpy).toHaveBeenCalledWith('mock-unused');
       expect(PluginSyncService.publish).toHaveBeenCalledWith('PROVIDER_DELETED', {

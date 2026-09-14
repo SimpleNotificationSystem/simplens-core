@@ -682,7 +682,7 @@ export function ProvidersTab() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Provider</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {providerToDelete}? This will unregister the instance.
+              Are you sure you want to delete {providerToDelete}? This will unregister the instance and remove it from any channel routing. If it is a channel&apos;s primary provider, the first fallback will become primary.
               Deletion will be blocked if this provider is assigned in channel routing.
             </AlertDialogDescription>
           </AlertDialogHeader>

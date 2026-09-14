@@ -35,6 +35,7 @@ import {
   Loader2,
   AlertCircle,
   X,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -60,6 +61,7 @@ export function ChannelRoutingTab() {
   const [fallbackIds, setFallbackIds] = useState<string[]>([]);
   const [partitions, setPartitions] = useState<number>(6);
   const [saving, setSaving] = useState(false);
+  const [deletingChannel, setDeletingChannel] = useState<string | null>(null);
 
   const allProviders = providersData?.providers || [];
   const routings = routingData?.routings || [];
@@ -121,6 +123,22 @@ export function ChannelRoutingTab() {
       toast.error(message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async (route: ChannelRoutingDto) => {
+    if (!window.confirm(`Delete the routing for channel '${route.channel}'?`)) return;
+
+    setDeletingChannel(route.channel);
+    try {
+      await channelRoutingService.delete(route.channel);
+      toast.success(`Routing for channel '${route.channel}' deleted`);
+      mutateRouting();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to delete channel routing";
+      toast.error(message);
+    } finally {
+      setDeletingChannel(null);
     }
   };
 
@@ -225,7 +243,7 @@ export function ChannelRoutingTab() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end pt-2 border-t">
+                <div className="flex items-center justify-end gap-2 pt-2 border-t">
                   <Button
                     variant="outline"
                     size="sm"
@@ -234,6 +252,20 @@ export function ChannelRoutingTab() {
                   >
                     <Edit2 className="h-3.5 w-3.5" />
                     Edit Routing
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs gap-1.5 text-destructive hover:text-destructive"
+                    onClick={() => handleDelete(route)}
+                    disabled={deletingChannel === route.channel}
+                  >
+                    {deletingChannel === route.channel ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
+                    Delete Routing
                   </Button>
                 </div>
               </CardContent>

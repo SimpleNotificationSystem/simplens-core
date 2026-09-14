@@ -344,7 +344,7 @@ export function InstalledPluginsTab() {
             <AlertDialogTitle>Uninstall Plugin</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to uninstall {pluginToUninstall}? This will delete the package from
-              .plugins/node_modules. Uninstallation will be blocked if any configured providers still depend on this plugin.
+                .plugins/node_modules. Any providers using this plugin and channel routings that reference those providers will also be deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

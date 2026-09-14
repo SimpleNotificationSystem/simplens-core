@@ -7,6 +7,8 @@
 
 import Plugin from '@src/database/models/plugin.models.js';
 import Provider from '@src/database/models/provider.models.js';
+import ChannelRouting from '@src/database/models/channel-routing.models.js';
+import { PluginRegistry } from '@src/plugins/loader/registry.js';
 import {
   installNpmPackage,
   uninstallNpmPackage,
@@ -102,17 +104,10 @@ export class PluginManagerService {
   }
 
   /**
-   * Uninstall a plugin. Rejects if any configured providers depend on it.
+   * Uninstall a plugin and remove its dependent routing and provider records.
    */
   public static async uninstallPlugin(packageName: string): Promise<void> {
     logger.info(`Uninstalling plugin '${packageName}'...`);
-
-    const dependentProvidersCount = await Provider.countDocuments({ plugin_name: packageName });
-    if (dependentProvidersCount > 0) {
-      throw new Error(
-        `Cannot uninstall plugin '${packageName}': ${dependentProvidersCount} provider(s) depend on it. Delete or reassign providers first.`
-      );
-    }
 
     const existing = await Plugin.findOne({ name: packageName });
     if (!existing) {
@@ -122,6 +117,36 @@ export class PluginManagerService {
     await PluginSyncService.runWithLock(async () => {
       try {
         uninstallNpmPackage(packageName);
+
+        const dependentProviders = await Provider.find({ plugin_name: packageName })
+          .select({ id: 1 })
+          .lean();
+        const providerIds = dependentProviders.map((provider) => provider.id);
+
+        if (providerIds.length > 0) {
+          const dependentRoutings = await ChannelRouting.find({
+            $or: [
+              { default_provider_id: { $in: providerIds } },
+              { fallback_provider_ids: { $in: providerIds } },
+            ],
+          }).select({ channel: 1 }).lean();
+          const routingChannels = dependentRoutings.map((routing) => routing.channel);
+
+          if (routingChannels.length > 0) {
+            await ChannelRouting.deleteMany({ channel: { $in: routingChannels } });
+            for (const channel of routingChannels) {
+              PluginRegistry.setChannelConfig(channel, { default: '', fallback: [] });
+              await PluginSyncService.publish('CHANNEL_ROUTING_UPDATED', { channel });
+            }
+          }
+
+          await Provider.deleteMany({ plugin_name: packageName });
+          for (const providerId of providerIds) {
+            PluginRegistry.unregister(providerId);
+            await PluginSyncService.publish('PROVIDER_DELETED', { provider_id: providerId });
+          }
+        }
+
         await Plugin.deleteOne({ name: packageName });
 
         await PluginSyncService.publish('PLUGIN_UNINSTALLED', {

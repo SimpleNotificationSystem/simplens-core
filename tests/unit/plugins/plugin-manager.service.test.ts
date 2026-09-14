@@ -6,6 +6,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PluginManagerService } from '../../../src/plugins/services/plugin-manager.service.js';
 import Plugin from '../../../src/database/models/plugin.models.js';
 import Provider from '../../../src/database/models/provider.models.js';
+import ChannelRouting from '../../../src/database/models/channel-routing.models.js';
+import { PluginRegistry } from '../../../src/plugins/loader/registry.js';
 import * as pluginFs from '../../../src/plugins/loader/plugin-fs.js';
 import { PluginSyncService } from '../../../src/plugins/sync/plugin-sync.service.js';
 
@@ -116,17 +118,49 @@ describe('PluginManagerService', () => {
   });
 
   describe('uninstallPlugin', () => {
-    it('should reject uninstallation if providers depend on the plugin', async () => {
-      vi.spyOn(Provider, 'countDocuments').mockResolvedValue(2 as any);
+    it('should remove dependent routings and providers before uninstalling the plugin', async () => {
+      vi.spyOn(Plugin, 'findOne').mockResolvedValue({ name: '@simplens/mock' } as any);
+      vi.spyOn(Provider, 'find').mockReturnValue({
+        select: () => ({
+          lean: vi.fn().mockResolvedValue([{ id: 'mock-provider' }]),
+        }),
+      } as any);
+      vi.spyOn(ChannelRouting, 'find').mockReturnValue({
+        select: () => ({
+          lean: vi.fn().mockResolvedValue([{ channel: 'mock' }]),
+        }),
+      } as any);
+      const routingDeleteSpy = vi.spyOn(ChannelRouting, 'deleteMany').mockResolvedValue({ deletedCount: 1 } as any);
+      const providerDeleteSpy = vi.spyOn(Provider, 'deleteMany').mockResolvedValue({ deletedCount: 1 } as any);
+      const unregisterSpy = vi.spyOn(PluginRegistry, 'unregister').mockReturnValue(true);
+      const uninstallSpy = vi.spyOn(pluginFs, 'uninstallNpmPackage').mockReturnValue(undefined);
+      const deleteSpy = vi.spyOn(Plugin, 'deleteOne').mockResolvedValue({ deletedCount: 1 } as any);
 
-      await expect(PluginManagerService.uninstallPlugin('@simplens/mock')).rejects.toThrow(
-        "Cannot uninstall plugin '@simplens/mock': 2 provider(s) depend on it."
-      );
+      await PluginManagerService.uninstallPlugin('@simplens/mock');
+
+      expect(uninstallSpy).toHaveBeenCalledWith('@simplens/mock');
+      expect(routingDeleteSpy).toHaveBeenCalledWith({ channel: { $in: ['mock'] } });
+      expect(providerDeleteSpy).toHaveBeenCalledWith({ plugin_name: '@simplens/mock' });
+      expect(unregisterSpy).toHaveBeenCalledWith('mock-provider');
+      expect(deleteSpy).toHaveBeenCalledWith({ name: '@simplens/mock' });
+      expect(PluginSyncService.publish).toHaveBeenCalledWith('CHANNEL_ROUTING_UPDATED', {
+        channel: 'mock',
+      });
+      expect(PluginSyncService.publish).toHaveBeenCalledWith('PROVIDER_DELETED', {
+        provider_id: 'mock-provider',
+      });
+      expect(PluginSyncService.publish).toHaveBeenCalledWith('PLUGIN_UNINSTALLED', {
+        plugin_name: '@simplens/mock',
+      });
     });
 
-    it('should uninstall and remove from DB when no providers depend on it', async () => {
-      vi.spyOn(Provider, 'countDocuments').mockResolvedValue(0 as any);
+    it('should uninstall and remove the plugin when no providers depend on it', async () => {
       vi.spyOn(Plugin, 'findOne').mockResolvedValue({ name: '@simplens/mock' } as any);
+      vi.spyOn(Provider, 'find').mockReturnValue({
+        select: () => ({
+          lean: vi.fn().mockResolvedValue([]),
+        }),
+      } as any);
       const uninstallSpy = vi.spyOn(pluginFs, 'uninstallNpmPackage').mockReturnValue(undefined);
       const deleteSpy = vi.spyOn(Plugin, 'deleteOne').mockResolvedValue({ deletedCount: 1 } as any);
 
@@ -134,9 +168,6 @@ describe('PluginManagerService', () => {
 
       expect(uninstallSpy).toHaveBeenCalledWith('@simplens/mock');
       expect(deleteSpy).toHaveBeenCalledWith({ name: '@simplens/mock' });
-      expect(PluginSyncService.publish).toHaveBeenCalledWith('PLUGIN_UNINSTALLED', {
-        plugin_name: '@simplens/mock',
-      });
     });
   });
 });
