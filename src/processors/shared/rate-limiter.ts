@@ -8,20 +8,12 @@
 import { getRedisClient } from '@src/config/redis.config.js';
 import { getRateLimitConfig as getPluginRateLimitConfig } from '@src/plugins/index.js';
 import { rateLimiterLogger as logger } from '@src/workers/utils/logger.js';
+import type { RateLimitConfig, RefillInterval, RateLimitResult } from '@src/types/types.js';
 
 // Redis key prefixes
 const TOKENS_KEY_PREFIX = 'ratelimit:tokens';
 const LAST_REFILL_KEY_PREFIX = 'ratelimit:last_refill';
 const QUEUE_POSITION_KEY_PREFIX = 'ratelimit:queue_position';
-
-/** Time interval for refill rate */
-type RefillInterval = 'second' | 'minute' | 'hour' | 'day';
-
-interface RateLimitConfig {
-    maxTokens: number;
-    refillRate: number;
-    refillInterval?: RefillInterval;
-}
 
 // Conversion divisors to convert rate to per-second
 const INTERVAL_TO_SECONDS: Record<RefillInterval, number> = {
@@ -77,13 +69,6 @@ const buildKeys = (providerId: string): { tokensKey: string; lastRefillKey: stri
 /**
  * Token Bucket Algorithm Result
  */
-export interface RateLimitResult {
-    allowed: boolean;
-    remainingTokens: number;
-    retryAfterMs?: number;
-    queuePosition?: number;  // Position in queue when rate-limited
-}
-
 /**
  * Try to consume a token from the bucket
  * Uses Redis Lua script for atomic operation with queue-based staggering

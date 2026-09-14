@@ -3,21 +3,16 @@
  * Channel-agnostic - routes based on dynamic target_topic
  */
 
-import { Consumer, EachMessagePayload } from 'kafkajs';
+import { EachMessagePayload } from 'kafkajs';
 import { kafka } from '@src/config/kafka.config.js';
-import { CORE_TOPICS } from '@src/types/types.js';
+import { CORE_TOPICS, type KafkaConsumerState } from '@src/types/types.js';
 import { delayedNotificationTopicSchema } from '@src/types/schemas.js';
 import { addToDelayedQueue } from './delayed.queue.js';
 import { delayedWorkerLogger as logger } from '@src/workers/utils/logger.js';
 
 const CONSUMER_GROUP_ID = 'delayed-worker-group';
 
-interface ConsumerState {
-    consumer: Consumer | null;
-    isConsuming: boolean;
-}
-
-const state: ConsumerState = {
+const state: KafkaConsumerState = {
     consumer: null,
     isConsuming: false
 };

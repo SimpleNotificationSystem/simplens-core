@@ -13,7 +13,7 @@ import { claimDueEvents, confirmProcessed, reAddToQueue, getDueEventCount, relea
 import { publishToTarget } from './target.producer.js';
 import { publishDLQFailureStatus } from './dlq.status.js';
 import { delayedWorkerLogger as logger } from '@src/workers/utils/logger.js';
-import type { delayed_notification_topic } from '@src/types/types.js';
+import type { DelayedEventWithRetries } from '@src/types/types.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 
 let pollerInterval: NodeJS.Timeout | null = null;
@@ -22,10 +22,6 @@ let isPolling = false;
 /**
  * Extended event type with poller retry tracking
  */
-interface DelayedEventWithRetries extends delayed_notification_topic {
-    _pollerRetries?: number;
-}
-
 /**
  * Calculate exponential backoff delay
  * @param retryCount Current retry count

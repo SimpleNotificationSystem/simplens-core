@@ -41,15 +41,7 @@ const hasNonEmptyContent = (
   content?: Record<string, Record<string, string>>,
 ) => !!content && Object.keys(content).length > 0;
 
-// ============================================================================
-// BASE NOTIFICATION SCHEMA (Channel-Agnostic)
-// ============================================================================
-
-/**
- * Base notification schema - plugins extend this with channel-specific fields
- */
-export const baseNotificationSchema = z.object({
-  notification_id: objectIdSchema,
+const notificationPayloadFields = {
   request_id: UUIDV4Schema,
   client_id: UUIDV4Schema,
   client_name: z.string().optional(),
@@ -59,8 +51,40 @@ export const baseNotificationSchema = z.object({
   content: z.record(z.string(), z.unknown()),
   variables: variablesSchema.optional(),
   webhook_url: z.url(),
-  retry_count: z.number().int().min(0),
   scheduled_at: z.coerce.date().optional(),
+};
+
+const notificationRequestFields = {
+  client_id: UUIDV4Schema,
+  client_name: z.string().optional(),
+  channel: z.array(z.string()).min(1, "At least one channel is required."),
+  template_id: z.array(z.string().nullable().optional()).optional(),
+  provider: z
+    .union([z.string(), z.array(z.string().nullable().optional())])
+    .optional(),
+  content: z.record(z.string(), z.record(z.string(), z.string())).optional(),
+  scheduled_at: z.coerce.date().optional(),
+  webhook_url: z.url(),
+};
+
+const notificationTemplateFields = {
+  name: z.string(),
+  description: z.string().optional(),
+  content: z.record(z.string(), z.unknown()),
+  package: z.string(),
+};
+
+// ============================================================================
+// BASE NOTIFICATION SCHEMA (Channel-Agnostic)
+// ============================================================================
+
+/**
+ * Base notification schema - plugins extend this with channel-specific fields
+ */
+export const baseNotificationSchema = z.object({
+  notification_id: objectIdSchema,
+  ...notificationPayloadFields,
+  retry_count: z.number().int().min(0),
   created_at: z.coerce.date(),
 });
 
@@ -104,17 +128,8 @@ export const notificationStatusTopicSchema = z.object({
  * Notification record in MongoDB
  */
 export const notificationSchema = z.object({
-  request_id: UUIDV4Schema,
-  client_id: UUIDV4Schema,
-  client_name: z.string().optional(),
-  channel: z.string(),
-  provider: z.string().optional(),
-  recipient: z.record(z.string(), z.unknown()),
-  content: z.record(z.string(), z.unknown()),
-  variables: variablesSchema.optional(),
-  webhook_url: z.url(),
+  ...notificationPayloadFields,
   status: z.enum(NOTIFICATION_STATUS),
-  scheduled_at: z.coerce.date().optional(),
   error_message: z.string().optional(),
   retry_count: z.number().int().min(0),
   // Recovery claiming fields for horizontal scalability
@@ -341,18 +356,9 @@ export const telegramConfigSchema = z.object({
 export const baseNotificationRequestSchema = z
   .object({
     request_id: UUIDV4Schema,
-    client_id: UUIDV4Schema,
-    client_name: z.string().optional(),
-    template_id: z.array(z.string().nullable().optional()).optional(),
-    channel: z.array(z.string()).min(1, "At least one channel is required."),
-    provider: z
-      .union([z.string(), z.array(z.string().nullable().optional())])
-      .optional(),
+    ...notificationRequestFields,
     recipient: z.record(z.string(), z.unknown()),
-    content: z.record(z.string(), z.record(z.string(), z.string())).optional(),
     variables: variablesSchema.optional(),
-    scheduled_at: z.coerce.date().optional(),
-    webhook_url: z.url(),
   })
   .superRefine((data, ctx) => {
     if (
@@ -375,14 +381,7 @@ export const baseNotificationRequestSchema = z
  */
 export const baseBatchNotificationRequestSchema = z
   .object({
-    client_id: UUIDV4Schema,
-    client_name: z.string().optional(),
-    channel: z.array(z.string()).min(1, "At least one channel is required."),
-    template_id: z.array(z.string().nullable().optional()).optional(),
-    provider: z
-      .union([z.string(), z.array(z.string().nullable().optional())])
-      .optional(),
-    content: z.record(z.string(), z.record(z.string(), z.string())).optional(),
+    ...notificationRequestFields,
     recipients: z.array(
       z.looseObject({
         request_id: UUIDV4Schema,
@@ -390,8 +389,6 @@ export const baseBatchNotificationRequestSchema = z
         variables: variablesSchema.optional(),
       }),
     ).min(1, "At least one recipient is required."),
-    scheduled_at: z.coerce.date().optional(),
-    webhook_url: z.url(),
   })
   .refine(
     (data) => {
@@ -429,19 +426,11 @@ export const baseBatchNotificationRequestSchema = z
 Notification Template Request Schema
 */
 export const notificationTemplateRequestSchema = z.object({
-  name: z.string(),
+  ...notificationTemplateFields,
   template_id: z.string().optional(),
-  description: z.string().optional(),
-  content: z.record(z.string(), z.unknown()),
-  package: z.string(),
 });
 
-export const notificationTemplateUpdateRequestSchema = z.object({
-  name: z.string(),
-  description: z.string().optional(),
-  content: z.record(z.string(), z.unknown()),
-  package: z.string(),
-});
+export const notificationTemplateUpdateRequestSchema = z.object(notificationTemplateFields);
 
 // ============================================================================
 // VALIDATION FUNCTIONS

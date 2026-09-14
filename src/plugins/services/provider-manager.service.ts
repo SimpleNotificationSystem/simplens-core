@@ -15,22 +15,10 @@ import {
 import { importAndInstantiateProvider } from '@src/plugins/loader/plugin-fs.js';
 import { PluginRegistry } from '@src/plugins/loader/registry.js';
 import { PluginSyncService } from '@src/plugins/sync/plugin-sync.service.js';
-import type { provider_document } from '@src/types/types.js';
-import type { ProviderConfig } from '@src/plugins/interfaces/provider.types.js';
+import type { provider_document, ProviderConfig, ProviderResponseDto } from '@src/types/types.js';
 import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
 
-export interface ProviderResponseDto {
-  _id?: string;
-  id: string;
-  plugin_name: string;
-  channel: string;
-  priority: number;
-  enabled: boolean;
-  options?: Record<string, unknown>;
-  credentials_configured: boolean;
-  created_at?: Date;
-  updated_at?: Date;
-}
+export type { ProviderResponseDto } from '@src/types/types.js';
 
 export class ProviderManagerService {
   /**

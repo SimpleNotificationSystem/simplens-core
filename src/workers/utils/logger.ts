@@ -6,6 +6,7 @@
 import winston from 'winston';
 import LokiTransport from 'winston-loki';
 import { env } from '@src/config/env.config.js';
+import type { LogMeta, Logger, ServiceContext } from '@src/types/types.js';
 
 // Service context types
 const SERVICE_LABELS = {
@@ -23,20 +24,6 @@ const SERVICE_LABELS = {
     pluginRegistry: 'plugin-registry',
     rateLimiter: 'rate-limiter'
 } as const;
-
-type ServiceContext = keyof typeof SERVICE_LABELS;
-
-// Log metadata interface
-interface LogMeta {
-    notificationId?: string;
-    requestId?: string;
-    clientId?: string;
-    channel?: string;
-    workerId?: string;
-    topic?: string;
-    partition?: number;
-    [key: string]: unknown;
-}
 
 // Custom log levels including 'success'
 const customLevels = {
@@ -174,17 +161,6 @@ const createWinstonLogger = (service: ServiceContext) => {
         transports
     });
 };
-
-/**
- * Logger interface matching our usage patterns
- */
-export interface Logger {
-    info: (message: string, meta?: LogMeta) => void;
-    warn: (message: string, meta?: LogMeta) => void;
-    error: (message: string, meta?: LogMeta | unknown) => void;
-    debug: (message: string, meta?: LogMeta) => void;
-    success: (message: string, meta?: LogMeta) => void;
-}
 
 /**
  * Create a typed logger for a service context

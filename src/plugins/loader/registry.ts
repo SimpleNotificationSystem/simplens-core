@@ -5,65 +5,21 @@
  * Handles provider lookup by ID or channel.
  */
 
-import type { SimpleNSProvider, ProviderManifest } from '../interfaces/provider.types.js';
+import type { SimpleNSProvider, ProviderManifest, RegisteredProvider, ChannelConfig, FieldDefinition, ProviderMetadata, ChannelMetadata, PluginMetadata } from '@src/types/types.js';
 import { pluginRegistryLogger as logger } from '@src/workers/utils/logger.js';
+
+export type {
+    RegisteredProvider,
+    ChannelConfig,
+    FieldDefinition,
+    ProviderMetadata,
+    ChannelMetadata,
+    PluginMetadata,
+} from '@src/types/types.js';
 
 /**
  * Registered provider with configuration
  */
-export interface RegisteredProvider {
-    provider: SimpleNSProvider;
-    id: string;
-    priority: number;
-}
-
-/**
- * Channel configuration
- */
-export interface ChannelConfig {
-    default: string;
-    fallback?: string | string[];
-}
-
-/**
- * Field definition for dynamic form generation
- */
-export interface FieldDefinition {
-    name: string;
-    type: 'string' | 'email' | 'phone' | 'text' | 'number' | 'boolean';
-    required: boolean;
-    description?: string;
-}
-
-/**
- * Provider metadata for dashboard
- */
-export interface ProviderMetadata {
-    id: string;
-    name: string;
-    displayName: string;
-    description?: string;
-    priority: number;
-    recipientFields: FieldDefinition[];
-    contentFields: FieldDefinition[];
-}
-
-/**
- * Channel metadata for dashboard
- */
-export interface ChannelMetadata {
-    providers: ProviderMetadata[];
-    default?: string;
-    fallback?: string | string[];
-}
-
-/**
- * Full plugin metadata response
- */
-export interface PluginMetadata {
-    channels: Record<string, ChannelMetadata>;
-}
-
 /**
  * Extract field definitions from a Zod object schema
  */

@@ -1,5 +1,5 @@
 import { env } from "@src/config/env.config.js";
-import { OUTBOX_STATUS } from "@src/types/types.js";
+import { OUTBOX_STATUS, type OutboxCronState } from "@src/types/types.js";
 import outbox_model from "@src/database/models/outbox.models.js";
 import status_outbox_model from "@src/database/models/status-outbox.models.js";
 import { type status_outbox } from "@src/types/types.js";
@@ -8,17 +8,7 @@ import { cronLogger as logger } from "@src/workers/utils/logger.js";
 import type { OutboxDocument } from "@src/workers/utils/validation.js";
 
 // Cron state management
-interface CronState {
-    pollIntervalId: NodeJS.Timeout | null;
-    cleanupIntervalId: NodeJS.Timeout | null;
-    statusPollIntervalId: NodeJS.Timeout | null;
-    isPolling: boolean;
-    isCleaningUp: boolean;
-    isPollingStatus: boolean;
-    shouldStop: boolean;
-}
-
-const state: CronState = {
+const state: OutboxCronState = {
     pollIntervalId: null,
     cleanupIntervalId: null,
     statusPollIntervalId: null,

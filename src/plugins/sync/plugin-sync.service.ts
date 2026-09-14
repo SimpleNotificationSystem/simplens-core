@@ -9,35 +9,9 @@ import { randomUUID } from 'crypto';
 import type { Redis as RedisType } from 'ioredis';
 import { getRedisClient } from '@src/config/redis.config.js';
 import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
+import type { PluginSyncAction, PluginSyncHandler, PluginSyncMessage, PluginSyncPayload } from '@src/types/types.js';
 
 export const PLUGIN_SYNC_CHANNEL = 'simplens:plugin_system:sync';
-
-export type PluginSyncAction =
-  | 'PLUGIN_INSTALLED'
-  | 'PLUGIN_UNINSTALLED'
-  | 'PLUGIN_VERSION_CHANGED'
-  | 'PROVIDER_UPSERTED'
-  | 'PROVIDER_DELETED'
-  | 'CHANNEL_ROUTING_UPDATED'
-  | 'SYSTEM_RELOAD';
-
-export interface PluginSyncPayload {
-  plugin_name?: string;
-  version?: string;
-  provider_id?: string;
-  channel?: string;
-  [key: string]: unknown;
-}
-
-export interface PluginSyncMessage {
-  event_id: string;
-  source_instance_id: string;
-  timestamp: string;
-  action: PluginSyncAction;
-  payload: PluginSyncPayload;
-}
-
-export type PluginSyncHandler = (message: PluginSyncMessage) => Promise<void>;
 
 export class PluginSyncServiceClass {
   private static instance: PluginSyncServiceClass;

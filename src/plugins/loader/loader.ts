@@ -18,7 +18,7 @@ import Provider from '@src/database/models/provider.models.js';
 import ChannelRouting from '@src/database/models/channel-routing.models.js';
 import { ProviderManagerService } from '@src/plugins/services/provider-manager.service.js';
 import { installNpmPackage } from './plugin-fs.js';
-import type { provider_document } from '@src/types/types.js';
+import type { provider_document, ProviderEntry, SimpleNSConfig } from '@src/types/types.js';
 
 // Plugins directory for user-installed plugins
 const PLUGINS_DIR = join(process.cwd(), '.plugins');
@@ -91,39 +91,6 @@ async function installMissingPlugins(config: SimpleNSConfig): Promise<void> {
 /**
  * Provider entry in configuration
  */
-interface ProviderEntry {
-    /** npm package name (e.g., '@simplens/gmail') */
-    package: string;
-    /** Unique ID for this provider instance */
-    id: string;
-    /** Provider credentials */
-    credentials: Record<string, string>;
-    /** Optional config values (resolved from env vars) */
-    optionalConfig?: Record<string, string>;
-    /** Optional settings */
-    options?: {
-        priority?: number;
-        rateLimit?: {
-            maxTokens?: number;
-            refillRate?: number;
-        };
-        [key: string]: unknown;
-    };
-}
-
-/**
- * SimpleNS configuration file structure
- */
-interface SimpleNSConfig {
-    /** Provider configurations */
-    providers: ProviderEntry[];
-    /** Channel to provider mapping */
-    channels?: Record<string, {
-        default: string;
-        fallback?: string;
-    }>;
-}
-
 /**
  * Find local config file if it exists
  * Checks for simplens.config.yaml/.yml/.json

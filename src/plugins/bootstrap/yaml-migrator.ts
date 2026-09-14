@@ -21,30 +21,7 @@ import {
 } from '@src/plugins/loader/plugin-fs.js';
 import { PluginSyncService } from '@src/plugins/sync/plugin-sync.service.js';
 import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
-
-interface YamlProviderEntry {
-  package: string;
-  version?: string;
-  id: string;
-  credentials?: Record<string, string>;
-  optionalConfig?: Record<string, string>;
-  options?: {
-    priority?: number;
-    [key: string]: unknown;
-  };
-}
-
-interface YamlConfig {
-  providers?: YamlProviderEntry[];
-  channels?: Record<
-    string,
-    {
-      default: string;
-      fallback?: string | string[];
-      partitions?: number;
-    }
-  >;
-}
+import type { YamlConfig } from '@src/types/types.js';
 
 /**
  * Resolve environment variables in credential templates

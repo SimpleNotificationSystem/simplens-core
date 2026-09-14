@@ -1,6 +1,6 @@
-import { Consumer, EachMessagePayload } from "kafkajs";
+import { EachMessagePayload } from "kafkajs";
 import { kafka } from "@src/config/kafka.config.js";
-import { CORE_TOPICS, NOTIFICATION_STATUS, NOTIFICATION_STATUS_SF, type notification_status_topic } from "@src/types/types.js";
+import { CORE_TOPICS, NOTIFICATION_STATUS, NOTIFICATION_STATUS_SF, type KafkaConsumerState, type notification_status_topic, type StatusProcessResult, type WebhookPayload } from "@src/types/types.js";
 import { safeValidateNotificationStatusTopic } from "@src/types/schemas.js";
 import notification_model from "@src/database/models/notification.models.js";
 import { consumerLogger as logger } from "@src/workers/utils/logger.js";
@@ -11,12 +11,7 @@ const CONSUMER_GROUP_ID = "notification-status-group";
 const WEBHOOK_TIMEOUT_MS = 30000; // 30 seconds
 
 // Consumer state management
-interface ConsumerState {
-    consumer: Consumer | null;
-    isConsuming: boolean;
-}
-
-const state: ConsumerState = {
+const state: KafkaConsumerState = {
     consumer: null,
     isConsuming: false
 };
@@ -33,7 +28,7 @@ const mapToNotificationStatus = (externalStatus: NOTIFICATION_STATUS_SF): NOTIFI
 /**
  * Build webhook payload from status data
  */
-const buildWebhookPayload = (data: notification_status_topic) => ({
+const buildWebhookPayload = (data: notification_status_topic): WebhookPayload => ({
     request_id: data.request_id,
     client_id: data.client_id,
     notification_id: data.notification_id.toString(),
@@ -89,18 +84,11 @@ const sendWebhookCallback = (
 /**
  * Result of processing a status message
  */
-interface ProcessResult {
-    dbUpdated: boolean;
-    webhookUrl?: string;
-    webhookPayload?: ReturnType<typeof buildWebhookPayload>;
-    notificationId?: string;
-}
-
 /**
  * Process a single status message
  * Returns result indicating if DB was updated and webhook info
  */
-const processStatusMessage = async ({ partition, message }: EachMessagePayload): Promise<ProcessResult> => {
+const processStatusMessage = async ({ partition, message }: EachMessagePayload): Promise<StatusProcessResult> => {
     try {
         if (!message.value) {
             logger.warn("Received empty message, skipping");
