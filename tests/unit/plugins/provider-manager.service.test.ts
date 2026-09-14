@@ -64,10 +64,9 @@ describe('ProviderManagerService', () => {
         id: 'mock-test',
         plugin_name: '@simplens/mock',
         channel: 'mock',
-        priority: 5,
         enabled: true,
         credentials: { encrypted_data: 'enc123' },
-        options: {},
+        options: { priority: 5 },
         toObject: () => mockCreated,
       };
 
@@ -78,7 +77,7 @@ describe('ProviderManagerService', () => {
         id: 'mock-test',
         plugin_name: '@simplens/mock',
         credentials: {},
-        priority: 5,
+        options: { priority: 5 },
       });
 
       expect(keypairManager.encryptCredentials).toHaveBeenCalled();
@@ -87,7 +86,7 @@ describe('ProviderManagerService', () => {
           id: 'mock-test',
           plugin_name: '@simplens/mock',
           channel: 'mock',
-          priority: 5,
+          options: { priority: 5 },
         })
       );
       expect(PluginSyncService.publish).toHaveBeenCalledWith('PROVIDER_UPSERTED', {

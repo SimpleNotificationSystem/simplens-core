@@ -275,7 +275,7 @@ export function ChannelRoutingTab() {
                   <SelectContent>
                     {channelProviders.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
-                        {p.id} (Priority: {p.priority})
+                         {p.id} (Priority: {p.options?.priority ?? 0})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -327,7 +327,7 @@ export function ChannelRoutingTab() {
                         .filter((p) => p.id !== defaultProviderId && !fallbackIds.includes(p.id))
                         .map((p) => (
                           <SelectItem key={p.id} value={p.id} className="text-xs">
-                            {p.id} (Priority: {p.priority})
+                             {p.id} (Priority: {p.options?.priority ?? 0})
                           </SelectItem>
                         ))}
                     </SelectContent>

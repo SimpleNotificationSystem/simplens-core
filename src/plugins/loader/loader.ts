@@ -18,7 +18,7 @@ import Provider from '@src/database/models/provider.models.js';
 import ChannelRouting from '@src/database/models/channel-routing.models.js';
 import { ProviderManagerService } from '@src/plugins/services/provider-manager.service.js';
 import { installNpmPackage } from './plugin-fs.js';
-import type { provider_document, ProviderEntry, SimpleNSConfig } from '@src/types/types.js';
+import type { provider_document, ProviderEntry, ProviderOptions, SimpleNSConfig } from '@src/types/types.js';
 
 // Plugins directory for user-installed plugins
 const PLUGINS_DIR = join(process.cwd(), '.plugins');
@@ -404,7 +404,7 @@ export async function registerProvider(
     provider: SimpleNSProvider,
     id: string,
     credentials: Record<string, string>,
-    options?: Record<string, unknown>
+    options?: ProviderOptions
 ): Promise<void> {
     await provider.initialize({
         id,
@@ -412,7 +412,7 @@ export async function registerProvider(
         options,
     });
 
-    const priority = (options?.priority as number) || 0;
+    const priority = options?.priority ?? 0;
     PluginRegistry.register(provider, id, priority);
 }
 

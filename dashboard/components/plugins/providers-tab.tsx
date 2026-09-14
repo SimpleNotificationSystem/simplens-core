@@ -50,6 +50,20 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+type AdditionalOption = {
+  id: string;
+  key: string;
+  value: string;
+};
+
+let additionalOptionId = 0;
+
+const createAdditionalOption = (key = "", value = ""): AdditionalOption => ({
+  id: `additional-option-${additionalOptionId++}`,
+  key,
+  value,
+});
+
 export function ProvidersTab() {
   const {
     data: providersData,
@@ -69,6 +83,12 @@ export function ProvidersTab() {
   const [providerId, setProviderId] = useState("");
   const [pluginName, setPluginName] = useState("");
   const [priority, setPriority] = useState(0);
+  const [rateLimit, setRateLimit] = useState({
+    maxTokens: "",
+    refillRate: "",
+    refillInterval: "second",
+  });
+  const [additionalOptions, setAdditionalOptions] = useState<AdditionalOption[]>([]);
   const [enabled, setEnabled] = useState(true);
   const [credentials, setCredentials] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -90,6 +110,8 @@ export function ProvidersTab() {
     setProviderId("");
     setPluginName(installedPlugins[0]?.name || "");
     setPriority(0);
+    setRateLimit({ maxTokens: "", refillRate: "", refillInterval: "second" });
+    setAdditionalOptions([]);
     setEnabled(true);
     setCredentials({});
     setTestResult(null);
@@ -107,11 +129,53 @@ export function ProvidersTab() {
     setEditingProvider(provider);
     setProviderId(provider.id);
     setPluginName(provider.plugin_name);
-    setPriority(provider.priority);
+    setPriority(provider.options?.priority ?? 0);
+    setRateLimit({
+      maxTokens: provider.options?.rateLimit?.maxTokens?.toString() || "",
+      refillRate: provider.options?.rateLimit?.refillRate?.toString() || "",
+      refillInterval: provider.options?.rateLimit?.refillInterval || "second",
+    });
+    setAdditionalOptions(
+      Object.entries(provider.options || {})
+        .filter(([key]) => key !== "priority" && key !== "rateLimit")
+        .map(([key, value]) => ({
+          ...createAdditionalOption(
+            key,
+            typeof value === "string" ? value : JSON.stringify(value),
+          ),
+        }))
+    );
     setEnabled(provider.enabled);
     setCredentials({});
     setTestResult(null);
     setModalOpen(true);
+  };
+
+  const buildProviderOptions = (): Record<string, unknown> => {
+    const options: Record<string, unknown> = { priority };
+    const configuredRateLimit: Record<string, unknown> = {};
+
+    if (rateLimit.maxTokens.trim() !== "") {
+      configuredRateLimit.maxTokens = parseInt(rateLimit.maxTokens, 10);
+    }
+    if (rateLimit.refillRate.trim() !== "") {
+      configuredRateLimit.refillRate = parseInt(rateLimit.refillRate, 10);
+    }
+    if (rateLimit.refillInterval) {
+      configuredRateLimit.refillInterval = rateLimit.refillInterval;
+    }
+    if (Object.keys(configuredRateLimit).length > 0) {
+      options.rateLimit = configuredRateLimit;
+    }
+
+    for (const option of additionalOptions) {
+      const key = option.key.trim();
+      if (!key || key === "priority" || key === "rateLimit") continue;
+      const value = option.value.trim();
+      options[key] = /^-?\d+$/.test(value) ? parseInt(value, 10) : option.value;
+    }
+
+    return options;
   };
 
   const handleTestConnection = async () => {
@@ -144,7 +208,7 @@ export function ProvidersTab() {
     try {
       if (editingProvider) {
         await providerService.update(editingProvider.id, {
-          priority,
+          options: buildProviderOptions(),
           enabled,
           credentials: Object.keys(credentials).length > 0 ? credentials : undefined,
         });
@@ -158,7 +222,7 @@ export function ProvidersTab() {
           id: providerId.trim(),
           plugin_name: pluginName,
           credentials,
-          priority,
+          options: buildProviderOptions(),
           enabled,
         });
         toast.success(`Provider '${providerId}' created`);
@@ -301,7 +365,7 @@ export function ProvidersTab() {
 
                 <div className="flex items-center gap-2 flex-wrap text-xs">
                   <Badge variant="outline">Channel: {p.channel}</Badge>
-                  <Badge variant="outline">Priority: {p.priority}</Badge>
+                  <Badge variant="outline">Priority: {p.options?.priority || 0}</Badge>
                   <div className="flex items-center gap-1 text-muted-foreground">
                     <KeyRound className="h-3.5 w-3.5 text-emerald-500" />
                     <span>Encrypted (RSA-OAEP)</span>
@@ -421,6 +485,101 @@ export function ProvidersTab() {
                     </Label>
                   </div>
                 </div>
+              </div>
+
+              <div className="space-y-3 pt-2 border-t">
+                <Label className="text-sm font-semibold">Rate Limit</Label>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="rate-limit-max-tokens" className="text-xs">Max Tokens</Label>
+                    <Input
+                      id="rate-limit-max-tokens"
+                      type="number"
+                      step="1"
+                      min="0"
+                      value={rateLimit.maxTokens}
+                      onChange={(e) => setRateLimit({ ...rateLimit, maxTokens: e.target.value })}
+                      placeholder="100"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="rate-limit-refill-rate" className="text-xs">Refill Rate</Label>
+                    <Input
+                      id="rate-limit-refill-rate"
+                      type="number"
+                      step="1"
+                      min="0"
+                      value={rateLimit.refillRate}
+                      onChange={(e) => setRateLimit({ ...rateLimit, refillRate: e.target.value })}
+                      placeholder="10"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="rate-limit-interval" className="text-xs">Interval</Label>
+                    <Select
+                      value={rateLimit.refillInterval}
+                      onValueChange={(value) => setRateLimit({ ...rateLimit, refillInterval: value })}
+                    >
+                      <SelectTrigger id="rate-limit-interval">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="second">Second</SelectItem>
+                        <SelectItem value="minute">Minute</SelectItem>
+                        <SelectItem value="hour">Hour</SelectItem>
+                        <SelectItem value="day">Day</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-2 border-t">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold">Additional Options</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAdditionalOptions([...additionalOptions, createAdditionalOption()])}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Option
+                  </Button>
+                </div>
+                {additionalOptions.map((option, index) => (
+                  <div className="flex items-center gap-2" key={option.id}>
+                    <Input
+                      aria-label={`Option ${index + 1} key`}
+                      placeholder="Option key"
+                      value={option.key}
+                      onChange={(e) => {
+                        const next = [...additionalOptions];
+                        next[index] = { ...next[index], key: e.target.value };
+                        setAdditionalOptions(next);
+                      }}
+                    />
+                    <Input
+                      aria-label={`Option ${index + 1} value`}
+                      placeholder="Option value"
+                      value={option.value}
+                      onChange={(e) => {
+                        const next = [...additionalOptions];
+                        next[index] = { ...next[index], value: e.target.value };
+                        setAdditionalOptions(next);
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Remove option ${index + 1}`}
+                      onClick={() => setAdditionalOptions(additionalOptions.filter((_, itemIndex) => itemIndex !== index))}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
               </div>
 
               {/* Dynamic Credential Fields from Plugin Manifest */}

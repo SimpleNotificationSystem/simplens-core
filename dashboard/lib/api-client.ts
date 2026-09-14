@@ -148,15 +148,13 @@ export const providerService = {
     id: string;
     plugin_name: string;
     credentials: Record<string, string>;
-    priority?: number;
-    options?: Record<string, unknown>;
+    options?: Record<string, unknown> & { priority?: number };
     enabled?: boolean;
   }): Promise<{ message: string; provider: ProviderDto }> =>
     apiClient.post('/api/providers', payload),
   update: (id: string, payload: {
     credentials?: Record<string, string>;
-    priority?: number;
-    options?: Record<string, unknown>;
+    options?: Record<string, unknown> & { priority?: number };
     enabled?: boolean;
   }): Promise<{ message: string; provider: ProviderDto }> =>
     apiClient.put(`/api/providers/${id}`, payload),

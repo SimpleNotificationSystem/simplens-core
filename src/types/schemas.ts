@@ -288,6 +288,26 @@ export const providerManifestSchema = z.object({
     optionalConfig: z.array(z.string()).optional(),
 });
 
+  /** Options supplied by a YAML/JSON provider configuration entry. */
+  export const providerConfigOptionsSchema = z.object({
+    priority: z.number().int().optional(),
+    rateLimit: z.object({
+      maxTokens: z.number().nonnegative().optional(),
+      refillRate: z.number().nonnegative().optional(),
+      refillInterval: z.enum(['second', 'minute', 'hour', 'day']).optional(),
+    }).optional(),
+  }).catchall(z.unknown());
+
+  /** Provider entry as read from YAML/JSON configuration. */
+  export const providerConfigEntrySchema = z.object({
+    package: z.string().min(1),
+    version: z.string().optional(),
+    id: z.string().min(1),
+    credentials: z.record(z.string(), z.string()).optional(),
+    optionalConfig: z.record(z.string(), z.string()).optional(),
+    options: providerConfigOptionsSchema.optional(),
+  });
+
 /**
  * Plugin document schema
  */
@@ -308,10 +328,9 @@ export const providerSchema = z.object({
     id: z.string().min(1),
     plugin_name: z.string().min(1),
     channel: z.string().min(1),
-    priority: z.number().int().default(0),
     enabled: z.boolean().default(true),
     credentials: encryptedCredentialsSchema,
-    options: z.record(z.string(), z.unknown()).optional(),
+  options: providerConfigOptionsSchema.optional(),
     created_at: z.coerce.date().optional(),
     updated_at: z.coerce.date().optional(),
 });

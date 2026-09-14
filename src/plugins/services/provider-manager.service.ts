@@ -15,7 +15,7 @@ import {
 import { importAndInstantiateProvider } from '@src/plugins/loader/plugin-fs.js';
 import { PluginRegistry } from '@src/plugins/loader/registry.js';
 import { PluginSyncService } from '@src/plugins/sync/plugin-sync.service.js';
-import type { provider_document, ProviderConfig, ProviderResponseDto } from '@src/types/types.js';
+import type { provider_document, ProviderConfig, ProviderOptions, ProviderResponseDto } from '@src/types/types.js';
 import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
 
 export type { ProviderResponseDto } from '@src/types/types.js';
@@ -28,8 +28,7 @@ export class ProviderManagerService {
     id: string;
     plugin_name: string;
     credentials: Record<string, string>;
-    priority?: number;
-    options?: Record<string, unknown>;
+    options?: ProviderOptions;
     enabled?: boolean;
   }): Promise<ProviderResponseDto> {
     logger.info(`Creating provider '${data.id}' using plugin '${data.plugin_name}'...`);
@@ -50,7 +49,6 @@ export class ProviderManagerService {
       id: data.id,
       plugin_name: data.plugin_name,
       channel: plugin.manifest.channel,
-      priority: data.priority ?? 0,
       enabled: data.enabled !== false,
       credentials: encryptedCredentials,
       options: data.options || {},
@@ -78,9 +76,8 @@ export class ProviderManagerService {
       id: providerDoc.id,
       plugin_name: providerDoc.plugin_name,
       channel: providerDoc.channel,
-      priority: providerDoc.priority,
       enabled: providerDoc.enabled,
-      options: providerDoc.options as Record<string, unknown> | undefined,
+      options: providerDoc.options as ProviderOptions | undefined,
       credentials_configured: true,
       created_at: providerDoc.created_at,
       updated_at: providerDoc.updated_at,
@@ -94,8 +91,7 @@ export class ProviderManagerService {
     id: string,
     updates: {
       credentials?: Record<string, string>;
-      priority?: number;
-      options?: Record<string, unknown>;
+      options?: ProviderOptions;
       enabled?: boolean;
     }
   ): Promise<ProviderResponseDto> {
@@ -106,9 +102,6 @@ export class ProviderManagerService {
       throw new Error(`Provider '${id}' not found.`);
     }
 
-    if (updates.priority !== undefined) {
-      providerDoc.priority = updates.priority;
-    }
     if (updates.enabled !== undefined) {
       providerDoc.enabled = updates.enabled;
     }
@@ -144,7 +137,6 @@ export class ProviderManagerService {
       id: providerDoc.id,
       plugin_name: providerDoc.plugin_name,
       channel: providerDoc.channel,
-      priority: providerDoc.priority,
       enabled: providerDoc.enabled,
       options: providerDoc.options as Record<string, unknown> | undefined,
       credentials_configured: true,
@@ -188,16 +180,15 @@ export class ProviderManagerService {
    * List all providers without exposing ciphertext credentials
    */
   public static async listProviders(): Promise<ProviderResponseDto[]> {
-    const providers = await Provider.find().sort({ channel: 1, priority: -1 }).lean();
+    const providers = await Provider.find().sort({ channel: 1, 'options.priority': -1 }).lean();
 
     return providers.map((p) => ({
       _id: p._id.toString(),
       id: p.id,
       plugin_name: p.plugin_name,
       channel: p.channel,
-      priority: p.priority,
       enabled: p.enabled,
-      options: p.options as Record<string, unknown> | undefined,
+      options: p.options as ProviderOptions | undefined,
       credentials_configured: !!p.credentials?.encrypted_data,
       created_at: p.created_at,
       updated_at: p.updated_at,
@@ -224,9 +215,8 @@ export class ProviderManagerService {
       id: providerDoc.id,
       plugin_name: providerDoc.plugin_name,
       channel: providerDoc.channel,
-      priority: providerDoc.priority,
       enabled: providerDoc.enabled,
-      options: providerDoc.options as Record<string, unknown> | undefined,
+      options: providerDoc.options as ProviderOptions | undefined,
       credentials_configured: !!providerDoc.credentials?.encrypted_data,
       decrypted_credentials: decrypted,
       created_at: providerDoc.created_at,
@@ -241,11 +231,11 @@ export class ProviderManagerService {
     provider_id?: string;
     plugin_name?: string;
     credentials?: Record<string, string>;
-    options?: Record<string, unknown>;
+    options?: ProviderOptions;
   }): Promise<{ success: boolean; message: string }> {
     let pluginName = data.plugin_name;
     let credentials = data.credentials;
-    let options = data.options || {};
+    let options: ProviderOptions = data.options || {};
 
     if (data.provider_id) {
       const existing = await Provider.findOne({ id: data.provider_id });
@@ -253,7 +243,7 @@ export class ProviderManagerService {
         throw new Error(`Provider '${data.provider_id}' not found.`);
       }
       pluginName = existing.plugin_name;
-      options = { ...(existing.options as Record<string, unknown>), ...options };
+      options = { ...(existing.options as ProviderOptions), ...options };
       if (!credentials || Object.keys(credentials).length === 0) {
         credentials = await decryptCredentials(existing.credentials);
       }
@@ -303,8 +293,7 @@ export class ProviderManagerService {
         id: providerDoc.id,
         credentials,
         options: {
-          ...(providerDoc.options as Record<string, unknown>),
-          priority: providerDoc.priority,
+          ...(providerDoc.options as ProviderOptions),
         },
       };
 
@@ -316,7 +305,11 @@ export class ProviderManagerService {
       }
     }
 
-    PluginRegistry.registerOrReplace(providerInstance, providerDoc.id, providerDoc.priority ?? 0);
+    PluginRegistry.registerOrReplace(
+      providerInstance,
+      providerDoc.id,
+      providerDoc.options?.priority ?? 0
+    );
     logger.success(`Registered provider '${providerDoc.id}' in PluginRegistry.`);
   }
 

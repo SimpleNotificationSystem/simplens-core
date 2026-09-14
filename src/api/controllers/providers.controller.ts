@@ -58,7 +58,7 @@ export const getProvider = async (req: Request, res: Response): Promise<void> =>
  */
 export const createProvider = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id, plugin_name, credentials, priority, options, enabled } = req.body;
+    const { id, plugin_name, credentials, options, enabled } = req.body;
 
     if (!id || typeof id !== 'string') {
       res.status(400).json({
@@ -88,7 +88,6 @@ export const createProvider = async (req: Request, res: Response): Promise<void>
       id: id.trim(),
       plugin_name: plugin_name.trim(),
       credentials,
-      priority: typeof priority === 'number' ? priority : 0,
       options: options || {},
       enabled: enabled !== false,
     });
@@ -114,11 +113,10 @@ export const createProvider = async (req: Request, res: Response): Promise<void>
  */
 export const updateProvider = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { credentials, priority, options, enabled } = req.body;
+    const { credentials, options, enabled } = req.body;
 
     const provider = await ProviderManagerService.updateProvider(req.params.id, {
       credentials,
-      priority: typeof priority === 'number' ? priority : undefined,
       options,
       enabled: typeof enabled === 'boolean' ? enabled : undefined,
     });

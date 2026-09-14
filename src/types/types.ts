@@ -123,6 +123,8 @@ import {
     // Plugin & Provider schemas
     encryptedCredentialsSchema,
     providerManifestSchema,
+    providerConfigOptionsSchema,
+    providerConfigEntrySchema,
     pluginSchema,
     providerSchema,
     channelRoutingSchema,
@@ -292,29 +294,11 @@ export interface PluginMetadata {
     channels: Record<string, ChannelMetadata>;
 }
 
-export interface ProviderRateLimitOptions {
-    maxTokens?: number;
-    refillRate?: number;
-    refillInterval?: RefillInterval;
-}
+export type ProviderRateLimitOptions = z.infer<typeof providerConfigOptionsSchema>['rateLimit'];
+export type ProviderOptions = z.infer<typeof providerConfigOptionsSchema>;
 
-export interface ProviderOptions {
-    priority?: number;
-    rateLimit?: ProviderRateLimitOptions;
-    [key: string]: unknown;
-}
-
-export interface ProviderEntryBase {
-    package: string;
-    id: string;
-    credentials?: Record<string, string>;
-    optionalConfig?: Record<string, string>;
-    options?: ProviderOptions;
-}
-
-export interface YamlProviderEntry extends ProviderEntryBase {
-    version?: string;
-}
+export type ProviderConfigEntry = z.infer<typeof providerConfigEntrySchema>;
+export type YamlProviderEntry = ProviderConfigEntry;
 
 export interface YamlConfig {
     providers?: YamlProviderEntry[];
@@ -325,9 +309,9 @@ export interface YamlConfig {
     }>;
 }
 
-export interface ProviderEntry extends ProviderEntryBase {
+export type ProviderEntry = ProviderConfigEntry & {
     credentials: Record<string, string>;
-}
+};
 
 export interface SimpleNSConfig {
     providers: ProviderEntry[];
@@ -342,9 +326,8 @@ export interface ProviderResponseDto {
     id: string;
     plugin_name: string;
     channel: string;
-    priority: number;
     enabled: boolean;
-    options?: Record<string, unknown>;
+    options?: ProviderOptions;
     credentials_configured: boolean;
     created_at?: Date;
     updated_at?: Date;

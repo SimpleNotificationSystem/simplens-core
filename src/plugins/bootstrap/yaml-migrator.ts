@@ -181,7 +181,6 @@ export class YamlMigrator {
           id: entry.id,
           plugin_name: entry.package,
           channel,
-          priority: entry.options?.priority ?? 0,
           enabled: true,
           credentials: encryptedCreds,
           options: mergedOptions,

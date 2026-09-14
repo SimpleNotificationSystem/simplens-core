@@ -249,9 +249,16 @@ export interface ProviderDto {
   id: string;
   plugin_name: string;
   channel: string;
-  priority: number;
   enabled: boolean;
-  options?: Record<string, unknown>;
+  options?: {
+    priority?: number;
+    rateLimit?: {
+      maxTokens?: number;
+      refillRate?: number;
+      refillInterval?: "second" | "minute" | "hour" | "day";
+    };
+    [key: string]: unknown;
+  };
   credentials_configured: boolean;
   decrypted_credentials?: Record<string, string>;
   created_at?: string;

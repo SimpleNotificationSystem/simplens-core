@@ -38,11 +38,6 @@ const provider_schema = new mongoose.Schema<provider_document>(
       required: true,
       index: true,
     },
-    priority: {
-      type: Number,
-      default: 0,
-      index: true,
-    },
     enabled: {
       type: Boolean,
       default: true,
@@ -66,7 +61,7 @@ const provider_schema = new mongoose.Schema<provider_document>(
 );
 
 // Compound index for priority-based provider routing per channel
-provider_schema.index({ channel: 1, priority: -1 });
+provider_schema.index({ channel: 1, 'options.priority': -1 });
 
 const provider_model =
   mongoose.models.Provider || mongoose.model<provider_document>('Provider', provider_schema);
