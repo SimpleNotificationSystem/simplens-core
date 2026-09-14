@@ -47,6 +47,8 @@ import {
   AlertCircle,
   Loader2,
   Server,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -91,6 +93,8 @@ export function ProvidersTab() {
   const [additionalOptions, setAdditionalOptions] = useState<AdditionalOption[]>([]);
   const [enabled, setEnabled] = useState(true);
   const [credentials, setCredentials] = useState<Record<string, string>>({});
+  const [visibleCredentials, setVisibleCredentials] = useState<Record<string, boolean>>({});
+  const [loadingCredentialVisibility, setLoadingCredentialVisibility] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
 
   // Test Connection State
@@ -114,6 +118,8 @@ export function ProvidersTab() {
     setAdditionalOptions([]);
     setEnabled(true);
     setCredentials({});
+    setVisibleCredentials({});
+    setLoadingCredentialVisibility({});
     setTestResult(null);
   };
 
@@ -147,6 +153,8 @@ export function ProvidersTab() {
     );
     setEnabled(provider.enabled);
     setCredentials({});
+    setVisibleCredentials({});
+    setLoadingCredentialVisibility({});
     setTestResult(null);
     setModalOpen(true);
   };
@@ -176,6 +184,32 @@ export function ProvidersTab() {
     }
 
     return options;
+  };
+
+  const toggleCredentialVisibility = async (field: string): Promise<void> => {
+    if (visibleCredentials[field]) {
+      setVisibleCredentials({ ...visibleCredentials, [field]: false });
+      return;
+    }
+
+    if (!editingProvider) return;
+
+    if (!credentials[field]) {
+      setLoadingCredentialVisibility({ ...loadingCredentialVisibility, [field]: true });
+      try {
+        const result = await providerService.get(editingProvider.id, true);
+        const decryptedCredentials = result.provider.decrypted_credentials || {};
+        setCredentials({ ...credentials, ...decryptedCredentials });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : `Failed to reveal ${field}`;
+        toast.error(message);
+        return;
+      } finally {
+        setLoadingCredentialVisibility({ ...loadingCredentialVisibility, [field]: false });
+      }
+    }
+
+    setVisibleCredentials({ ...visibleCredentials, [field]: true });
   };
 
   const handleTestConnection = async () => {
@@ -606,20 +640,51 @@ export function ProvidersTab() {
                       <Label htmlFor={`cred-${field}`} className="text-xs font-mono">
                         {field}
                       </Label>
-                      <Input
-                        id={`cred-${field}`}
-                        type={field.toLowerCase().includes("pass") || field.toLowerCase().includes("secret") || field.toLowerCase().includes("token") ? "password" : "text"}
-                        placeholder={
-                          editingProvider
-                            ? "Leave empty to keep existing encrypted value"
-                            : `Enter ${field}`
-                        }
-                        value={credentials[field] || ""}
-                        onChange={(e) =>
-                          setCredentials({ ...credentials, [field]: e.target.value })
-                        }
-                        required={!editingProvider}
-                      />
+                      <div className="relative">
+                        <Input
+                          id={`cred-${field}`}
+                          className={editingProvider ? "pr-10" : undefined}
+                          type={
+                            editingProvider
+                              ? visibleCredentials[field]
+                                ? "text"
+                                : "password"
+                              : field.toLowerCase().includes("pass") || field.toLowerCase().includes("secret") || field.toLowerCase().includes("token")
+                                ? "password"
+                                : "text"
+                          }
+                          placeholder={
+                            editingProvider
+                              ? "Leave empty to keep existing encrypted value"
+                              : `Enter ${field}`
+                          }
+                          value={credentials[field] || ""}
+                          onChange={(e) =>
+                            setCredentials({ ...credentials, [field]: e.target.value })
+                          }
+                          required={!editingProvider}
+                        />
+                        {editingProvider && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="absolute right-1 top-1/2 -translate-y-1/2"
+                            aria-label={visibleCredentials[field] ? `Hide ${field}` : `Show ${field}`}
+                            title={visibleCredentials[field] ? `Hide ${field}` : `Show ${field}`}
+                            disabled={loadingCredentialVisibility[field]}
+                            onClick={() => void toggleCredentialVisibility(field)}
+                          >
+                            {loadingCredentialVisibility[field] ? (
+                              <Loader2 className="animate-spin" />
+                            ) : visibleCredentials[field] ? (
+                              <Eye />
+                            ) : (
+                              <EyeOff />
+                            )}
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   ))
                 ) : (
