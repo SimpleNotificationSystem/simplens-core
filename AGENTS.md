@@ -21,6 +21,9 @@ Use TypeScript with strict typing and existing `@src/*` path aliases. Match curr
 
 Plan changes before writing code. Follow low-level design principles: single responsibility, clear interfaces, useful dependency inversion, and explicit error handling. Do not duplicate logic; extract shared behavior into focused utilities, services, or test helpers. Always use `axios` instead of the plain `fetch` API in this project.
 
+## Type & Schema Centralisation
+All TypeScript interfaces and types that live inside `src/` **must** be declared in `src/types/types.ts`. All Zod (or other validation library) schemas must be declared in `src/types/schemas.ts`. Individual source files must **not** define their own local interfaces, types, or schemas — import everything from `@src/types/types` or `@src/types/schemas` instead. This rule applies to every layer: API controllers, services, plugins, workers, processors, utilities, and database modules.
+
 ## Testing Guidelines
 Vitest is the test runner. Integration tests also use `supertest`, `mongodb-memory-server`, and Redis mocks. Name test files with `.test.ts`, for example `tests/unit/plugins/loader.test.ts`.
 
