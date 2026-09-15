@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Puzzle, Server, Package, GitBranch } from "lucide-react";
+import { Server, Package, GitBranch } from "lucide-react";
 import { ProvidersTab } from "@/components/plugins/providers-tab";
 import { InstalledPluginsTab } from "@/components/plugins/installed-plugins-tab";
 import { ChannelRoutingTab } from "@/components/plugins/channel-routing-tab";
