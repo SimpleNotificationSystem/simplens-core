@@ -7,6 +7,10 @@
 import { Request, Response } from 'express';
 import { PluginRegistry, PluginManagerService } from '@src/plugins/index.js';
 import { apiLogger as logger } from '@src/workers/utils/logger.js';
+import axios from 'axios';
+import type { plugin_catalog_entry } from '@src/types/types.js';
+
+const PLUGIN_CATALOG_BASE_URL = 'https://www.simplens.in/plugins';
 
 /**
  * GET /api/plugins
@@ -46,6 +50,37 @@ export const listInstalledPlugins = async (_req: Request, res: Response): Promis
     res.status(500).json({
       error: 'Internal server error',
       message: 'Failed to list installed plugins'
+    });
+  }
+};
+
+/**
+ * GET /api/plugins/catalog/:category
+ * Proxy the public plugin catalog server-side to avoid browser CORS restrictions.
+ */
+export const listPluginCatalog = async (req: Request, res: Response): Promise<void> => {
+  const category = req.params.category;
+  if (category !== 'official' && category !== 'community') {
+    res.status(400).json({
+      error: 'Bad Request',
+      message: 'Catalog category must be official or community',
+    });
+    return;
+  }
+
+  try {
+    const response = await axios.get<plugin_catalog_entry[]>(
+      `${PLUGIN_CATALOG_BASE_URL}/${category}`,
+      { timeout: 10000 }
+    );
+    const catalog = Array.isArray(response.data) ? response.data : [];
+    res.json(catalog);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(`Error loading ${category} plugin catalog: ${message}`);
+    res.status(502).json({
+      error: 'Bad Gateway',
+      message: `Failed to load ${category} plugin catalog`,
     });
   }
 };

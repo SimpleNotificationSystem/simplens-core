@@ -298,6 +298,13 @@ export type ProviderRateLimitOptions = z.infer<typeof providerConfigOptionsSchem
 export type ProviderOptions = z.infer<typeof providerConfigOptionsSchema>;
 
 export type ProviderConfigEntry = z.infer<typeof providerConfigEntrySchema>;
+
+export type plugin_catalog_entry = {
+    name: string;
+    package: string;
+    description: string;
+    versions?: string[];
+};
 export type YamlProviderEntry = ProviderConfigEntry;
 
 export interface YamlConfig {

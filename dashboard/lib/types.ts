@@ -244,6 +244,13 @@ export interface InstalledPlugin {
   updated_at?: string;
 }
 
+export interface PluginCatalogItem {
+  name: string;
+  package: string;
+  description: string;
+  versions?: string[];
+}
+
 export interface ProviderDto {
   _id?: string;
   id: string;

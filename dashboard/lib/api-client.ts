@@ -20,6 +20,7 @@ import {
   AdminChannelFormData,
   AdminChannelProviderMeta,
   InstalledPlugin,
+  PluginCatalogItem,
   ProviderDto,
   ChannelRoutingDto,
 } from './types';
@@ -130,6 +131,8 @@ export const alertService = {
 };
 
 export const pluginService = {
+  listCatalog: (category: 'official' | 'community'): Promise<PluginCatalogItem[]> =>
+    apiClient.get(`/api/plugins/catalog/${category}`),
   getMetadata: (): Promise<PluginMetadata> => apiClient.get('/api/plugins'),
   listInstalled: (): Promise<{ plugins: InstalledPlugin[] }> => apiClient.get('/api/plugins/installed'),
   install: (packageName: string, version?: string): Promise<{ message: string; plugin: InstalledPlugin }> =>

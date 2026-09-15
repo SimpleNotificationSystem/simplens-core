@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { pluginService } from "@/lib/api-client";
-import type { InstalledPlugin } from "@/lib/types";
+import type { InstalledPlugin, PluginCatalogItem } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +28,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Download, Package, RefreshCw, Trash2, ArrowUpDown, Loader2, ExternalLink, Info } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Download, Package, RefreshCw, Trash2, ArrowUpDown, Loader2, ExternalLink, Info, Search } from "lucide-react";
 import { toast } from "sonner";
 
 export function InstalledPluginsTab() {
@@ -38,9 +40,19 @@ export function InstalledPluginsTab() {
   );
 
   const [installModalOpen, setInstallModalOpen] = useState(false);
-  const [packageName, setPackageName] = useState("");
-  const [packageVersion, setPackageVersion] = useState("");
-  const [installing, setInstalling] = useState(false);
+  const [catalogTab, setCatalogTab] = useState<"official" | "community">("official");
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [selectedVersions, setSelectedVersions] = useState<Record<string, string>>({});
+  const [installingPackage, setInstallingPackage] = useState<string | null>(null);
+
+  const { data: officialCatalog = [], isLoading: officialLoading, error: officialError } = useSWR<PluginCatalogItem[]>(
+    installModalOpen && catalogTab === "official" ? "plugin-catalog-official" : null,
+    () => pluginService.listCatalog("official")
+  );
+  const { data: communityCatalog = [], isLoading: communityLoading, error: communityError } = useSWR<PluginCatalogItem[]>(
+    installModalOpen && catalogTab === "community" ? "plugin-catalog-community" : null,
+    () => pluginService.listCatalog("community")
+  );
 
   const [versionModalOpen, setVersionModalOpen] = useState(false);
   const [selectedPlugin, setSelectedPlugin] = useState<InstalledPlugin | null>(null);
@@ -52,25 +64,33 @@ export function InstalledPluginsTab() {
   const [uninstalling, setUninstalling] = useState(false);
   const [detailsPlugin, setDetailsPlugin] = useState<InstalledPlugin | null>(null);
 
-  const handleInstall = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!packageName.trim()) return;
-
-    setInstalling(true);
+  const handleInstall = async (plugin: PluginCatalogItem) => {
+    const version = selectedVersions[plugin.package] || "latest";
+    setInstallingPackage(plugin.package);
     try {
-      await pluginService.install(packageName.trim(), packageVersion.trim() || undefined);
-      toast.success(`Plugin '${packageName}' installed successfully`);
-      setInstallModalOpen(false);
-      setPackageName("");
-      setPackageVersion("");
+      await pluginService.install(plugin.package, version === "latest" ? undefined : version);
+      toast.success(`Plugin '${plugin.name}' installed successfully`);
       mutate();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to install plugin";
       toast.error(message);
     } finally {
-      setInstalling(false);
+      setInstallingPackage(null);
     }
   };
+
+  const catalog = catalogTab === "official" ? officialCatalog : communityCatalog;
+  const catalogLoading = catalogTab === "official" ? officialLoading : communityLoading;
+  const catalogError = catalogTab === "official" ? officialError : communityError;
+  const filteredCatalog = useMemo(() => {
+    const query = catalogSearch.trim().toLowerCase();
+    if (!query) return catalog;
+    return catalog.filter((plugin) =>
+      [plugin.name, plugin.package, plugin.description].some((value) =>
+        value.toLowerCase().includes(query)
+      )
+    );
+  }, [catalog, catalogSearch]);
 
   const handleChangeVersion = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,7 +130,11 @@ export function InstalledPluginsTab() {
     }
   };
 
-  const plugins = data?.plugins || [];
+  const plugins = useMemo(() => data?.plugins || [], [data?.plugins]);
+  const installedPackages = useMemo(
+    () => new Set(plugins.map((plugin) => plugin.name)),
+    [plugins]
+  );
 
   return (
     <div className="space-y-6">
@@ -308,50 +332,103 @@ export function InstalledPluginsTab() {
 
       {/* Install Plugin Dialog */}
       <Dialog open={installModalOpen} onOpenChange={setInstallModalOpen}>
-        <DialogContent>
-          <form onSubmit={handleInstall}>
+        <DialogContent className="flex max-h-[min(720px,calc(100vh-2rem))] max-w-3xl flex-col overflow-hidden">
             <DialogHeader>
               <DialogTitle>Install Plugin Package</DialogTitle>
               <DialogDescription>
-                Install a new notification provider package from npm into SimpleNS.
+                Browse official and community provider packages available for SimpleNS.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="pkg-name">npm Package Name</Label>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4 pr-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  id="pkg-name"
-                  placeholder="e.g. @simplens/nodemailer-gmail or @simplens/mock"
-                  value={packageName}
-                  onChange={(e) => setPackageName(e.target.value)}
-                  required
+                  aria-label="Search plugins"
+                  placeholder="Search by name, package, or description"
+                  className="pl-9"
+                  value={catalogSearch}
+                  onChange={(event) => setCatalogSearch(event.target.value)}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="pkg-version">Version (Optional)</Label>
-                <Input
-                  id="pkg-version"
-                  placeholder="e.g. 1.0.0 or leave empty for latest"
-                  value={packageVersion}
-                  onChange={(e) => setPackageVersion(e.target.value)}
-                />
-              </div>
+              <Tabs value={catalogTab} onValueChange={(value) => setCatalogTab(value as "official" | "community")}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="official">Official</TabsTrigger>
+                  <TabsTrigger value="community">Community</TabsTrigger>
+                </TabsList>
+                <TabsContent value={catalogTab} className="mt-3">
+                  {catalogLoading ? (
+                    <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Loading plugins...
+                    </div>
+                  ) : catalogError ? (
+                    <div className="py-10 text-center text-sm text-destructive">
+                      Failed to load {catalogTab} plugins.
+                    </div>
+                  ) : filteredCatalog.length === 0 ? (
+                    <div className="py-10 text-center text-sm text-muted-foreground">
+                      {catalogTab === "community" && catalog.length === 0
+                        ? "No community plugins are available yet."
+                        : "No plugins match your search."}
+                    </div>
+                  ) : (
+                    <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
+                      {filteredCatalog.map((plugin) => {
+                        const versions = plugin.versions?.length ? plugin.versions : ["latest"];
+                        const selectedVersion = selectedVersions[plugin.package] || versions[0];
+                        return (
+                          <div key={plugin.package} className="flex items-center gap-4 rounded-lg border bg-card p-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium">{plugin.name}</div>
+                              <div className="truncate font-mono text-xs text-muted-foreground">{plugin.package}</div>
+                              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{plugin.description}</p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <Select
+                                value={selectedVersion}
+                                onValueChange={(value) => setSelectedVersions({ ...selectedVersions, [plugin.package]: value })}
+                              >
+                                <SelectTrigger className="w-28" aria-label={`Version for ${plugin.name}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {versions.map((version) => (
+                                    <SelectItem key={version} value={version}>{version}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {installedPackages.has(plugin.package) ? (
+                                <Button type="button" size="sm" variant="secondary" disabled>
+                                  Installed
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => void handleInstall(plugin)}
+                                  disabled={installingPackage !== null}
+                                >
+                                  {installingPackage === plugin.package ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Download className="h-4 w-4" />
+                                  )}
+                                  Install
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
             </div>
             <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setInstallModalOpen(false)}
-                disabled={installing}
-              >
+              <Button type="button" variant="outline" onClick={() => setInstallModalOpen(false)} disabled={installingPackage !== null}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={installing || !packageName.trim()} className="gap-2">
-                {installing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                {installing ? "Installing..." : "Install"}
-              </Button>
             </DialogFooter>
-          </form>
         </DialogContent>
       </Dialog>
 

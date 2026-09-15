@@ -9,7 +9,7 @@ import { InstalledPluginsTab } from "@/components/plugins/installed-plugins-tab"
 import { ChannelRoutingTab } from "@/components/plugins/channel-routing-tab";
 
 export default function PluginsPage() {
-  const [activeTab, setActiveTab] = useState("providers");
+  const [activeTab, setActiveTab] = useState("plugins");
 
   return (
     <DashboardLayout
