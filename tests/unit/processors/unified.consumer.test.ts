@@ -42,6 +42,7 @@ vi.mock('../../../src/config/kafka.config.js', () => ({
     kafka: {
         consumer: vi.fn(() => kafkaConsumerMock),
     },
+    ensureChannelTopic: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../../src/plugins/index.js', () => ({

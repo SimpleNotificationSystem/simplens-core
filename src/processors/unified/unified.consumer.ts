@@ -11,7 +11,7 @@
  */
 
 import { Consumer, EachMessagePayload } from 'kafkajs';
-import { kafka } from '@src/config/kafka.config.js';
+import { kafka, ensureChannelTopic } from '@src/config/kafka.config.js';
 import { NOTIFICATION_STATUS_SF } from '@src/types/types.js';
 import { env } from '@src/config/env.config.js';
 import { unifiedProcessorLogger as logger } from './unified.logger.js';
@@ -447,6 +447,9 @@ export const startUnifiedConsumer = async (channel: string): Promise<void> => {
         logger.warn(`[${channel}] Consumer already running`);
         return;
     }
+
+    // Ensure the Kafka topic exists before attempting to subscribe
+    await ensureChannelTopic(channel);
 
     const topic = getTopicForChannel(channel);
     const groupId = getConsumerGroupId(channel);

@@ -165,7 +165,24 @@ export const createTopics = async (topics: ITopicConfig[]) => {
 };
 
 /**
- * Dynamically expand partition count for a channel topic
+ * Ensure a channel topic exists in Kafka with at least desiredPartitions
+ */
+export const ensureChannelTopic = async (
+    channel: string,
+    desiredPartitions: number = 6
+): Promise<void> => {
+    const topic = getTopicForChannel(channel);
+    await createTopics([
+        {
+            topic,
+            numPartitions: desiredPartitions,
+            replicationFactor: 1,
+        }
+    ]);
+};
+
+/**
+ * Dynamically expand partition count for a channel topic (or create if missing)
  */
 export const expandTopicPartitions = async (
     channel: string,
@@ -180,7 +197,18 @@ export const expandTopicPartitions = async (
         const topicMetadata = metadata.topics.find(t => t.name === topic);
 
         if (!topicMetadata) {
-            throw new Error(`Topic '${topic}' for channel '${channel}' not found in Kafka`);
+            logger.info(`Topic '${topic}' for channel '${channel}' not found in Kafka, creating with ${desiredPartitions} partitions...`);
+            await admin.createTopics({
+                topics: [{
+                    topic,
+                    numPartitions: desiredPartitions,
+                    replicationFactor: 1,
+                }],
+                validateOnly: false,
+                timeout: 30000,
+            });
+            logger.success(`Created Kafka topic '${topic}' with ${desiredPartitions} partitions`);
+            return { previous: 0, current: desiredPartitions };
         }
 
         const currentPartitions = topicMetadata.partitions.length;
@@ -208,4 +236,5 @@ export const expandTopicPartitions = async (
         await admin.disconnect();
     }
 };
+
 

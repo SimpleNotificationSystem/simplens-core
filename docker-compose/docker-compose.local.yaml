@@ -30,7 +30,7 @@ services:
       SIMPLENS_CONFIG_PATH: ${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}
     volumes:
       - logs-data-local:/app/logs
-      - ../simplens.config.yaml:/app/simplens.config.yaml:ro
+      # - ../simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/api/server.js" ]
     networks:
       - simplens-infra
@@ -90,7 +90,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       - logs-data-local:/app/logs
-      - ../simplens.config.yaml:/app/simplens.config.yaml:ro
+      # - ../simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/processors/unified/unified.processor.js" ]
     depends_on:
       api:

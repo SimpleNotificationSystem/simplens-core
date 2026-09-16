@@ -11,6 +11,7 @@ import * as keypairManager from '../../../src/plugins/crypto/keypair-manager.js'
 import * as pluginFs from '../../../src/plugins/loader/plugin-fs.js';
 import { PluginRegistry } from '../../../src/plugins/loader/registry.js';
 import { PluginSyncService } from '../../../src/plugins/sync/plugin-sync.service.js';
+import { ChannelRoutingService } from '../../../src/plugins/services/channel-routing.service.js';
 
 describe('ProviderManagerService', () => {
   beforeEach(() => {
@@ -71,7 +72,8 @@ describe('ProviderManagerService', () => {
       };
 
       vi.spyOn(Provider, 'create').mockResolvedValue(mockCreated as any);
-      vi.spyOn(ProviderManagerService, 'loadAndRegisterProvider').mockResolvedValue(undefined);
+      vi.spyOn(ChannelRouting, 'findOne').mockResolvedValue(null);
+      const setRoutingSpy = vi.spyOn(ChannelRoutingService, 'setChannelRouting').mockResolvedValue({} as any);
 
       const result = await ProviderManagerService.createProvider({
         id: 'mock-test',
@@ -89,10 +91,57 @@ describe('ProviderManagerService', () => {
           options: { priority: 5 },
         })
       );
+      expect(setRoutingSpy).toHaveBeenCalledWith('mock', {
+        default_provider_id: 'mock-test',
+        fallback_provider_ids: [],
+        partitions: 6,
+      });
       expect(PluginSyncService.publish).toHaveBeenCalledWith('PROVIDER_UPSERTED', {
         provider_id: 'mock-test',
       });
       expect(result.credentials_configured).toBe(true);
+    });
+
+    it('should not overwrite ChannelRouting if one already exists for the channel', async () => {
+      vi.spyOn(Provider, 'findOne').mockResolvedValue(null);
+      vi.spyOn(Plugin, 'findOne').mockResolvedValue({
+        name: '@simplens/mock',
+        manifest: { channel: 'mock' },
+      } as any);
+
+      vi.spyOn(keypairManager, 'encryptCredentials').mockResolvedValue({
+        encrypted_data: 'enc123',
+        iv: 'iv123',
+        auth_tag: 'tag123',
+        encrypted_dek: 'dek123',
+      });
+
+      const mockCreated = {
+        _id: '507f1f77bcf86cd799439011',
+        id: 'mock-test-2',
+        plugin_name: '@simplens/mock',
+        channel: 'mock',
+        enabled: true,
+        credentials: { encrypted_data: 'enc123' },
+        options: {},
+        toObject: () => mockCreated,
+      };
+
+      vi.spyOn(Provider, 'create').mockResolvedValue(mockCreated as any);
+      vi.spyOn(ProviderManagerService, 'loadAndRegisterProvider').mockResolvedValue(undefined);
+      vi.spyOn(ChannelRouting, 'findOne').mockResolvedValue({
+        channel: 'mock',
+        default_provider_id: 'existing-provider',
+      } as any);
+      const setRoutingSpy = vi.spyOn(ChannelRoutingService, 'setChannelRouting');
+
+      await ProviderManagerService.createProvider({
+        id: 'mock-test-2',
+        plugin_name: '@simplens/mock',
+        credentials: {},
+      });
+
+      expect(setRoutingSpy).not.toHaveBeenCalled();
     });
   });
 

@@ -110,5 +110,34 @@ describe('ChannelRoutingService', () => {
       });
       expect(result.partitions).toBe(12);
     });
+
+    it('should ensure Kafka topic is created when configuring new channel routing', async () => {
+      vi.spyOn(Provider, 'findOne').mockResolvedValue({
+        id: 'email-primary',
+        channel: 'email',
+      } as any);
+
+      vi.spyOn(ChannelRouting, 'findOne').mockResolvedValue(null);
+
+      const ensureTopicSpy = vi
+        .spyOn(kafkaConfig, 'ensureChannelTopic')
+        .mockResolvedValue(undefined);
+
+      const updatedRouting = {
+        channel: 'email',
+        default_provider_id: 'email-primary',
+        fallback_provider_ids: [],
+        partitions: 6,
+        toObject: () => updatedRouting,
+      };
+
+      vi.spyOn(ChannelRouting, 'findOneAndUpdate').mockResolvedValue(updatedRouting as any);
+
+      await ChannelRoutingService.setChannelRouting('email', {
+        default_provider_id: 'email-primary',
+      });
+
+      expect(ensureTopicSpy).toHaveBeenCalledWith('email', 6);
+    });
   });
 });

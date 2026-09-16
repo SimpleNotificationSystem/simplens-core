@@ -8,6 +8,7 @@
 import Provider from '@src/database/models/provider.models.js';
 import Plugin from '@src/database/models/plugin.models.js';
 import ChannelRouting from '@src/database/models/channel-routing.models.js';
+import { ChannelRoutingService } from '@src/plugins/services/channel-routing.service.js';
 import {
   encryptCredentials,
   decryptCredentials,
@@ -100,6 +101,23 @@ export class ProviderManagerService {
       } catch (err) {
         logger.warn(`Provider '${data.id}' registered in DB, but failed local initialization:`, {
           error: err instanceof Error ? err.message : String(err),
+        });
+      }
+
+      // Automatically create ChannelRouting if none exists for this channel yet
+      try {
+        const existingRouting = await ChannelRouting.findOne({ channel: providerDoc.channel });
+        if (!existingRouting) {
+          logger.info(`No channel routing found for '${providerDoc.channel}'. Automatically creating default routing with provider '${data.id}'...`);
+          await ChannelRoutingService.setChannelRouting(providerDoc.channel, {
+            default_provider_id: data.id,
+            fallback_provider_ids: [],
+            partitions: 6,
+          });
+        }
+      } catch (routingErr) {
+        logger.warn(`Failed to auto-create channel routing for '${providerDoc.channel}':`, {
+          error: routingErr instanceof Error ? routingErr.message : String(routingErr),
         });
       }
     }

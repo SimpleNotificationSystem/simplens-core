@@ -9,7 +9,7 @@ import ChannelRouting from '@src/database/models/channel-routing.models.js';
 import Provider from '@src/database/models/provider.models.js';
 import { PluginRegistry } from '@src/plugins/loader/registry.js';
 import { PluginSyncService } from '@src/plugins/sync/plugin-sync.service.js';
-import { expandTopicPartitions } from '@src/config/kafka.config.js';
+import { expandTopicPartitions, ensureChannelTopic } from '@src/config/kafka.config.js';
 import type { channel_routing_document } from '@src/types/types.js';
 import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
 
@@ -66,29 +66,31 @@ export class ChannelRoutingService {
       }
     }
 
-    // 3. Handle dynamic Kafka partition scaling
+    // 3. Handle dynamic Kafka topic creation and partition scaling
     const existing = await ChannelRouting.findOne({ channel });
     const currentPartitions = existing?.partitions || 6;
     const desiredPartitions = data.partitions !== undefined ? data.partitions : currentPartitions;
 
-    if (desiredPartitions < currentPartitions) {
+    if (existing && desiredPartitions < currentPartitions) {
       throw new Error(
         `Cannot decrease partitions for channel '${channel}' from ${currentPartitions} to ${desiredPartitions}. Kafka partitions can only be increased.`
       );
     }
 
-    if (desiredPartitions > currentPartitions) {
-      logger.info(
-        `Requesting Kafka partition expansion for channel '${channel}' from ${currentPartitions} to ${desiredPartitions}...`
-      );
-      try {
+    try {
+      if (desiredPartitions > currentPartitions) {
+        logger.info(
+          `Requesting Kafka partition expansion for channel '${channel}' from ${currentPartitions} to ${desiredPartitions}...`
+        );
         await expandTopicPartitions(channel, desiredPartitions);
-      } catch (kafkaErr) {
-        logger.error(`Failed to expand Kafka topic partitions for channel '${channel}':`, kafkaErr);
-        throw new Error(`Failed to expand Kafka partitions: ${(kafkaErr as Error).message}`, {
-          cause: kafkaErr,
-        });
+      } else {
+        await ensureChannelTopic(channel, desiredPartitions);
       }
+    } catch (kafkaErr) {
+      logger.error(`Failed to configure Kafka topic for channel '${channel}':`, kafkaErr);
+      throw new Error(`Failed to expand Kafka partitions: ${(kafkaErr as Error).message}`, {
+        cause: kafkaErr,
+      });
     }
 
     // 4. Save to MongoDB
