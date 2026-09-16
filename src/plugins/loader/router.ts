@@ -5,7 +5,7 @@
  */
 
 import { PluginRegistry } from './registry.js';
-import type { DeliveryResult, BaseNotification } from '../interfaces/provider.types.js';
+import type { DeliveryResult, BaseNotification } from '@src/types/types.js';
 import { unifiedProcessorLogger as logger } from '@src/processors/unified/unified.logger.js';
 import { handleSchemaValidationFailure } from '@src/processors/shared/schema-failure-handler.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
@@ -265,23 +265,13 @@ export function validateNotification(
     channel: string,
     notification: unknown
 ): { success: true; data: unknown } | { success: false; error: string } {
-    const provider = PluginRegistry.getDefaultProvider(channel);
+    const providerId = PluginRegistry.getDefaultProviderId(channel);
 
-    if (!provider) {
+    if (!providerId) {
         return { success: false, error: `No provider for channel: ${channel}` };
     }
 
-    const schema = provider.getNotificationSchema();
-    const result = schema.safeParse(notification);
-
-    if (result.success) {
-        return { success: true, data: result.data };
-    }
-
-    return {
-        success: false,
-        error: result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', '),
-    };
+    return validateNotificationForProvider(providerId, notification);
 }
 
 /**

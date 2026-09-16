@@ -21,7 +21,6 @@ export {
     loadProvidersFromEnv,
     loadProvidersFromDatabase,
     getConfiguredChannels,
-    getConfiguredChannelsFromDatabase,
     registerProvider,
 } from './loader/loader.js';
 

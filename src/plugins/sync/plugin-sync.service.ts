@@ -32,10 +32,6 @@ export class PluginSyncServiceClass {
     return PluginSyncServiceClass.instance;
   }
 
-  public getInstanceId(): string {
-    return this.instanceId;
-  }
-
   /**
    * Run an asynchronous task with in-process mutex locking
    * Useful for protecting the .plugins/ folder during npm install/uninstall

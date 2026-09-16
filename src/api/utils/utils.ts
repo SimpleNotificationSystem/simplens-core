@@ -13,6 +13,7 @@ import {
   getTopicForChannel,
   CORE_TOPICS,
   delayed_notification_topic,
+  SimpleNSProvider,
 } from "@src/types/types.js";
 import { NOTIFICATION_STATUS, OUTBOX_STATUS } from "@src/types/types.js";
 import mongoose from "mongoose";
@@ -21,7 +22,6 @@ import outbox_model from "@src/database/models/outbox.models.js";
 import { apiLogger as logger } from "@src/workers/utils/logger.js";
 import { PluginRegistry } from "@src/plugins/index.js";
 import notification_template_model from "@src/database/models/notification-template.models.js";
-import { SimpleNSProvider } from "@src/plugins/interfaces/provider.types.js";
 import { ZodError } from "zod";
 
 const preloadTemplatesByIds = async (

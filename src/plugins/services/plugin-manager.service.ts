@@ -21,14 +21,14 @@ import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
 
 export class PluginManagerService {
   /**
-   * Install an npm package, extract its manifest, persist to MongoDB, and broadcast.
+   * Helper to install package, extract manifest, upsert/update Plugin record, and broadcast sync event
    */
-  public static async installPlugin(
+  private static async saveAndBroadcastPlugin(
     packageName: string,
-    version?: string
+    version: string | undefined,
+    syncAction: 'PLUGIN_INSTALLED' | 'PLUGIN_VERSION_CHANGED',
+    upsert = false
   ): Promise<plugin_document> {
-    logger.info(`Installing plugin package '${packageName}' (version: ${version || 'latest'})...`);
-
     return await PluginSyncService.runWithLock(async () => {
       try {
         installNpmPackage(packageName, version);
@@ -43,21 +43,34 @@ export class PluginManagerService {
             manifest,
             error: undefined,
           },
-          { upsert: true, new: true }
+          upsert ? { upsert: true, new: true } : { new: true }
         );
 
-        await PluginSyncService.publish('PLUGIN_INSTALLED', {
+        await PluginSyncService.publish(syncAction, {
           plugin_name: packageName,
           version: authoritativeVersion,
         });
 
-        logger.success(`Plugin '${packageName}'@${authoritativeVersion} installed successfully.`);
-        return plugin.toObject() as plugin_document;
+        logger.success(
+          `Plugin '${packageName}' ${upsert ? '@' + authoritativeVersion + ' installed' : 'updated to version ' + authoritativeVersion} successfully.`
+        );
+        return plugin!.toObject() as plugin_document;
       } catch (err) {
-        logger.error(`Failed to install plugin '${packageName}':`, err);
+        logger.error(`Failed to process plugin '${packageName}':`, err);
         throw err;
       }
     });
+  }
+
+  /**
+   * Install an npm package, extract its manifest, persist to MongoDB, and broadcast.
+   */
+  public static async installPlugin(
+    packageName: string,
+    version?: string
+  ): Promise<plugin_document> {
+    logger.info(`Installing plugin package '${packageName}' (version: ${version || 'latest'})...`);
+    return this.saveAndBroadcastPlugin(packageName, version, 'PLUGIN_INSTALLED', true);
   }
 
   /**
@@ -74,34 +87,7 @@ export class PluginManagerService {
       throw new Error(`Plugin '${packageName}' is not installed.`);
     }
 
-    return await PluginSyncService.runWithLock(async () => {
-      try {
-        installNpmPackage(packageName, version);
-        const { manifest, version: authoritativeVersion } = await extractPackageManifest(packageName);
-
-        const plugin = await Plugin.findOneAndUpdate(
-          { name: packageName },
-          {
-            version: authoritativeVersion,
-            status: 'installed',
-            manifest,
-            error: undefined,
-          },
-          { new: true }
-        );
-
-        await PluginSyncService.publish('PLUGIN_VERSION_CHANGED', {
-          plugin_name: packageName,
-          version: authoritativeVersion,
-        });
-
-        logger.success(`Plugin '${packageName}' updated to version ${authoritativeVersion}.`);
-        return plugin!.toObject() as plugin_document;
-      } catch (err) {
-        logger.error(`Failed to update plugin '${packageName}' to version '${version}':`, err);
-        throw err;
-      }
-    });
+    return this.saveAndBroadcastPlugin(packageName, version, 'PLUGIN_VERSION_CHANGED', false);
   }
 
   /**
@@ -181,30 +167,25 @@ export class PluginManagerService {
    * Register remote synchronization handlers with Redis Pub/Sub
    */
   public static registerSyncHandlers(): void {
-    PluginSyncService.on('PLUGIN_INSTALLED', async (msg) => {
-      const { plugin_name, version } = msg.payload;
+    const handleRemoteInstallOrUpdate = async (actionDesc: string, payload: { plugin_name?: string; version?: string }) => {
+      const { plugin_name, version } = payload;
       if (!plugin_name) return;
-      logger.info(`Sync: Installing remote plugin '${plugin_name}' (${version || 'latest'})...`);
+      logger.info(`Sync: ${actionDesc} for '${plugin_name}' (${version || 'latest'})...`);
       await PluginSyncService.runWithLock(async () => {
         try {
           installNpmPackage(plugin_name, version);
         } catch (err) {
-          logger.error(`Failed to sync remote install of '${plugin_name}':`, err);
+          logger.error(`Failed to sync remote ${actionDesc} for '${plugin_name}':`, err);
         }
       });
+    };
+
+    PluginSyncService.on('PLUGIN_INSTALLED', async (msg) => {
+      await handleRemoteInstallOrUpdate('Installing remote plugin', msg.payload);
     });
 
     PluginSyncService.on('PLUGIN_VERSION_CHANGED', async (msg) => {
-      const { plugin_name, version } = msg.payload;
-      if (!plugin_name) return;
-      logger.info(`Sync: Changing remote plugin '${plugin_name}' to version '${version}'...`);
-      await PluginSyncService.runWithLock(async () => {
-        try {
-          installNpmPackage(plugin_name, version);
-        } catch (err) {
-          logger.error(`Failed to sync remote version change of '${plugin_name}':`, err);
-        }
-      });
+      await handleRemoteInstallOrUpdate('Changing remote plugin version', msg.payload);
     });
 
     PluginSyncService.on('PLUGIN_UNINSTALLED', async (msg) => {

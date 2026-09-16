@@ -23,7 +23,7 @@ import {
     resolveFallbackProviderId,
     validateNotificationForProvider
 } from '@src/plugins/index.js';
-import type { BaseNotification, DeliveryResult } from '@src/plugins/interfaces/provider.types.js';
+import type { BaseNotification, DeliveryResult } from '@src/types/types.js';
 
 // Shared utilities
 import { tryAcquireProcessingLock, setDelivered, setFailed, setRateLimited } from '@src/processors/shared/idempotency.js';

@@ -18,67 +18,13 @@ import {
   installNpmPackage,
   extractPackageManifest,
   PLUGINS_NODE_MODULES,
+  resolveCredentials,
+  resolveOptionalConfig,
+  findConfigFile,
 } from '@src/plugins/loader/plugin-fs.js';
 import { PluginSyncService } from '@src/plugins/sync/plugin-sync.service.js';
 import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
 import type { YamlConfig } from '@src/types/types.js';
-
-/**
- * Resolve environment variables in credential templates
- */
-function resolveCredentials(credentials?: Record<string, string>): Record<string, string> {
-  const resolved: Record<string, string> = {};
-  for (const [k, v] of Object.entries(credentials || {})) {
-    if (typeof v === 'string' && v.startsWith('${') && v.endsWith('}')) {
-      const envName = v.slice(2, -1);
-      resolved[k] = process.env[envName] || '';
-    } else {
-      resolved[k] = v;
-    }
-  }
-  return resolved;
-}
-
-/**
- * Resolve optional config placeholders and merge into options
- */
-function resolveOptionalConfig(optionalConfig?: Record<string, string>): Record<string, string> {
-  const resolved: Record<string, string> = {};
-  for (const [k, v] of Object.entries(optionalConfig || {})) {
-    if (typeof v === 'string' && v.startsWith('${') && v.endsWith('}')) {
-      const envName = v.slice(2, -1);
-      if (process.env[envName]) {
-        resolved[k] = process.env[envName]!;
-      }
-    } else if (v !== undefined) {
-      resolved[k] = v;
-    }
-  }
-  return resolved;
-}
-
-/**
- * Find local config file if it exists
- */
-function findConfigPath(): string | null {
-  const customPath = process.env.SIMPLENS_CONFIG_PATH;
-  if (customPath && existsSync(customPath)) {
-    return customPath;
-  }
-
-  const candidates = [
-    './simplens.config.yaml',
-    './simplens.config.yml',
-    './simplens.config.json',
-    join(process.cwd(), 'simplens.config.yaml'),
-    join(process.cwd(), 'simplens.config.yml'),
-  ];
-
-  for (const p of candidates) {
-    if (existsSync(p)) return p;
-  }
-  return null;
-}
 
 export class YamlMigrator {
   /**
@@ -94,7 +40,8 @@ export class YamlMigrator {
       return false;
     }
 
-    const configPath = findConfigPath();
+    
+    const configPath = findConfigFile();
     if (!configPath) {
       logger.info('No simplens.config.yaml found and MongoDB is empty. Standby mode ready.');
       return false;

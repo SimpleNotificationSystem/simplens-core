@@ -5,46 +5,31 @@
  * Supports dynamic import of npm packages.
  */
 
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { execSync } from 'child_process';
-import { pathToFileURL } from 'url';
 import { parse as parseYaml } from 'yaml';
 import { PluginRegistry, type ChannelConfig } from './registry.js';
-import type { SimpleNSProvider, ProviderConfig } from '../interfaces/provider.types.js';
 import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
 import Plugin from '@src/database/models/plugin.models.js';
 import Provider from '@src/database/models/provider.models.js';
 import ChannelRouting from '@src/database/models/channel-routing.models.js';
 import { ProviderManagerService } from '@src/plugins/services/provider-manager.service.js';
-import { installNpmPackage } from './plugin-fs.js';
-import type { provider_document, ProviderEntry, ProviderOptions, SimpleNSConfig } from '@src/types/types.js';
-
-// Plugins directory for user-installed plugins
-const PLUGINS_DIR = join(process.cwd(), '.plugins');
-const PLUGINS_NODE_MODULES = join(PLUGINS_DIR, 'node_modules');
-
-/**
- * Initialize plugins directory with package.json if needed
- */
-function initPluginsDir(): void {
-    if (!existsSync(PLUGINS_DIR)) {
-        mkdirSync(PLUGINS_DIR, { recursive: true });
-    }
-
-    const packageJsonPath = join(PLUGINS_DIR, 'package.json');
-    if (!existsSync(packageJsonPath)) {
-        const initialPackage = {
-            name: 'simplens-plugins',
-            version: '1.0.0',
-            description: 'User-installed SimpleNS plugins',
-            private: true,
-            type: 'module',
-            dependencies: {}
-        };
-        writeFileSync(packageJsonPath, JSON.stringify(initialPackage, null, 2));
-    }
-}
+import {
+    PLUGINS_NODE_MODULES,
+    installNpmPackage,
+    importAndInstantiateProvider,
+    resolveCredentials,
+    resolveOptionalConfig,
+    findConfigFile,
+} from './plugin-fs.js';
+import type {
+    provider_document,
+    ProviderEntry,
+    ProviderOptions,
+    SimpleNSConfig,
+    SimpleNSProvider,
+    ProviderConfig,
+} from '@src/types/types.js';
 
 /**
  * Install missing plugins from configuration
@@ -69,47 +54,10 @@ async function installMissingPlugins(config: SimpleNSConfig): Promise<void> {
     }
 
     logger.info(`Auto-installing ${missingPackages.length} missing plugin(s)...`);
-    initPluginsDir();
 
     for (const pkg of missingPackages) {
-        logger.info(`Installing ${pkg}...`);
-        try {
-            execSync(`npm install ${pkg}`, {
-                cwd: PLUGINS_DIR,
-                stdio: 'pipe' // Suppress output for cleaner logs
-            });
-            logger.success(`Installed ${pkg}`);
-        } catch (err) {
-            logger.error(`Failed to install ${pkg}`, err);
-            const wrappedErr = new Error(`Failed to auto-install plugin: ${pkg}`);
-            (wrappedErr as unknown as Record<string, unknown>).cause = err;
-            throw wrappedErr;
-        }
+        installNpmPackage(pkg);
     }
-}
-
-/**
- * Provider entry in configuration
- */
-/**
- * Find local config file if it exists
- * Checks for simplens.config.yaml/.yml/.json
- */
-function findLocalConfig(basePath: string): string | null {
-    const dir = basePath.substring(0, basePath.lastIndexOf('/') + 1) || './';
-    const localPatterns = [
-        'simplens.config.yaml',
-        'simplens.config.yml',
-        'simplens.config.json'
-    ];
-
-    for (const filename of localPatterns) {
-        const localPath = dir + filename;
-        if (existsSync(localPath)) {
-            return localPath;
-        }
-    }
-    return null;
 }
 
 /**
@@ -117,13 +65,7 @@ function findLocalConfig(basePath: string): string | null {
  * Returns null if no config file exists
  */
 function loadConfig(configPath: string): SimpleNSConfig | null {
-    // Check for local config first (takes precedence)
-    const localConfigPath = findLocalConfig(configPath);
-    const pathToUse = localConfigPath || configPath;
-
-    if (localConfigPath) {
-        logger.info(`Using local config: ${localConfigPath}`);
-    }
+    const pathToUse = findConfigFile(configPath) || configPath;
 
     if (!existsSync(pathToUse)) {
         // No config file - this is okay, just means no plugins configured
@@ -139,144 +81,6 @@ function loadConfig(configPath: string): SimpleNSConfig | null {
         return JSON.parse(content) as SimpleNSConfig;
     } else {
         throw new Error(`Unsupported config format. Use .yaml, .yml, or .json`);
-    }
-}
-
-/**
- * Resolve environment variables in credentials
- * Supports ${VAR_NAME} syntax
- */
-function resolveCredentials(credentials: Record<string, string> | undefined): Record<string, string> {
-    const resolved: Record<string, string> = {};
-
-    for (const [key, value] of Object.entries(credentials || {})) {
-        if (typeof value === 'string' && value.startsWith('${') && value.endsWith('}')) {
-            const envVar = value.slice(2, -1);
-            const envValue = process.env[envVar];
-            if (!envValue) {
-                logger.warn(`Environment variable ${envVar} not set`);
-            }
-            resolved[key] = envValue || '';
-        } else {
-            resolved[key] = value;
-        }
-    }
-
-    return resolved;
-}
-
-/**
- * Resolve optional config from environment variables
- * Takes the optionalConfig from the config entry and resolves ${VAR} placeholders
- * If env var is not set, the key is removed (no error since it's optional)
- */
-function resolveOptionalConfig(
-    optionalConfig: Record<string, string> | undefined
-): Record<string, string> {
-    const resolved: Record<string, string> = {};
-
-    if (!optionalConfig) return resolved;
-
-    for (const [key, value] of Object.entries(optionalConfig)) {
-        // Check if value is a placeholder like ${VAR_NAME}
-        if (typeof value === 'string' && value.startsWith('${') && value.endsWith('}')) {
-            const envVar = value.slice(2, -1);
-            const envValue = process.env[envVar];
-
-            if (envValue) {
-                resolved[key] = envValue;
-                logger.debug(`Loaded optional config: ${key}`);
-            }
-            // If not set, just skip (don't add to resolved)
-        } else {
-            // Literal value, keep as-is
-            resolved[key] = value;
-        }
-    }
-
-    return resolved;
-}
-
-/**
- * Helper to instantiate provider from module
- */
-function instantiateFromModule(module: Record<string, unknown>, packageName: string): SimpleNSProvider {
-    if (module.default) {
-        if (typeof module.default === 'function') {
-            const DefaultExport = module.default as new () => SimpleNSProvider;
-            if (DefaultExport.prototype?.constructor) {
-                return new DefaultExport();
-            }
-            // Factory function
-            return (module.default as () => SimpleNSProvider)();
-        }
-        return module.default as SimpleNSProvider;
-    }
-    if (module.createProvider) {
-        return (module.createProvider as () => SimpleNSProvider)();
-    }
-    throw new Error(`Package ${packageName} does not export a provider`);
-}
-
-/**
- * Resolve the entry file for a package from its package.json
- */
-function resolvePackageEntry(packagePath: string): string {
-    const pkgJsonPath = join(packagePath, 'package.json');
-    if (!existsSync(pkgJsonPath)) {
-        return join(packagePath, 'index.js'); // Fallback
-    }
-
-    const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
-
-    // Resolve entry point: exports > main > index.js
-    let entryPoint = 'index.js';
-    if (pkg.exports) {
-        if (typeof pkg.exports === 'string') {
-            entryPoint = pkg.exports;
-        } else if (pkg.exports['.']) {
-            const dotExport = pkg.exports['.'];
-            entryPoint = typeof dotExport === 'string'
-                ? dotExport
-                : (dotExport.import || dotExport.default || 'index.js');
-        }
-    } else if (pkg.main) {
-        entryPoint = pkg.main;
-    }
-
-    return join(packagePath, entryPoint);
-}
-
-/**
- * Dynamically import a provider package and instantiate
- * First checks plugins directory, then falls back to core node_modules
- */
-async function importAndInstantiateProvider(packageName: string): Promise<SimpleNSProvider> {
-    try {
-        // First, try to import from plugins directory
-        const pluginPath = join(PLUGINS_NODE_MODULES, packageName);
-        if (existsSync(pluginPath)) {
-            logger.debug(`Loading from plugins directory: ${packageName}`);
-            // Resolve the actual entry file from package.json
-            const entryFile = resolvePackageEntry(pluginPath);
-            // Convert to file:// URL for cross-platform compatibility
-            const pluginUrl = pathToFileURL(entryFile).href;
-            const module = await import(pluginUrl) as Record<string, unknown>;
-            return instantiateFromModule(module, packageName);
-        }
-
-        // Fall back to core node_modules (for bundled plugins or testing)
-        const module = await import(packageName) as Record<string, unknown>;
-        return instantiateFromModule(module, packageName);
-    } catch (_err) {
-        // Handle local path imports
-        if (packageName.startsWith('./') || packageName.startsWith('../')) {
-            const module = await import(packageName) as Record<string, unknown>;
-            return instantiateFromModule(module, packageName);
-        }
-        const wrappedErr = new Error(`Plugin not found: ${packageName}. Install with: npm run plugin:install ${packageName}`);
-        (wrappedErr as unknown as Record<string, unknown>).cause = _err;
-        throw wrappedErr;
     }
 }
 
@@ -478,19 +282,3 @@ export async function loadProvidersFromDatabase(options: { initialize?: boolean 
     logger.info(`Configured channels: ${PluginRegistry.getChannels().join(', ')}`);
 }
 
-/**
- * Get list of configured channels from MongoDB (falls back to YAML if DB has no routings)
- */
-export async function getConfiguredChannelsFromDatabase(): Promise<string[]> {
-    try {
-        const routings = await ChannelRouting.find().lean();
-        if (routings && routings.length > 0) {
-            return routings.map((r) => r.channel);
-        }
-    } catch (err) {
-        logger.warn('Could not query ChannelRouting from database:', {
-            error: err instanceof Error ? err.message : String(err)
-        });
-    }
-    return getConfiguredChannels();
-}

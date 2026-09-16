@@ -9,11 +9,83 @@ import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import { pathToFileURL } from 'url';
-import type { SimpleNSProvider, ProviderManifest } from '../interfaces/provider.types.js';
+import type { SimpleNSProvider, ProviderManifest } from '@src/types/types.js';
 import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
 
 export const PLUGINS_DIR = join(process.cwd(), '.plugins');
 export const PLUGINS_NODE_MODULES = join(PLUGINS_DIR, 'node_modules');
+
+/**
+ * Resolve environment variables in credentials (${VAR_NAME} syntax)
+ */
+export function resolveCredentials(credentials: Record<string, string> | undefined): Record<string, string> {
+  const resolved: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(credentials || {})) {
+    if (typeof value === 'string' && value.startsWith('${') && value.endsWith('}')) {
+      const envVar = value.slice(2, -1);
+      const envValue = process.env[envVar];
+      if (!envValue) {
+        logger.warn(`Environment variable ${envVar} not set`);
+      }
+      resolved[key] = envValue || '';
+    } else {
+      resolved[key] = value;
+    }
+  }
+
+  return resolved;
+}
+
+/**
+ * Resolve optional config from environment variables (${VAR_NAME} syntax)
+ */
+export function resolveOptionalConfig(
+  optionalConfig: Record<string, string> | undefined
+): Record<string, string> {
+  const resolved: Record<string, string> = {};
+  if (!optionalConfig) return resolved;
+
+  for (const [key, value] of Object.entries(optionalConfig)) {
+    if (typeof value === 'string' && value.startsWith('${') && value.endsWith('}')) {
+      const envVar = value.slice(2, -1);
+      const envValue = process.env[envVar];
+      if (envValue) {
+        resolved[key] = envValue;
+        logger.debug(`Loaded optional config: ${key}`);
+      }
+    } else {
+      resolved[key] = value;
+    }
+  }
+
+  return resolved;
+}
+
+/**
+ * Find local config file if it exists
+ */
+export function findConfigFile(basePath?: string): string | null {
+  const customPath = process.env.SIMPLENS_CONFIG_PATH;
+  if (customPath && existsSync(customPath)) {
+    return customPath;
+  }
+
+  const dir = basePath ? basePath.substring(0, basePath.lastIndexOf('/') + 1) || './' : './';
+  const candidates = [
+    dir + 'simplens.config.yaml',
+    dir + 'simplens.config.yml',
+    dir + 'simplens.config.json',
+    join(process.cwd(), 'simplens.config.yaml'),
+    join(process.cwd(), 'simplens.config.yml'),
+    join(process.cwd(), 'simplens.config.json'),
+  ];
+
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
 
 /**
  * Initialize plugins directory with package.json if needed

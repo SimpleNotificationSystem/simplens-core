@@ -257,14 +257,6 @@ class PluginRegistryClass {
     }
 
     /**
-     * Get first fallback provider ID for a channel
-     */
-    getFallbackProviderId(channel: string): string | undefined {
-        const ids = this.getFallbackProviderIds(channel);
-        return ids[0];
-    }
-
-    /**
      * Get all registered provider IDs
      */
     getProviderIds(): string[] {

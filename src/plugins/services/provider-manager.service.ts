@@ -15,7 +15,14 @@ import {
 import { importAndInstantiateProvider } from '@src/plugins/loader/plugin-fs.js';
 import { PluginRegistry } from '@src/plugins/loader/registry.js';
 import { PluginSyncService } from '@src/plugins/sync/plugin-sync.service.js';
-import type { provider_document, ProviderConfig, ProviderOptions, ProviderResponseDto } from '@src/types/types.js';
+import type {
+  provider_document,
+  ProviderConfig,
+  ProviderOptions,
+  ProviderResponseDto,
+  SimpleNSProvider,
+  encrypted_credentials,
+} from '@src/types/types.js';
 import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
 
 export type { ProviderResponseDto } from '@src/types/types.js';
@@ -287,6 +294,47 @@ export class ProviderManagerService {
   }
 
   /**
+   * Helper to retrieve cached credentials or decrypt and cache them
+   */
+  private static async getOrDecryptCredentials(
+    id: string,
+    encryptedCredentials?: Record<string, unknown> | null
+  ): Promise<Record<string, string>> {
+    let credentials = ProviderManagerService.getCachedCredentials(id);
+    if (!credentials && encryptedCredentials) {
+      credentials = await decryptCredentials(encryptedCredentials as unknown as encrypted_credentials);
+      ProviderManagerService.cacheCredentials(id, credentials);
+    }
+    return credentials || {};
+  }
+
+  /**
+   * Helper to instantiate and optionally initialize a provider instance
+   */
+  private static async createAndInitProvider(
+    id: string,
+    pluginName: string,
+    credentials: Record<string, string>,
+    options: ProviderOptions,
+    initialize = true
+  ): Promise<{ providerInstance: SimpleNSProvider; healthy: boolean }> {
+    const providerInstance = await importAndInstantiateProvider(pluginName);
+    let healthy = true;
+
+    if (initialize) {
+      const config: ProviderConfig = {
+        id,
+        credentials,
+        options,
+      };
+      await providerInstance.initialize(config);
+      healthy = await providerInstance.healthCheck();
+    }
+
+    return { providerInstance, healthy };
+  }
+
+  /**
    * Test live provider connection / credentials
    */
   public static async testProviderConnection(data: {
@@ -307,11 +355,7 @@ export class ProviderManagerService {
       pluginName = existing.plugin_name;
       options = { ...(existing.options as ProviderOptions), ...options };
       if (!credentials || Object.keys(credentials).length === 0) {
-        credentials = ProviderManagerService.getCachedCredentials(data.provider_id);
-        if (!credentials) {
-          credentials = await decryptCredentials(existing.credentials);
-          ProviderManagerService.cacheCredentials(data.provider_id, credentials);
-        }
+        credentials = await ProviderManagerService.getOrDecryptCredentials(data.provider_id, existing.credentials);
       }
     }
 
@@ -323,15 +367,13 @@ export class ProviderManagerService {
     }
 
     try {
-      const providerInstance = await importAndInstantiateProvider(pluginName);
-      const config: ProviderConfig = {
-        id: data.provider_id || 'test-connection',
+      const { healthy } = await ProviderManagerService.createAndInitProvider(
+        data.provider_id || 'test-connection',
+        pluginName,
         credentials,
         options,
-      };
-
-      await providerInstance.initialize(config);
-      const healthy = await providerInstance.healthCheck();
+        true
+      );
 
       if (healthy) {
         return { success: true, message: 'Provider connection and health check succeeded.' };
@@ -351,28 +393,17 @@ export class ProviderManagerService {
     providerDoc: provider_document,
     initialize = true
   ): Promise<void> {
-    let credentials = ProviderManagerService.getCachedCredentials(providerDoc.id);
-    if (!credentials) {
-      credentials = await decryptCredentials(providerDoc.credentials);
-      ProviderManagerService.cacheCredentials(providerDoc.id, credentials);
-    }
-    const providerInstance = await importAndInstantiateProvider(providerDoc.plugin_name);
+    const credentials = await ProviderManagerService.getOrDecryptCredentials(providerDoc.id, providerDoc.credentials);
+    const { providerInstance, healthy } = await ProviderManagerService.createAndInitProvider(
+      providerDoc.id,
+      providerDoc.plugin_name,
+      credentials,
+      (providerDoc.options as ProviderOptions) || {},
+      initialize
+    );
 
-    if (initialize) {
-      const config: ProviderConfig = {
-        id: providerDoc.id,
-        credentials,
-        options: {
-          ...(providerDoc.options as ProviderOptions),
-        },
-      };
-
-      await providerInstance.initialize(config);
-
-      const healthy = await providerInstance.healthCheck();
-      if (!healthy) {
-        logger.warn(`Provider '${providerDoc.id}' failed health check on initial load.`);
-      }
+    if (initialize && !healthy) {
+      logger.warn(`Provider '${providerDoc.id}' failed health check on initial load.`);
     }
 
     PluginRegistry.registerOrReplace(
