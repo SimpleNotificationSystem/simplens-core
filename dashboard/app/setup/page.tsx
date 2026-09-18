@@ -81,7 +81,18 @@ export default function SetupPage() {
     const [isCatalogLoading, setIsCatalogLoading] = useState(false);
     const [installedPackages, setInstalledPackages] = useState<Set<string>>(new Set());
     const [newlyInstalledPlugins, setNewlyInstalledPlugins] = useState<InstalledPlugin[]>([]);
-    const [installingPkg, setInstallingPkg] = useState<string | null>(null);
+    const [installingPkgs, setInstallingPkgs] = useState<Set<string>>(new Set());
+
+    // Helper to sanitize provider IDs without slashes ('/')
+    const sanitizeProviderId = (rawName: string): string => {
+        return rawName
+            .replace(/^@/, "")
+            .replace(/[/\\_ ]/g, "-")
+            .replace(/^plugin-/, "")
+            .replace(/-+/g, "-")
+            .toLowerCase()
+            + "-provider";
+    };
 
     // Provider configuration state
     const [configureIndex, setConfigureIndex] = useState(0);
@@ -217,19 +228,26 @@ export default function SetupPage() {
     };
 
     const handleInstallPlugin = async (item: PluginCatalogItem) => {
-        setInstallingPkg(item.package);
+        setInstallingPkgs((prev) => new Set(prev).add(item.package));
         try {
             const res = await pluginService.install(item.package);
-            setInstalledPackages((prev) => new Set([...prev, item.package]));
+            setInstalledPackages((prev) => new Set(prev).add(item.package));
             if (res.plugin) {
-                setNewlyInstalledPlugins((prev) => [...prev, res.plugin]);
+                setNewlyInstalledPlugins((prev) => {
+                    if (prev.some((p) => p.name === res.plugin.name)) return prev;
+                    return [...prev, res.plugin];
+                });
             }
             toast.success(`Installed ${item.name} successfully!`);
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : "Failed to install plugin";
             toast.error(msg);
         } finally {
-            setInstallingPkg(null);
+            setInstallingPkgs((prev) => {
+                const next = new Set(prev);
+                next.delete(item.package);
+                return next;
+            });
         }
     };
 
@@ -240,7 +258,7 @@ export default function SetupPage() {
         }
         setConfigureIndex(0);
         const first = newlyInstalledPlugins[0];
-        setProviderId(`${first.name.replace(/^plugin-/, "")}-provider`);
+        setProviderId(sanitizeProviderId(first.name));
         setCredentials({});
         setProviderError("");
         setPluginPhase("configure");
@@ -256,9 +274,13 @@ export default function SetupPage() {
             return;
         }
 
-        const trimmedId = providerId.trim();
+        const trimmedId = providerId.trim().replace(/[/\\ ]/g, "-");
         if (!trimmedId) {
             setProviderError("Provider identifier is required.");
+            return;
+        }
+        if (trimmedId.includes("/")) {
+            setProviderError("Provider identifier cannot contain slashes ('/').");
             return;
         }
 
@@ -279,7 +301,7 @@ export default function SetupPage() {
                 const nextIndex = configureIndex + 1;
                 const nextPlugin = newlyInstalledPlugins[nextIndex];
                 setConfigureIndex(nextIndex);
-                setProviderId(`${nextPlugin.name.replace(/^plugin-/, "")}-provider`);
+                setProviderId(sanitizeProviderId(nextPlugin.name));
                 setCredentials({});
                 setProviderError("");
             } else {
@@ -298,7 +320,7 @@ export default function SetupPage() {
             const nextIndex = configureIndex + 1;
             const nextPlugin = newlyInstalledPlugins[nextIndex];
             setConfigureIndex(nextIndex);
-            setProviderId(`${nextPlugin.name.replace(/^plugin-/, "")}-provider`);
+            setProviderId(sanitizeProviderId(nextPlugin.name));
             setCredentials({});
             setProviderError("");
         } else {
@@ -937,7 +959,7 @@ export default function SetupPage() {
                                             <div className="space-y-3 pt-1">
                                                 {catalog.map((item) => {
                                                     const isInstalled = installedPackages.has(item.package);
-                                                    const isInstalling = installingPkg === item.package;
+                                                    const isInstalling = installingPkgs.has(item.package);
 
                                                     return (
                                                         <div
@@ -1050,14 +1072,14 @@ export default function SetupPage() {
                                                 <Input
                                                     type="text"
                                                     value={providerId}
-                                                    onChange={(e) => setProviderId(e.target.value)}
+                                                    onChange={(e) => setProviderId(e.target.value.replace(/[/\\ ]/g, "-"))}
                                                     placeholder="my-provider-id"
                                                     required
                                                     disabled={isSavingProvider}
                                                     className="h-10 text-sm font-mono"
                                                 />
                                                 <p className="text-[11px] text-muted-foreground">
-                                                    Unique identifier used when sending notifications through this provider.
+                                                    Unique identifier without slashes (e.g. gmail-provider).
                                                 </p>
                                             </div>
 
