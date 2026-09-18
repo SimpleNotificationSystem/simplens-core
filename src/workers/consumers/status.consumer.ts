@@ -121,7 +121,7 @@ const processStatusMessage = async ({ partition, message }: EachMessagePayload):
         const result = await notification_model.findByIdAndUpdate(
             data.notification_id,
             updateData,
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         if (result) {

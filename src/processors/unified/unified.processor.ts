@@ -8,6 +8,7 @@
  */
 
 import { connectMongoDB } from '@src/config/db.config.js';
+import { dynamicConfig } from '@src/config/dynamic-config.service.js';
 import { connectRedis, disconnectRedis } from '@src/config/redis.config.js';
 import { initStatusProducer, disconnectStatusProducer } from '@src/processors/shared/status.producer.js';
 import { initDelayedProducer, disconnectDelayedProducer } from '@src/processors/shared/delayed.producer.js';
@@ -190,6 +191,9 @@ const main = async (): Promise<void> => {
     logger.info('Connecting to MongoDB...');
     dbConnection = await connectMongoDB();
     logger.success('Successfully connected to MongoDB');
+
+    // Initialize Dynamic Configuration
+    await dynamicConfig.initialize(false);
 
     // 2. Connect to Redis
     logger.info('Connecting to Redis...');

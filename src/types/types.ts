@@ -128,6 +128,10 @@ import {
     pluginSchema,
     providerSchema,
     channelRoutingSchema,
+    operationalSettingsSchema,
+    partialOperationalSettingsSchema,
+    adminSetupSchema,
+    adminLoginSchema,
 } from "./schemas.js";
 
 // ============================================================================
@@ -407,7 +411,8 @@ export type ServiceContext =
     | 'adminAlert'
     | 'pluginLoader'
     | 'pluginRegistry'
-    | 'rateLimiter';
+    | 'rateLimiter'
+    | 'configSync';
 
 export interface LogMeta {
     notificationId?: string;
@@ -446,3 +451,36 @@ export interface ValidatedOutboxEntry {
     payload: Record<string, unknown>;
     status: string;
 }
+
+// ============================================================================
+// DYNAMIC OPERATIONAL SETTINGS & ADMIN AUTH TYPES
+// ============================================================================
+
+export type OperationalSettings = z.infer<typeof operationalSettingsSchema>;
+export type PartialOperationalSettings = z.infer<typeof partialOperationalSettingsSchema>;
+export type OperationalSettingsGroup = keyof OperationalSettings;
+
+export type SystemConfigSyncAction = 'SETTINGS_SEEDED' | 'SETTINGS_UPDATED' | 'SETTINGS_RESET';
+
+export interface SystemConfigSyncMessage {
+    action: SystemConfigSyncAction;
+    source_instance_id: string;
+    timestamp: string;
+    payload?: PartialOperationalSettings;
+}
+
+export interface AdminCredentialsDoc {
+    username: string;
+    password_hash: string;
+    salt: string;
+    created_at: string;
+    updated_at?: string;
+}
+
+export type AdminSetupPayload = z.infer<typeof adminSetupSchema>;
+export type AdminLoginPayload = z.infer<typeof adminLoginSchema>;
+
+export interface AdminAuthStatus {
+    isConfigured: boolean;
+}
+

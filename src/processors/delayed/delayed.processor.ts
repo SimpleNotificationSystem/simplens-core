@@ -10,6 +10,8 @@
  * - Atomic Lua script prevents duplicate processing across multiple workers
  */
 
+import { connectMongoDB } from '@src/config/db.config.js';
+import { dynamicConfig } from '@src/config/dynamic-config.service.js';
 import { connectRedis, disconnectRedis } from '@src/config/redis.config.js';
 import { initTargetProducer, disconnectTargetProducer } from './target.producer.js';
 import { initDLQStatusProducer, disconnectDLQStatusProducer } from './dlq.status.js';
@@ -23,6 +25,7 @@ import "@src/admin-alerts/channels/discord.channel.js";
 import "@src/admin-alerts/channels/telegram.channel.js";
 
 let isShuttingDown = false;
+let dbConnection: Awaited<ReturnType<typeof connectMongoDB>> | null = null;
 
 /**
  * Graceful shutdown handler
@@ -55,6 +58,12 @@ const gracefulShutdown = async (signal: string): Promise<void> => {
         // 4. Disconnect Redis
         logger.info('Disconnecting Redis...');
         await disconnectRedis();
+
+        // 5. Disconnect MongoDB
+        if (dbConnection) {
+            logger.info('Disconnecting MongoDB...');
+            await dbConnection.disconnect();
+        }
 
         logger.success('Graceful shutdown complete');
         process.exit(0);
@@ -105,7 +114,13 @@ const main = async (): Promise<void> => {
     logger.info('Starting Delayed Processor...');
 
     try {
-        // 1. Connect to Redis (for delayed queue)
+        // 1. Connect to MongoDB & Initialize Dynamic Configuration
+        logger.info('Connecting to MongoDB...');
+        dbConnection = await connectMongoDB();
+        logger.success('Connected to MongoDB');
+        await dynamicConfig.initialize(false);
+
+        // 2. Connect to Redis (for delayed queue)
         logger.info('Connecting to Redis...');
         await connectRedis();
 

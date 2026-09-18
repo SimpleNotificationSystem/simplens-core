@@ -281,3 +281,44 @@ export interface ChannelRoutingDto {
   created_at?: string;
   updated_at?: string;
 }
+
+export interface OperationalSettings {
+  api: {
+    max_batch_req_limit: number;
+  };
+  worker: {
+    outbox_poll_interval_ms: number;
+    outbox_cleanup_interval_ms: number;
+    outbox_batch_size: number;
+    outbox_retention_ms: number;
+    outbox_claim_timeout_ms: number;
+  };
+  retry: {
+    max_retry_count: number;
+    idempotency_ttl_seconds: number;
+    processing_ttl_seconds: number;
+  };
+  delayed: {
+    delayed_poll_interval_ms: number;
+    delayed_batch_size: number;
+    max_poller_retries: number;
+  };
+  recovery: {
+    recovery_poll_interval_ms: number;
+    processing_stuck_threshold_ms: number;
+    pending_stuck_threshold_ms: number;
+    recovery_batch_size: number;
+    recovery_claim_timeout_ms: number;
+    cleanup_resolved_alerts_retention_ms: number;
+    cleanup_processed_status_outbox_retention_ms: number;
+  };
+  logging: {
+    log_level: 'debug' | 'info' | 'warn' | 'error';
+    log_to_file: boolean;
+  };
+}
+
+export interface AdminAuthStatus {
+  isConfigured: boolean;
+}
+

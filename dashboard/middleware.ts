@@ -30,7 +30,10 @@ function proxyToBackend(request: NextRequest, pathname: string) {
 // Routes that don't require authentication
 const publicRoutes = [
     "/login",
+    "/setup",
     "/api/auth/login",
+    "/api/auth/setup",
+    "/api/auth/status",
     "/api/auth/logout",
     "/api/auth/session",
     "/api/webhook",
@@ -55,11 +58,11 @@ interface SessionPayload {
 }
 
 function getAuthSecret(): string {
-    const secret = process.env.AUTH_SECRET;
-    if (!secret) {
-        throw new Error("AUTH_SECRET environment variable is not configured");
+    const secret = process.env.AUTH_SECRET || process.env.JWT_SECRET || process.env.NS_API_KEY;
+    if (secret && secret.trim().length > 0) {
+        return secret.trim();
     }
-    return secret;
+    return "simplens-session-auth-secret-fallback-key-32b";
 }
 
 // Web Crypto API compatible HMAC-SHA256

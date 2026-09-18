@@ -14,6 +14,7 @@
 
 import mongoose from 'mongoose';
 import { env } from '@src/config/env.config.js';
+import { dynamicConfig } from '@src/config/dynamic-config.service.js';
 import { connectRedis, disconnectRedis, getRedisClient } from '@src/config/redis.config.js';
 import { startRecoveryCron, stopRecoveryCron, setHealthChecker } from './recovery.cron.js';
 import { recoveryLogger as logger, flushLogs } from '@src/workers/utils/logger.js';
@@ -262,6 +263,10 @@ const main = async (): Promise<void> => {
     if (!mongoConnected || !redisConnected) {
         logger.error('Failed to connect to required databases after retries');
         logger.info('Recovery service will start anyway and retry connections...');
+    }
+
+    if (mongoConnected) {
+        await dynamicConfig.initialize(false);
     }
 
     // Set health checker for recovery cron

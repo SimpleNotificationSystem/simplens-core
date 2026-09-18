@@ -9,6 +9,7 @@
  */
 
 import { env } from '@src/config/env.config.js';
+import { dynamicConfig } from '@src/config/dynamic-config.service.js';
 import { claimDueEvents, confirmProcessed, reAddToQueue, getDueEventCount, releaseClaim } from './delayed.queue.js';
 import { publishToTarget } from './target.producer.js';
 import { publishDLQFailureStatus } from './dlq.status.js';
@@ -177,6 +178,15 @@ export const startDelayedPoller = (): void => {
 
     logger.success('Delayed poller started');
 };
+
+// Listen for dynamic configuration updates and hot-adjust poller interval
+dynamicConfig.on('change', () => {
+    if (pollerInterval) {
+        clearInterval(pollerInterval);
+        pollerInterval = setInterval(pollForDueEvents, env.DELAYED_POLL_INTERVAL_MS);
+        logger.info(`Adjusted delayed poller interval to ${env.DELAYED_POLL_INTERVAL_MS}ms`);
+    }
+});
 
 /**
  * Stop the delayed poller

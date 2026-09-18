@@ -12,6 +12,9 @@ import notification_templates_router from '@src/api/routes/notification_template
 import notifications_management_router from './routes/notifications-management.routes.js';
 import alerts_router from './routes/alerts.routes.js';
 import dashboard_router from './routes/dashboard.routes.js';
+import settings_router from './routes/settings.routes.js';
+import admin_auth_router from './routes/admin-auth.routes.js';
+import { dynamicConfig } from '@src/config/dynamic-config.service.js';
 import { auth_middleware } from './middlewares/auth_middleware.js';
 import http from 'http';
 import helmet from 'helmet';
@@ -67,11 +70,16 @@ app.use('/api/providers', auth_middleware, providers_router);
 app.use('/api/channels/routing', auth_middleware, channel_routing_router);
 app.use('/api/admin-channels', auth_middleware, admin_channels_router);
 app.use('/api/templates', auth_middleware, notification_templates_router);
+app.use('/api/settings', auth_middleware, settings_router);
+app.use('/api/admin/auth', admin_auth_router);
 
 const start_server = async () => {
     try {
         const db = await connectMongoDB();
         logger.success("Successfully connected to MongoDB");
+
+        // 0. Initialize Dynamic Configuration & seed defaults into MongoDB
+        await dynamicConfig.initialize(true);
 
         // 1. Initialize Redis subscriber & sync handlers for plugins
         await PluginSyncService.startSubscriber();

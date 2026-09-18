@@ -1,4 +1,5 @@
 import { env } from "@src/config/env.config.js";
+import { dynamicConfig } from "@src/config/dynamic-config.service.js";
 import { OUTBOX_STATUS, type OutboxCronState } from "@src/types/types.js";
 import outbox_model from "@src/database/models/outbox.models.js";
 import status_outbox_model from "@src/database/models/status-outbox.models.js";
@@ -51,7 +52,7 @@ const claimOutboxEntries = async (): Promise<OutboxDocument[]> => {
                 }
             },
             {
-                new: true,
+                returnDocument: 'after',
                 sort: { created_at: 1 } // FIFO order
             }
         );
@@ -146,7 +147,7 @@ const claimStatusOutboxEntries = async (): Promise<status_outbox[]> => {
                 }
             },
             {
-                new: true,
+                returnDocument: 'after',
                 sort: { created_at: 1 }
             }
         );
@@ -209,6 +210,29 @@ export const startCronJobs = (): void => {
 
     logger.success("Cron jobs started");
 };
+
+// Listen for dynamic configuration updates and hot-adjust intervals
+dynamicConfig.on('change', () => {
+    if (state.shouldStop) return;
+
+    if (state.pollIntervalId) {
+        clearInterval(state.pollIntervalId);
+        state.pollIntervalId = setInterval(pollOutbox, env.OUTBOX_POLL_INTERVAL_MS);
+        logger.info(`Adjusted outbox poll interval to ${env.OUTBOX_POLL_INTERVAL_MS}ms`);
+    }
+
+    if (state.statusPollIntervalId) {
+        clearInterval(state.statusPollIntervalId);
+        state.statusPollIntervalId = setInterval(pollStatusOutbox, env.OUTBOX_POLL_INTERVAL_MS);
+        logger.info(`Adjusted status outbox poll interval to ${env.OUTBOX_POLL_INTERVAL_MS}ms`);
+    }
+
+    if (state.cleanupIntervalId) {
+        clearInterval(state.cleanupIntervalId);
+        state.cleanupIntervalId = setInterval(cleanupPublishedEvents, env.OUTBOX_CLEANUP_INTERVAL_MS);
+        logger.info(`Adjusted outbox cleanup interval to ${env.OUTBOX_CLEANUP_INTERVAL_MS}ms`);
+    }
+});
 
 /**
  * Stop the cron jobs gracefully

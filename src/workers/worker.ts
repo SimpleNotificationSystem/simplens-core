@@ -1,4 +1,5 @@
 import { connectMongoDB } from "@src/config/db.config.js";
+import { dynamicConfig } from "@src/config/dynamic-config.service.js";
 import { initProducer, disconnectProducer } from "@src/workers/producers/background.producer.js";
 import { startCronJobs, stopCronJobs } from "@src/workers/cron/background.cron.js";
 import { startStatusConsumer, stopStatusConsumer } from "@src/workers/consumers/status.consumer.js";
@@ -96,6 +97,9 @@ const main = async (): Promise<void> => {
         logger.info("Connecting to MongoDB...");
         dbConnection = await connectMongoDB();
         logger.success("MongoDB connected");
+
+        // Initialize Dynamic Configuration
+        await dynamicConfig.initialize(false);
 
         // 2. Initialize Kafka producer
         logger.info("Initializing Kafka producer...");

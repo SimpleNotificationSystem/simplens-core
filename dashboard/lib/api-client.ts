@@ -23,6 +23,8 @@ import {
   PluginCatalogItem,
   ProviderDto,
   ChannelRoutingDto,
+  OperationalSettings,
+  AdminAuthStatus,
 } from './types';
 
 export class ApiError extends Error {
@@ -78,6 +80,19 @@ export const authService = {
   logout: (): Promise<unknown> => apiClient.post('/api/auth/logout'),
   getSession: (): Promise<{ authenticated: boolean; user?: { id: string; username: string } }> => 
     apiClient.get('/api/auth/session'),
+  getAuthStatus: (): Promise<AdminAuthStatus> =>
+    apiClient.get('/api/auth/status'),
+  setup: (payload: { username: string; password: string }): Promise<{ success: boolean; redirectUrl: string; message?: string }> =>
+    apiClient.post('/api/auth/setup', payload),
+};
+
+export const settingsService = {
+  get: (): Promise<{ success: boolean; settings: OperationalSettings }> =>
+    apiClient.get('/api/settings'),
+  update: (payload: Partial<OperationalSettings>): Promise<{ success: boolean; message: string; settings: OperationalSettings }> =>
+    apiClient.put('/api/settings', payload),
+  reset: (): Promise<{ success: boolean; message: string; settings: OperationalSettings }> =>
+    apiClient.post('/api/settings/reset'),
 };
 
 export const notificationService = {

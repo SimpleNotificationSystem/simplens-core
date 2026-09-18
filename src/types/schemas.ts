@@ -15,7 +15,6 @@ import {
 } from "./types.js";
 import type { UUID } from "crypto";
 import { validate, version } from "uuid";
-import { env } from "@src/config/env.config.js";
 
 // ============================================================================
 // BASE FIELD SCHEMAS
@@ -409,22 +408,22 @@ export const baseBatchNotificationRequestSchema = z
       }),
     ).min(1, "At least one recipient is required."),
   })
-  .refine(
-    (data) => {
-      // limit check
-      if (
-        data.recipients &&
-        data.recipients.length * data.channel.length > env.MAX_BATCH_REQ_LIMIT
-      ) {
-        return false;
-      }
-      return true;
-    },
-    {
-      message: `Batch size exceeds limit (${env.MAX_BATCH_REQ_LIMIT})`,
-      path: ["recipients"],
-    },
-  )
+  .superRefine((data, ctx) => {
+    const maxLimit =
+      typeof process !== "undefined" && process.env.MAX_BATCH_REQ_LIMIT
+        ? parseInt(process.env.MAX_BATCH_REQ_LIMIT)
+        : 1000;
+    if (
+      data.recipients &&
+      data.recipients.length * data.channel.length > maxLimit
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Batch size exceeds limit (${maxLimit})`,
+        path: ["recipients"],
+      });
+    }
+  })
   .superRefine((data, ctx) => {
     if (
       !hasNonEmptyTemplateIds(data.template_id) &&
@@ -495,3 +494,63 @@ export const safeValidateNotificationTemplateRequestSchema = (data: unknown) =>
   notificationTemplateRequestSchema.safeParse(data);
 export const safeValidateNotificationTemplateUpdateRequestSchema = (data: unknown) =>
   notificationTemplateUpdateRequestSchema.safeParse(data);
+
+// ============================================================================
+// DYNAMIC OPERATIONAL SETTINGS & ADMIN AUTH SCHEMAS
+// ============================================================================
+
+export const operationalSettingsSchema = z.object({
+  api: z.object({
+    max_batch_req_limit: z.number().int().min(10).max(10000).default(1000),
+  }),
+  worker: z.object({
+    outbox_poll_interval_ms: z.number().int().min(500).max(60000).default(5000),
+    outbox_cleanup_interval_ms: z.number().int().min(5000).max(600000).default(60000),
+    outbox_batch_size: z.number().int().min(1).max(2000).default(100),
+    outbox_retention_ms: z.number().int().min(10000).max(86400000).default(300000),
+    outbox_claim_timeout_ms: z.number().int().min(5000).max(300000).default(30000),
+  }),
+  retry: z.object({
+    max_retry_count: z.number().int().min(1).max(30).default(5),
+    idempotency_ttl_seconds: z.number().int().min(60).max(2592000).default(86400),
+    processing_ttl_seconds: z.number().int().min(10).max(1800).default(120),
+  }),
+  delayed: z.object({
+    delayed_poll_interval_ms: z.number().int().min(200).max(30000).default(1000),
+    delayed_batch_size: z.number().int().min(1).max(500).default(10),
+    max_poller_retries: z.number().int().min(1).max(10).default(3),
+  }),
+  recovery: z.object({
+    recovery_poll_interval_ms: z.number().int().min(5000).max(600000).default(60000),
+    processing_stuck_threshold_ms: z.number().int().min(10000).max(3600000).default(300000),
+    pending_stuck_threshold_ms: z.number().int().min(10000).max(3600000).default(300000),
+    recovery_batch_size: z.number().int().min(1).max(500).default(50),
+    recovery_claim_timeout_ms: z.number().int().min(5000).max(300000).default(60000),
+    cleanup_resolved_alerts_retention_ms: z.number().int().min(60000).max(2592000000).default(86400000),
+    cleanup_processed_status_outbox_retention_ms: z.number().int().min(60000).max(2592000000).default(86400000),
+  }),
+  logging: z.object({
+    log_level: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+    log_to_file: z.boolean().default(true),
+  }),
+});
+
+export const partialOperationalSettingsSchema = z.object({
+  api: operationalSettingsSchema.shape.api.partial().optional(),
+  worker: operationalSettingsSchema.shape.worker.partial().optional(),
+  retry: operationalSettingsSchema.shape.retry.partial().optional(),
+  delayed: operationalSettingsSchema.shape.delayed.partial().optional(),
+  recovery: operationalSettingsSchema.shape.recovery.partial().optional(),
+  logging: operationalSettingsSchema.shape.logging.partial().optional(),
+});
+
+export const adminSetupSchema = z.object({
+  username: z.string().trim().min(3, "Username must be at least 3 characters").max(50, "Username cannot exceed 50 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters").max(64, "Password cannot exceed 64 characters"),
+});
+
+export const adminLoginSchema = z.object({
+  username: z.string().trim().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+});
+

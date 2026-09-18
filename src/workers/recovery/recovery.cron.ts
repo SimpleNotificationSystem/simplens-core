@@ -13,6 +13,7 @@
 
 import mongoose from 'mongoose';
 import { env } from '@src/config/env.config.js';
+import { dynamicConfig } from '@src/config/dynamic-config.service.js';
 import { NOTIFICATION_STATUS, ALERT_TYPE, type HealthChecker, type RecoveryCronState } from '@src/types/types.js';
 import notification_model from '@src/database/models/notification.models.js';
 import alert_model from '@src/database/models/alert.models.js';
@@ -61,7 +62,7 @@ const recoverStuckProcessing = async (): Promise<void> => {
                     recovery_claimed_at: now
                 }
             },
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         if (!notification) break;
@@ -291,7 +292,7 @@ const detectOrphanedPending = async (): Promise<void> => {
                     recovery_claimed_at: now
                 }
             },
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         if (!notification) break;
@@ -403,7 +404,7 @@ const autoResolveDeliveredAlerts = async (): Promise<void> => {
                     recovery_claimed_at: now
                 }
             },
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         if (!alert) break;
@@ -525,6 +526,16 @@ export const startRecoveryCron = (): void => {
 
     logger.success('Recovery cron started');
 };
+
+// Listen for dynamic configuration updates and hot-adjust recovery interval
+dynamicConfig.on('change', () => {
+    if (state.shouldStop) return;
+    if (state.intervalId) {
+        clearInterval(state.intervalId);
+        state.intervalId = setInterval(runRecovery, env.RECOVERY_POLL_INTERVAL_MS);
+        logger.info(`Adjusted recovery cron interval to ${env.RECOVERY_POLL_INTERVAL_MS}ms`);
+    }
+});
 
 /**
  * Stop the recovery cron job gracefully
