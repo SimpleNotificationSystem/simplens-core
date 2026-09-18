@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -36,10 +36,17 @@ export default function SettingsPage() {
     const { restartTour } = useTour();
 
     const [settings, setSettings] = useState<OperationalSettings | null>(null);
+    const [initialSettings, setInitialSettings] = useState<OperationalSettings | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isResetting, setIsResetting] = useState(false);
     const [showAdvanced, setShowAdvanced] = useState(false);
+
+    // Compute whether operational settings have been modified from original loaded state
+    const hasChanges = useMemo(() => {
+        if (!settings || !initialSettings) return false;
+        return JSON.stringify(settings) !== JSON.stringify(initialSettings);
+    }, [settings, initialSettings]);
 
     // Fetch operational settings on mount
     useEffect(() => {
@@ -48,6 +55,7 @@ export default function SettingsPage() {
                 const res = await settingsService.get();
                 if (res.success && res.settings) {
                     setSettings(res.settings);
+                    setInitialSettings(res.settings);
                 }
             } catch (err) {
                 console.error("Failed to load settings", err);
@@ -67,6 +75,7 @@ export default function SettingsPage() {
             const res = await settingsService.update(settings);
             if (res.success && res.settings) {
                 setSettings(res.settings);
+                setInitialSettings(res.settings);
                 toast.success("Settings updated and synchronized across all instances!");
             }
         } catch (err: unknown) {
@@ -87,6 +96,7 @@ export default function SettingsPage() {
             const res = await settingsService.reset();
             if (res.success && res.settings) {
                 setSettings(res.settings);
+                setInitialSettings(res.settings);
                 toast.success("Operational settings reset to system defaults!");
             }
         } catch (err: unknown) {
@@ -237,7 +247,14 @@ export default function SettingsPage() {
                             {/* Action Bar inside Advanced Settings */}
                             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border/60 pb-5">
                                 <div>
-                                    <h4 className="text-sm font-semibold text-foreground">Live Engine Tuning</h4>
+                                    <div className="flex items-center gap-2">
+                                        <h4 className="text-sm font-semibold text-foreground">Live Engine Tuning</h4>
+                                        {hasChanges && (
+                                            <Badge variant="secondary" className="text-[10px] text-amber-500 bg-amber-500/10 border-amber-500/20 font-medium">
+                                                Unsaved Changes
+                                            </Badge>
+                                        )}
+                                    </div>
                                     <p className="text-xs text-muted-foreground mt-0.5">
                                         Changes synchronize immediately across all running containers without service restarts.
                                     </p>
@@ -260,7 +277,7 @@ export default function SettingsPage() {
                                     <Button
                                         size="sm"
                                         onClick={handleSave}
-                                        disabled={isLoading || isSaving || isResetting}
+                                        disabled={isLoading || isSaving || isResetting || !hasChanges}
                                         className="gap-1.5 text-xs h-9 font-semibold"
                                     >
                                         {isSaving ? (
