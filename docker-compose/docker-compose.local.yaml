@@ -27,10 +27,8 @@ services:
       BROKERS: kafka:9093
       LOKI_URL: http://loki:3100
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      SIMPLENS_CONFIG_PATH: ${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}
     volumes:
       - logs-data-local:/app/logs
-      # - ../simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/api/server.js" ]
     networks:
       - simplens-infra
@@ -84,13 +82,10 @@ services:
       MONGO_URI: mongodb://mongo:27017/simplens_local?replicaSet=rs0
       REDIS_URL: redis://redis:6379
       BROKERS: kafka:9093
-      PROCESSOR_CHANNEL: ${PROCESSOR_CHANNEL:-all}
-      SIMPLENS_CONFIG_PATH: ${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}
       LOKI_URL: http://loki:3100
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       - logs-data-local:/app/logs
-      # - ../simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/processors/unified/unified.processor.js" ]
     depends_on:
       api:
@@ -168,14 +163,13 @@ services:
     env_file:
       - ../.env
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-development}
       PORT: ${DASHBOARD_PORT:-3002}
       API_BASE_URL: http://api:${PORT:-3000}
       MONGO_URI: mongodb://mongo:27017/simplens_local?replicaSet=rs0
-      AUTH_SECRET: ${AUTH_SECRET:-change-this-in-production}
-      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
       AUTH_TRUST_HOST: "true"
+      AUTH_SECRET: ${AUTH_SECRET:-${NS_API_KEY:-simplens-default-session-secret-change-in-production}}
+      HTTPS_COOKIE: ${HTTPS_COOKIE:-false}
       WEBHOOK_HOST: dashboard
       WEBHOOK_PORT: "3002"
     depends_on:

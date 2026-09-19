@@ -27,7 +27,6 @@ services:
       SIMPLENS_CONFIG_PATH: ${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}
     volumes:
       - logs-data-dev:/app/logs
-      - ../simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/api/server.js" ]
     networks:
       - simplens-infra
@@ -87,7 +86,6 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       - logs-data-dev:/app/logs
-      - ../simplens.config.yaml:/app/simplens.config.yaml:ro
     command: [ "node", "dist/processors/unified/unified.processor.js" ]
     depends_on:
       api:
@@ -166,10 +164,9 @@ services:
       PORT: ${DASHBOARD_PORT:-3002}
       API_BASE_URL: http://api:${PORT:-3000}
       MONGO_URI: mongodb://mongo:27017/simplens_dev?replicaSet=rs0
-      AUTH_SECRET: ${AUTH_SECRET:-change-this-in-production}
-      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      AUTH_SECRET: ${AUTH_SECRET:-${NS_API_KEY:-change-this-in-production}}
       AUTH_TRUST_HOST: "true"
+      HTTPS_COOKIE: ${HTTPS_COOKIE:-false}
       WEBHOOK_HOST: dashboard
       WEBHOOK_PORT: "3002"
     depends_on:

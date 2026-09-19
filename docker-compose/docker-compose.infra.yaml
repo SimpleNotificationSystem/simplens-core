@@ -4,7 +4,7 @@
 # Shared across all application environments (local, dev, master).
 # ==============================================================================
 
-name: infra
+name: simplens-infra
 
 services:
   # ============================================
