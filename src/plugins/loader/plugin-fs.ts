@@ -10,6 +10,7 @@ import { join } from 'path';
 import { execSync } from 'child_process';
 import { pathToFileURL } from 'url';
 import type { SimpleNSProvider, ProviderManifest } from '@src/types/types.js';
+import { providerManifestSchema } from '@src/types/schemas.js';
 import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
 
 export const PLUGINS_DIR = join(process.cwd(), '.plugins');
@@ -190,6 +191,59 @@ export async function importAndInstantiateProvider(packageName: string): Promise
 }
 
 /**
+ * Validate that an instantiated object strictly satisfies the SimpleNSProvider contract
+ */
+export function validateSimpleNSProvider(
+  provider: unknown,
+  packageName: string
+): SimpleNSProvider {
+  if (!provider || typeof provider !== 'object') {
+    throw new Error(
+      `Package '${packageName}' is not a valid SimpleNS plugin: default export must be a Provider object or class.`
+    );
+  }
+
+  const p = provider as Record<string, unknown>;
+
+  if (!p.manifest || typeof p.manifest !== 'object') {
+    throw new Error(
+      `Package '${packageName}' is not a valid SimpleNS plugin: missing 'manifest' definition.`
+    );
+  }
+
+  const manifestValidation = providerManifestSchema.safeParse(p.manifest);
+  if (!manifestValidation.success) {
+    const errorDetails = Object.entries(manifestValidation.error.flatten().fieldErrors)
+      .map(([k, v]) => `${k}: ${v?.join(', ')}`)
+      .join('; ');
+    throw new Error(
+      `Package '${packageName}' has an invalid plugin manifest: ${errorDetails}`
+    );
+  }
+
+  const requiredMethods: (keyof SimpleNSProvider)[] = [
+    'send',
+    'initialize',
+    'healthCheck',
+    'shutdown',
+    'getNotificationSchema',
+    'getRecipientSchema',
+    'getContentSchema',
+    'getRateLimitConfig',
+  ];
+
+  const missingMethods = requiredMethods.filter((method) => typeof p[method] !== 'function');
+
+  if (missingMethods.length > 0) {
+    throw new Error(
+      `Package '${packageName}' is not a valid SimpleNS plugin. Missing required provider methods: ${missingMethods.join(', ')}`
+    );
+  }
+
+  return provider as SimpleNSProvider;
+}
+
+/**
  * Extract manifest and authoritative package.json version from an installed package
  */
 export async function extractPackageManifest(
@@ -209,10 +263,8 @@ export async function extractPackageManifest(
   const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
   const version: string = pkgJson.version || '1.0.0';
 
-  const provider = await importAndInstantiateProvider(packageName);
-  if (!provider.manifest) {
-    throw new Error(`Plugin '${packageName}' does not export a valid manifest property.`);
-  }
+  const rawProvider = await importAndInstantiateProvider(packageName);
+  const provider = validateSimpleNSProvider(rawProvider, packageName);
 
   // Ensure manifest version matches package.json
   const manifest: ProviderManifest = {
@@ -237,9 +289,23 @@ export function installNpmPackage(packageName: string, version?: string): void {
       stdio: 'pipe',
     });
     logger.success(`Successfully installed ${specifier}`);
-  } catch (err) {
-    logger.error(`Failed to install ${specifier}:`, err);
-    throw new Error(`Failed to install package: ${specifier}`, { cause: err });
+  } catch (err: unknown) {
+    const execErr = err as { stderr?: Buffer; message?: string };
+    const stderrMsg = execErr.stderr ? execErr.stderr.toString('utf-8') : '';
+    logger.error(`Failed to install ${specifier}:`, stderrMsg || execErr.message || err);
+
+    let friendlyMessage = `Failed to install package '${specifier}'`;
+    if (stderrMsg.includes('E401') || stderrMsg.includes('401 Unauthorized')) {
+      friendlyMessage = `npm authentication failed (401 Unauthorized) for package '${packageName}'. Verify your npm token.`;
+    } else if (stderrMsg.includes('E404') || stderrMsg.includes('404 Not Found')) {
+      friendlyMessage = `Package '${packageName}' was not found (404 Not Found) on npm registry.`;
+    } else if (stderrMsg.includes('ETARGET')) {
+      friendlyMessage = `Version '${version}' not found for package '${packageName}'.`;
+    } else if (stderrMsg.trim()) {
+      friendlyMessage += `: ${stderrMsg.trim().slice(0, 300)}`;
+    }
+
+    throw new Error(friendlyMessage, { cause: err });
   }
 }
 

@@ -132,6 +132,9 @@ import {
     partialOperationalSettingsSchema,
     adminSetupSchema,
     adminLoginSchema,
+    npmAuthConfigSchema,
+    npmAuthStatusSchema,
+    installPluginPayloadSchema,
 } from "./schemas.js";
 
 // ============================================================================
@@ -198,6 +201,9 @@ export type provider_manifest = z.infer<typeof providerManifestSchema>;
 export type plugin_document = z.infer<typeof pluginSchema>;
 export type provider_document = z.infer<typeof providerSchema>;
 export type channel_routing_document = z.infer<typeof channelRoutingSchema>;
+export type npm_auth_config = z.infer<typeof npmAuthConfigSchema>;
+export type npm_auth_status = z.infer<typeof npmAuthStatusSchema>;
+export type install_plugin_payload = z.infer<typeof installPluginPayloadSchema>;
 
 export interface KafkaConsumerState {
     consumer: import('kafkajs').Consumer | null;
@@ -351,7 +357,8 @@ export type PluginSyncAction =
     | 'PROVIDER_UPSERTED'
     | 'PROVIDER_DELETED'
     | 'CHANNEL_ROUTING_UPDATED'
-    | 'SYSTEM_RELOAD';
+    | 'SYSTEM_RELOAD'
+    | 'NPM_AUTH_UPDATED';
 
 export interface PluginSyncPayload {
     plugin_name?: string;

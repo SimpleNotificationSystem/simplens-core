@@ -21,6 +21,8 @@ import {
   AdminChannelProviderMeta,
   InstalledPlugin,
   PluginCatalogItem,
+  NpmAuthStatus,
+  InstallPluginPayload,
   ProviderDto,
   ChannelRoutingDto,
   OperationalSettings,
@@ -150,12 +152,18 @@ export const pluginService = {
     apiClient.get(`/api/plugins/catalog/${category}`),
   getMetadata: (): Promise<PluginMetadata> => apiClient.get('/api/plugins'),
   listInstalled: (): Promise<{ plugins: InstalledPlugin[] }> => apiClient.get('/api/plugins/installed'),
-  install: (packageName: string, version?: string): Promise<{ message: string; plugin: InstalledPlugin }> =>
-    apiClient.post('/api/plugins/install', { package: packageName, version }),
+  install: (payload: string | InstallPluginPayload, version?: string): Promise<{ message: string; plugin: InstalledPlugin }> => {
+    const body = typeof payload === 'string' ? { package: payload, version } : payload;
+    return apiClient.post('/api/plugins/install', body);
+  },
   changeVersion: (packageName: string, version: string): Promise<{ message: string; plugin: InstalledPlugin }> =>
     apiClient.put('/api/plugins/version', { package: packageName, version }),
   uninstall: (packageName: string): Promise<{ message: string }> =>
     apiClient.delete(`/api/plugins/${encodeURIComponent(packageName)}`),
+  getNpmAuth: (): Promise<NpmAuthStatus> => apiClient.get('/api/plugins/npm-auth'),
+  saveNpmAuth: (payload: { token: string; registry_url?: string }): Promise<{ message: string; status: NpmAuthStatus }> =>
+    apiClient.post('/api/plugins/npm-auth', payload),
+  deleteNpmAuth: (): Promise<{ message: string }> => apiClient.delete('/api/plugins/npm-auth'),
 };
 
 export const providerService = {

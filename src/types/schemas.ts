@@ -554,3 +554,33 @@ export const adminLoginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+/**
+ * npm registry authentication config schema
+ */
+export const npmAuthConfigSchema = z.object({
+  token: z.string().min(1, "npm token cannot be empty"),
+  registry_url: z.string().url("Invalid registry URL").default("https://registry.npmjs.org/"),
+});
+
+/**
+ * npm registry auth status schema (safe to return to UI with masked token)
+ */
+export const npmAuthStatusSchema = z.object({
+  is_configured: z.boolean(),
+  registry_url: z.string().optional(),
+  masked_token: z.string().optional(),
+});
+
+/**
+ * Payload schema for installing a plugin package
+ */
+export const installPluginPayloadSchema = z.object({
+  package: z.string().min(1, "Package name is required"),
+  version: z.string().optional(),
+  auth: z.object({
+    token: z.string().optional(),
+    registry_url: z.string().url("Invalid registry URL").optional(),
+    save_token: z.boolean().default(true),
+  }).optional(),
+});
+

@@ -36,6 +36,7 @@ export {
 
 // Dynamic Management Services
 export { PluginManagerService } from './services/plugin-manager.service.js';
+export { NpmAuthService } from './services/npm-auth.service.js';
 export { ProviderManagerService, type ProviderResponseDto } from './services/provider-manager.service.js';
 export { ChannelRoutingService } from './services/channel-routing.service.js';
 export { YamlMigrator } from './bootstrap/yaml-migrator.js';
@@ -46,4 +47,5 @@ export {
     uninstallNpmPackage,
     extractPackageManifest,
     importAndInstantiateProvider,
+    validateSimpleNSProvider,
 } from './loader/plugin-fs.js';

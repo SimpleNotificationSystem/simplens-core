@@ -191,7 +191,7 @@ describe('Status Consumer', () => {
                 expect.objectContaining({
                     status: 'delivered',
                 }),
-                { new: true }
+                { returnDocument: 'after' }
             );
         });
 

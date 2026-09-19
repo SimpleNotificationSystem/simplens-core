@@ -16,6 +16,7 @@ import {
   PluginRegistry,
   PluginSyncService,
   PluginManagerService,
+  NpmAuthService,
   ProviderManagerService,
   ChannelRoutingService,
   loadProvidersFromDatabase,
@@ -201,6 +202,8 @@ const main = async (): Promise<void> => {
 
     // 3. Initialize Redis Pub/Sub synchronization
     await PluginSyncService.startSubscriber();
+    NpmAuthService.registerSyncHandlers();
+    await NpmAuthService.syncNpmrc();
     PluginManagerService.registerSyncHandlers();
     ProviderManagerService.registerSyncHandlers();
     ChannelRoutingService.registerSyncHandlers();

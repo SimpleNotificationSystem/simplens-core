@@ -4,10 +4,11 @@
  * Exposes plugin metadata, package management, and status
  */
 
-import { Request, Response } from 'express';
-import { PluginRegistry, PluginManagerService } from '@src/plugins/index.js';
+import type { Request, Response } from 'express';
+import { PluginRegistry, PluginManagerService, NpmAuthService } from '@src/plugins/index.js';
 import { apiLogger as logger } from '@src/workers/utils/logger.js';
 import axios from 'axios';
+import { installPluginPayloadSchema, npmAuthConfigSchema } from '@src/types/schemas.js';
 import type { plugin_catalog_entry } from '@src/types/types.js';
 
 const PLUGIN_CATALOG_BASE_URL = 'https://www.simplens.in/plugins';
@@ -91,16 +92,18 @@ export const listPluginCatalog = async (req: Request, res: Response): Promise<vo
  */
 export const installPlugin = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { package: packageName, version } = req.body;
-    if (!packageName || typeof packageName !== 'string') {
+    const validation = installPluginPayloadSchema.safeParse(req.body);
+    if (!validation.success) {
       res.status(400).json({
         error: 'Bad Request',
-        message: 'A valid npm package name is required'
+        message: 'Invalid plugin installation payload',
+        details: validation.error.flatten().fieldErrors,
       });
       return;
     }
 
-    const plugin = await PluginManagerService.installPlugin(packageName.trim(), version);
+    const { package: packageName, version, auth } = validation.data;
+    const plugin = await PluginManagerService.installPlugin(packageName.trim(), version?.trim(), auth);
     res.status(201).json({
       message: `Plugin '${packageName}' installed successfully`,
       plugin
@@ -108,8 +111,16 @@ export const installPlugin = async (req: Request, res: Response): Promise<void> 
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error(`Error installing plugin: ${message}`);
-    res.status(500).json({
-      error: 'Failed to install plugin',
+
+    const isBadRequest =
+      message.includes('not a valid SimpleNS plugin') ||
+      message.includes('invalid plugin manifest') ||
+      message.includes('npm authentication failed') ||
+      message.includes('not found') ||
+      message.includes('Missing required provider methods');
+
+    res.status(isBadRequest ? 400 : 500).json({
+      error: isBadRequest ? 'Bad Request' : 'Failed to install plugin',
       message
     });
   }
@@ -183,3 +194,74 @@ export const uninstallPlugin = async (req: Request, res: Response): Promise<void
     });
   }
 };
+
+/**
+ * GET /api/plugins/npm-auth
+ * Retrieve status of configured npm auth (with masked token)
+ */
+export const getNpmAuth = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const status = await NpmAuthService.getAuthStatus();
+    res.json(status);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(`Error retrieving npm auth status: ${message}`);
+    res.status(500).json({
+      error: 'Failed to retrieve npm auth status',
+      message,
+    });
+  }
+};
+
+/**
+ * POST /api/plugins/npm-auth
+ * Configure/save npm auth token and registry URL
+ */
+export const saveNpmAuth = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const validation = npmAuthConfigSchema.safeParse(req.body);
+    if (!validation.success) {
+      res.status(400).json({
+        error: 'Bad Request',
+        message: 'Invalid npm auth configuration',
+        details: validation.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const { token, registry_url } = validation.data;
+    const status = await NpmAuthService.saveNpmAuth(token, registry_url);
+    res.status(200).json({
+      message: 'npm auth configuration saved successfully',
+      status,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(`Error saving npm auth configuration: ${message}`);
+    res.status(500).json({
+      error: 'Failed to save npm auth configuration',
+      message,
+    });
+  }
+};
+
+/**
+ * DELETE /api/plugins/npm-auth
+ * Delete saved npm auth configuration
+ */
+export const deleteNpmAuth = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    await NpmAuthService.deleteNpmAuth();
+    res.json({
+      message: 'npm auth configuration removed successfully',
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(`Error deleting npm auth configuration: ${message}`);
+    res.status(500).json({
+      error: 'Failed to delete npm auth configuration',
+      message,
+    });
+  }
+};
+

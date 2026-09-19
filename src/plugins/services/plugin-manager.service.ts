@@ -16,7 +16,8 @@ import {
 } from '@src/plugins/loader/plugin-fs.js';
 import { PluginSyncService } from '@src/plugins/sync/plugin-sync.service.js';
 import { ProviderManagerService } from '@src/plugins/services/provider-manager.service.js';
-import type { plugin_document } from '@src/types/types.js';
+import type { plugin_document, ProviderManifest, install_plugin_payload } from '@src/types/types.js';
+import { NpmAuthService, extractScope } from './npm-auth.service.js';
 import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
 
 export class PluginManagerService {
@@ -32,7 +33,22 @@ export class PluginManagerService {
     return await PluginSyncService.runWithLock(async () => {
       try {
         installNpmPackage(packageName, version);
-        const { manifest, version: authoritativeVersion } = await extractPackageManifest(packageName);
+
+        let manifest: ProviderManifest;
+        let authoritativeVersion: string;
+        try {
+          const extracted = await extractPackageManifest(packageName);
+          manifest = extracted.manifest;
+          authoritativeVersion = extracted.version;
+        } catch (validationErr) {
+          logger.warn(`Plugin validation failed for '${packageName}'. Rolling back by uninstalling...`);
+          try {
+            uninstallNpmPackage(packageName);
+          } catch (uninstallErr) {
+            logger.error(`Rollback failed for '${packageName}':`, uninstallErr);
+          }
+          throw validationErr;
+        }
 
         const plugin = await Plugin.findOneAndUpdate(
           { name: packageName },
@@ -67,8 +83,22 @@ export class PluginManagerService {
    */
   public static async installPlugin(
     packageName: string,
-    version?: string
+    version?: string,
+    auth?: install_plugin_payload['auth']
   ): Promise<plugin_document> {
+    if (auth?.token) {
+      const scope = extractScope(packageName);
+      if (auth.save_token !== false) {
+        await NpmAuthService.saveNpmAuth(auth.token, auth.registry_url);
+      } else {
+        await NpmAuthService.syncNpmrc({
+          scope,
+          registryUrl: auth.registry_url,
+          token: auth.token,
+        });
+      }
+    }
+
     logger.info(`Installing plugin package '${packageName}' (version: ${version || 'latest'})...`);
     return this.saveAndBroadcastPlugin(packageName, version, 'PLUGIN_INSTALLED', true);
   }

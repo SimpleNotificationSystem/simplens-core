@@ -3,12 +3,13 @@
 import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { pluginService } from "@/lib/api-client";
-import type { InstalledPlugin, PluginCatalogItem } from "@/lib/types";
+import type { InstalledPlugin, PluginCatalogItem, InstallPluginPayload, NpmAuthStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -30,7 +31,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, Package, RefreshCw, Trash2, ArrowUpDown, Loader2, ExternalLink, Info, Search } from "lucide-react";
+import { Download, Package, RefreshCw, Trash2, ArrowUpDown, Loader2, ExternalLink, Info, Search, Lock, ShieldCheck, Eye, EyeOff, Check } from "lucide-react";
 import { toast } from "sonner";
 
 export function InstalledPluginsTab() {
@@ -40,10 +41,26 @@ export function InstalledPluginsTab() {
   );
 
   const [installModalOpen, setInstallModalOpen] = useState(false);
-  const [catalogTab, setCatalogTab] = useState<"official" | "community">("official");
+  const [catalogTab, setCatalogTab] = useState<"official" | "community" | "custom">("official");
   const [catalogSearch, setCatalogSearch] = useState("");
   const [selectedVersions, setSelectedVersions] = useState<Record<string, string>>({});
-  const [installingPackage, setInstallingPackage] = useState<string | null>(null);
+  const [installingPkgs, setInstallingPkgs] = useState<Set<string>>(new Set());
+
+  // Custom Package Form State
+  const [customPkg, setCustomPkg] = useState("");
+  const [customVersion, setCustomVersion] = useState("");
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [useSavedToken, setUseSavedToken] = useState(true);
+  const [npmToken, setNpmToken] = useState("");
+  const [showToken, setShowToken] = useState(false);
+  const [enterpriseRegistryUrl, setEnterpriseRegistryUrl] = useState("");
+  const [saveToken, setSaveToken] = useState(true);
+  const [isInstallingCustom, setIsInstallingCustom] = useState(false);
+
+  const { data: npmAuth, mutate: mutateNpmAuth } = useSWR<NpmAuthStatus>(
+    installModalOpen ? "/api/plugins/npm-auth" : null,
+    () => pluginService.getNpmAuth()
+  );
 
   const { data: officialCatalog = [], isLoading: officialLoading, error: officialError } = useSWR<PluginCatalogItem[]>(
     installModalOpen && catalogTab === "official" ? "plugin-catalog-official" : null,
@@ -66,7 +83,7 @@ export function InstalledPluginsTab() {
 
   const handleInstall = async (plugin: PluginCatalogItem) => {
     const version = selectedVersions[plugin.package] || "latest";
-    setInstallingPackage(plugin.package);
+    setInstallingPkgs((prev) => new Set(prev).add(plugin.package));
     try {
       await pluginService.install(plugin.package, version === "latest" ? undefined : version);
       toast.success(`Plugin '${plugin.name}' installed successfully`);
@@ -75,13 +92,70 @@ export function InstalledPluginsTab() {
       const message = err instanceof Error ? err.message : "Failed to install plugin";
       toast.error(message);
     } finally {
-      setInstallingPackage(null);
+      setInstallingPkgs((prev) => {
+        const next = new Set(prev);
+        next.delete(plugin.package);
+        return next;
+      });
+    }
+  };
+
+  const handleInstallCustom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const pkgName = customPkg.trim();
+    if (!pkgName) {
+      toast.error("Please enter a package name");
+      return;
+    }
+
+    const payload: InstallPluginPayload = {
+      package: pkgName,
+      version: customVersion.trim() || undefined,
+    };
+
+    if (isPrivate) {
+      const token = useSavedToken && npmAuth?.is_configured ? undefined : npmToken.trim();
+      if (!useSavedToken && !token) {
+        toast.error("Please enter an npm authentication token for this private package");
+        return;
+      }
+      if (token || enterpriseRegistryUrl.trim()) {
+        payload.auth = {
+          token: token || undefined,
+          registry_url: enterpriseRegistryUrl.trim() || undefined,
+          save_token: saveToken,
+        };
+      }
+    }
+
+    setIsInstallingCustom(true);
+    setInstallingPkgs((prev) => new Set(prev).add(pkgName));
+    try {
+      await pluginService.install(payload);
+      toast.success(`Plugin '${pkgName}' installed successfully!`);
+      mutate();
+      if (payload.auth?.token && saveToken) {
+        mutateNpmAuth();
+      }
+      setCustomPkg("");
+      setCustomVersion("");
+      setNpmToken("");
+      setIsPrivate(false);
+      setInstallModalOpen(false);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to install custom plugin";
+      toast.error(message);
+    } finally {
+      setIsInstallingCustom(false);
+      setInstallingPkgs((prev) => {
+        const next = new Set(prev);
+        next.delete(pkgName);
+        return next;
+      });
     }
   };
 
   const catalog = catalogTab === "official" ? officialCatalog : communityCatalog;
-  const catalogLoading = catalogTab === "official" ? officialLoading : communityLoading;
-  const catalogError = catalogTab === "official" ? officialError : communityError;
   const filteredCatalog = useMemo(() => {
     const query = catalogSearch.trim().toLowerCase();
     if (!query) return catalog;
@@ -336,45 +410,50 @@ export function InstalledPluginsTab() {
             <DialogHeader>
               <DialogTitle>Install Plugin Package</DialogTitle>
               <DialogDescription>
-                Browse official and community provider packages available for SimpleNS.
+                Browse official and community provider packages or install custom plugins from npmjs.
               </DialogDescription>
             </DialogHeader>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4 pr-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  aria-label="Search plugins"
-                  placeholder="Search by name, package, or description"
-                  className="pl-9"
-                  value={catalogSearch}
-                  onChange={(event) => setCatalogSearch(event.target.value)}
-                />
-              </div>
-              <Tabs value={catalogTab} onValueChange={(value) => setCatalogTab(value as "official" | "community")}>
-                <TabsList className="grid w-full grid-cols-2">
+              <Tabs value={catalogTab} onValueChange={(value) => setCatalogTab(value as "official" | "community" | "custom")}>
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="official">Official</TabsTrigger>
                   <TabsTrigger value="community">Community</TabsTrigger>
+                  <TabsTrigger value="custom">Custom Package</TabsTrigger>
                 </TabsList>
-                <TabsContent value={catalogTab} className="mt-3">
-                  {catalogLoading ? (
+
+                {catalogTab !== "custom" && (
+                  <div className="relative mt-3">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      aria-label="Search plugins"
+                      placeholder="Search by name, package, or description"
+                      className="pl-9"
+                      value={catalogSearch}
+                      onChange={(event) => setCatalogSearch(event.target.value)}
+                    />
+                  </div>
+                )}
+
+                <TabsContent value="official" className="mt-3">
+                  {officialLoading ? (
                     <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" /> Loading plugins...
                     </div>
-                  ) : catalogError ? (
+                  ) : officialError ? (
                     <div className="py-10 text-center text-sm text-destructive">
-                      Failed to load {catalogTab} plugins.
+                      Failed to load official plugins.
                     </div>
                   ) : filteredCatalog.length === 0 ? (
                     <div className="py-10 text-center text-sm text-muted-foreground">
-                      {catalogTab === "community" && catalog.length === 0
-                        ? "No community plugins are available yet."
-                        : "No plugins match your search."}
+                      No plugins match your search.
                     </div>
                   ) : (
                     <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
                       {filteredCatalog.map((plugin) => {
                         const versions = plugin.versions?.length ? plugin.versions : ["latest"];
                         const selectedVersion = selectedVersions[plugin.package] || versions[0];
+                        const isInstalled = installedPackages.has(plugin.package);
+                        const isInstalling = installingPkgs.has(plugin.package);
                         return (
                           <div key={plugin.package} className="flex items-center gap-4 rounded-lg border bg-card p-3">
                             <div className="min-w-0 flex-1">
@@ -396,8 +475,9 @@ export function InstalledPluginsTab() {
                                   ))}
                                 </SelectContent>
                               </Select>
-                              {installedPackages.has(plugin.package) ? (
-                                <Button type="button" size="sm" variant="secondary" disabled>
+                              {isInstalled ? (
+                                <Button type="button" size="sm" variant="secondary" disabled className="gap-1">
+                                  <Check className="h-3.5 w-3.5 text-emerald-500" />
                                   Installed
                                 </Button>
                               ) : (
@@ -405,9 +485,9 @@ export function InstalledPluginsTab() {
                                   type="button"
                                   size="sm"
                                   onClick={() => void handleInstall(plugin)}
-                                  disabled={installingPackage !== null}
+                                  disabled={isInstalling}
                                 >
-                                  {installingPackage === plugin.package ? (
+                                  {isInstalling ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                   ) : (
                                     <Download className="h-4 w-4" />
@@ -422,10 +502,242 @@ export function InstalledPluginsTab() {
                     </div>
                   )}
                 </TabsContent>
+
+                <TabsContent value="community" className="mt-3">
+                  {communityLoading ? (
+                    <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Loading plugins...
+                    </div>
+                  ) : communityError ? (
+                    <div className="py-10 text-center text-sm text-destructive">
+                      Failed to load community plugins.
+                    </div>
+                  ) : filteredCatalog.length === 0 ? (
+                    <div className="py-10 text-center text-sm text-muted-foreground">
+                      {communityCatalog.length === 0
+                        ? "No community plugins are available yet."
+                        : "No plugins match your search."}
+                    </div>
+                  ) : (
+                    <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
+                      {filteredCatalog.map((plugin) => {
+                        const versions = plugin.versions?.length ? plugin.versions : ["latest"];
+                        const selectedVersion = selectedVersions[plugin.package] || versions[0];
+                        const isInstalled = installedPackages.has(plugin.package);
+                        const isInstalling = installingPkgs.has(plugin.package);
+                        return (
+                          <div key={plugin.package} className="flex items-center gap-4 rounded-lg border bg-card p-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium">{plugin.name}</div>
+                              <div className="truncate font-mono text-xs text-muted-foreground">{plugin.package}</div>
+                              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{plugin.description}</p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <Select
+                                value={selectedVersion}
+                                onValueChange={(value) => setSelectedVersions({ ...selectedVersions, [plugin.package]: value })}
+                              >
+                                <SelectTrigger className="w-28" aria-label={`Version for ${plugin.name}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {versions.map((version) => (
+                                    <SelectItem key={version} value={version}>{version}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {isInstalled ? (
+                                <Button type="button" size="sm" variant="secondary" disabled className="gap-1">
+                                  <Check className="h-3.5 w-3.5 text-emerald-500" />
+                                  Installed
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => void handleInstall(plugin)}
+                                  disabled={isInstalling}
+                                >
+                                  {isInstalling ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Download className="h-4 w-4" />
+                                  )}
+                                  Install
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="custom" className="mt-3 space-y-4">
+                  <form onSubmit={handleInstallCustom} className="space-y-4">
+                    <div className="rounded-lg border bg-muted/40 p-4 space-y-1.5">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                        <Package className="h-4 w-4 text-primary" />
+                        <span>Install from npmjs or Enterprise Registry</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Install any custom plugin implementing the SimpleNS Provider interface. For scoped packages (e.g. <code>@myenterprise/provider</code>), the scope is automatically detected.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="md:col-span-2 space-y-1.5">
+                        <Label htmlFor="custom-pkg-name" className="text-xs font-semibold">
+                          Package Name <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id="custom-pkg-name"
+                          placeholder="e.g. @myenterprise/custom-provider or custom-mailer"
+                          value={customPkg}
+                          onChange={(e) => setCustomPkg(e.target.value)}
+                          required
+                          disabled={isInstallingCustom}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="custom-pkg-version" className="text-xs font-semibold">
+                          Version (Optional)
+                        </Label>
+                        <Input
+                          id="custom-pkg-version"
+                          placeholder="latest (or 1.2.0)"
+                          value={customVersion}
+                          onChange={(e) => setCustomVersion(e.target.value)}
+                          disabled={isInstallingCustom}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Private / Enterprise npm Package Toggle */}
+                    <div className="rounded-lg border p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <div className="text-xs font-semibold flex items-center gap-1.5">
+                            <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                            Private / Enterprise Package
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            Enable if this package requires an npm authentication token to download.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={isPrivate}
+                          onCheckedChange={setIsPrivate}
+                          aria-label="Toggle private package"
+                          disabled={isInstallingCustom}
+                        />
+                      </div>
+
+                      {isPrivate && (
+                        <div className="pt-3 border-t space-y-3">
+                          {npmAuth?.is_configured && (
+                            <div className="flex items-center justify-between rounded-md bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-xs">
+                              <div className="flex items-center gap-2">
+                                <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                <span>
+                                  Saved token active: <code className="font-mono font-semibold">{npmAuth.masked_token}</code>
+                                </span>
+                              </div>
+                              <label className="text-[11px] text-muted-foreground cursor-pointer flex items-center gap-1.5">
+                                <input
+                                  type="checkbox"
+                                  checked={useSavedToken}
+                                  onChange={(e) => setUseSavedToken(e.target.checked)}
+                                  className="rounded text-primary h-3.5 w-3.5"
+                                />
+                                Use saved token
+                              </label>
+                            </div>
+                          )}
+
+                          {(!useSavedToken || !npmAuth?.is_configured) && (
+                            <div className="space-y-3">
+                              <div className="space-y-1.5">
+                                <Label htmlFor="custom-npm-token" className="text-xs font-semibold">
+                                  npm Access Token <span className="text-destructive">*</span>
+                                </Label>
+                                <div className="relative">
+                                  <Input
+                                    id="custom-npm-token"
+                                    type={showToken ? "text" : "password"}
+                                    placeholder="npm_xxxxxxxxxxxxxxxxxxxxxxxx"
+                                    value={npmToken}
+                                    onChange={(e) => setNpmToken(e.target.value)}
+                                    required={isPrivate && (!useSavedToken || !npmAuth?.is_configured)}
+                                    className="pr-10 font-mono text-xs"
+                                    disabled={isInstallingCustom}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowToken(!showToken)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    tabIndex={-1}
+                                  >
+                                    {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <Label htmlFor="custom-registry-url" className="text-xs font-semibold">
+                                  Enterprise Registry URL (Optional)
+                                </Label>
+                                <Input
+                                  id="custom-registry-url"
+                                  placeholder="https://registry.npmjs.org/ (default)"
+                                  value={enterpriseRegistryUrl}
+                                  onChange={(e) => setEnterpriseRegistryUrl(e.target.value)}
+                                  disabled={isInstallingCustom}
+                                />
+                              </div>
+
+                              <div className="flex items-center gap-2 pt-1">
+                                <input
+                                  id="save-token-check"
+                                  type="checkbox"
+                                  checked={saveToken}
+                                  onChange={(e) => setSaveToken(e.target.checked)}
+                                  className="rounded text-primary h-4 w-4"
+                                  disabled={isInstallingCustom}
+                                />
+                                <Label htmlFor="save-token-check" className="text-xs font-normal cursor-pointer text-muted-foreground">
+                                  Save token in SimpleNS for background processors and future updates
+                                </Label>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex justify-end pt-2">
+                      <Button
+                        type="submit"
+                        disabled={isInstallingCustom || !customPkg.trim()}
+                        className="gap-2 text-xs font-semibold"
+                      >
+                        {isInstallingCustom ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        {isInstallingCustom ? "Validating & Installing..." : "Install Custom Plugin"}
+                      </Button>
+                    </div>
+                  </form>
+                </TabsContent>
               </Tabs>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setInstallModalOpen(false)} disabled={installingPackage !== null}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setInstallModalOpen(false)}
+                disabled={installingPkgs.size > 0}
+              >
                 Cancel
               </Button>
             </DialogFooter>

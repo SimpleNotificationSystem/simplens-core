@@ -251,6 +251,22 @@ export interface PluginCatalogItem {
   versions?: string[];
 }
 
+export interface NpmAuthStatus {
+  is_configured: boolean;
+  registry_url?: string;
+  masked_token?: string;
+}
+
+export interface InstallPluginPayload {
+  package: string;
+  version?: string;
+  auth?: {
+    token?: string;
+    registry_url?: string;
+    save_token?: boolean;
+  };
+}
+
 export interface ProviderDto {
   _id?: string;
   id: string;

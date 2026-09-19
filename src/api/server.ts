@@ -24,6 +24,7 @@ import { apiLogger as logger } from '@src/workers/utils/logger.js';
 import {
   PluginSyncService,
   PluginManagerService,
+  NpmAuthService,
   ProviderManagerService,
   ChannelRoutingService,
   YamlMigrator,
@@ -83,6 +84,8 @@ const start_server = async () => {
 
         // 1. Initialize Redis subscriber & sync handlers for plugins
         await PluginSyncService.startSubscriber();
+        NpmAuthService.registerSyncHandlers();
+        await NpmAuthService.syncNpmrc();
         PluginManagerService.registerSyncHandlers();
         ProviderManagerService.registerSyncHandlers();
         ChannelRoutingService.registerSyncHandlers();

@@ -71,6 +71,20 @@ describe('PluginManagerService', () => {
       });
       expect(result.version).toBe('2.1.0');
     });
+
+    it('should roll back by uninstalling if manifest extraction/validation fails', async () => {
+      vi.spyOn(pluginFs, 'installNpmPackage').mockReturnValue(undefined);
+      const uninstallSpy = vi.spyOn(pluginFs, 'uninstallNpmPackage').mockReturnValue(undefined);
+      vi.spyOn(pluginFs, 'extractPackageManifest').mockRejectedValue(
+        new Error("Package 'lodash' is not a valid SimpleNS plugin.")
+      );
+
+      await expect(
+        PluginManagerService.installPlugin('lodash', 'latest')
+      ).rejects.toThrow("Package 'lodash' is not a valid SimpleNS plugin.");
+
+      expect(uninstallSpy).toHaveBeenCalledWith('lodash');
+    });
   });
 
   describe('changePluginVersion', () => {
