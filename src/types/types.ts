@@ -495,3 +495,25 @@ export interface AdminAuthStatus {
     isConfigured: boolean;
 }
 
+// ============================================================================
+// KUBERNETES HEALTH PROBE TYPES
+// ============================================================================
+
+export interface HealthProbeCheck {
+    name: string;
+    check: () => Promise<boolean> | boolean;
+}
+
+export interface HealthProbeOptions {
+    port?: number;
+    serviceName: string;
+    readinessChecks?: HealthProbeCheck[];
+    livenessChecks?: HealthProbeCheck[];
+}
+
+export interface HealthProbeServer {
+    start: () => Promise<void>;
+    stop: () => Promise<void>;
+}
+
+

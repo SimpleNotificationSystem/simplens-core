@@ -19,6 +19,8 @@ import { connectRedis, disconnectRedis, getRedisClient } from '@src/config/redis
 import { startRecoveryCron, stopRecoveryCron, setHealthChecker } from './recovery.cron.js';
 import { recoveryLogger as logger, flushLogs } from '@src/workers/utils/logger.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
+import { createHealthProbeServer } from '@src/utils/k8s-health-probe.js';
+import type { HealthProbeServer } from '@src/types/types.js';
 
 //Import the admin channel provider files here for them to self-register
 import "@src/admin-alerts/channels/discord.channel.js";
@@ -27,6 +29,7 @@ import "@src/admin-alerts/channels/telegram.channel.js";
 let isShuttingDown = false;
 let mongoReconnecting = false;
 let redisReconnecting = false;
+let probeServer: HealthProbeServer | null = null;
 
 const RECONNECT_DELAY_MS = 5000;
 const MAX_RECONNECT_ATTEMPTS = 10;
@@ -240,6 +243,11 @@ const shutdown = async (signal: string): Promise<void> => {
         // Flush logs before exit
         await flushLogs();
 
+        // Stop health probe server
+        if (probeServer) {
+            await probeServer.stop();
+        }
+
         logger.success('Recovery service shutdown complete');
         process.exit(0);
     } catch (err) {
@@ -279,6 +287,19 @@ const main = async (): Promise<void> => {
     logger.info(`Recovery interval: ${env.RECOVERY_POLL_INTERVAL_MS}ms`);
     logger.info(`Processing stuck threshold: ${env.PROCESSING_STUCK_THRESHOLD_MS}ms`);
     logger.info(`Pending stuck threshold: ${env.PENDING_STUCK_THRESHOLD_MS}ms`);
+
+    // Start health probe server for Kubernetes
+    probeServer = createHealthProbeServer({
+        serviceName: 'recovery-service',
+        readinessChecks: [
+            { name: 'mongodb', check: () => isMongoHealthy() },
+            { name: 'redis', check: () => isRedisHealthy() }
+        ],
+        livenessChecks: [
+            { name: 'process', check: () => true }
+        ]
+    });
+    await probeServer.start();
 
     // Register signal handlers for graceful shutdown
     process.on('SIGTERM', () => shutdown('SIGTERM'));

@@ -29,6 +29,9 @@ import {
 } from './unified.consumer.js';
 import { unifiedProcessorLogger as logger } from './unified.logger.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
+import { createHealthProbeServer } from '@src/utils/k8s-health-probe.js';
+import type { HealthProbeServer } from '@src/types/types.js';
+import { getRedisClient } from '@src/config/redis.config.js';
 
 // Import the admin channel provider files here for them to self-register
 import "@src/admin-alerts/channels/discord.channel.js";
@@ -38,6 +41,7 @@ import "@src/admin-alerts/channels/telegram.channel.js";
 const activeChannels: string[] = [];
 let isShuttingDown = false;
 let dbConnection: { disconnect: () => Promise<void> } | null = null;
+let probeServer: HealthProbeServer | null = null;
 
 /**
  * Parse channel argument from CLI or environment
@@ -131,6 +135,11 @@ const gracefulShutdown = async (signal: string): Promise<void> => {
     if (dbConnection) {
       logger.info('Disconnecting MongoDB...');
       await dbConnection.disconnect();
+    }
+
+    // 6. Stop health probe server
+    if (probeServer) {
+      await probeServer.stop();
     }
 
     logger.success('Graceful shutdown complete');
@@ -269,7 +278,26 @@ const main = async (): Promise<void> => {
       logger.success(`Unified Processor is running! Active channels: ${activeChannels.join(', ')}`);
     }
 
-    // 8. Register shutdown handlers
+    // 8. Start health probe server for Kubernetes
+    probeServer = createHealthProbeServer({
+      serviceName: 'unified-processor',
+      readinessChecks: [
+        { name: 'mongodb', check: () => dbConnection !== null },
+        { name: 'redis', check: () => {
+          try {
+            return getRedisClient().status === 'ready';
+          } catch {
+            return false;
+          }
+        }}
+      ],
+      livenessChecks: [
+        { name: 'process', check: () => true }
+      ]
+    });
+    await probeServer.start();
+
+    // 9. Register shutdown handlers
     registerShutdownHandlers();
 
     logger.info('================================');

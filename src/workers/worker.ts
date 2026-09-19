@@ -2,9 +2,11 @@ import { connectMongoDB } from "@src/config/db.config.js";
 import { dynamicConfig } from "@src/config/dynamic-config.service.js";
 import { initProducer, disconnectProducer } from "@src/workers/producers/background.producer.js";
 import { startCronJobs, stopCronJobs } from "@src/workers/cron/background.cron.js";
-import { startStatusConsumer, stopStatusConsumer } from "@src/workers/consumers/status.consumer.js";
+import { startStatusConsumer, stopStatusConsumer, isStatusConsumerRunning } from "@src/workers/consumers/status.consumer.js";
 import { workerLogger as logger } from "@src/workers/utils/logger.js";
 import { AdminAlertService } from "@src/admin-alerts/admin-alert.service.js";
+import { createHealthProbeServer } from "@src/utils/k8s-health-probe.js";
+import type { HealthProbeServer } from "@src/types/types.js";
 
 //Import the admin channel provider files here for them to self-register
 import "@src/admin-alerts/channels/discord.channel.js";
@@ -12,6 +14,7 @@ import "@src/admin-alerts/channels/telegram.channel.js";
 
 let isShuttingDown = false;
 let dbConnection: Awaited<ReturnType<typeof connectMongoDB>> | null = null;
+let probeServer: HealthProbeServer | null = null;
 
 /**
  * Graceful shutdown handler
@@ -42,6 +45,11 @@ const gracefulShutdown = async (signal: string): Promise<void> => {
         if (dbConnection) {
             logger.info("Disconnecting MongoDB...");
             await dbConnection.disconnect();
+        }
+
+        // 5. Stop health probe server
+        if (probeServer) {
+            await probeServer.stop();
         }
 
         logger.success("Graceful shutdown complete");
@@ -116,6 +124,19 @@ const main = async (): Promise<void> => {
         logger.info("================================");
         logger.success("Background Worker is running!");
         logger.info("================================");
+
+        // 5. Start health probe server for Kubernetes
+        probeServer = createHealthProbeServer({
+            serviceName: 'worker',
+            readinessChecks: [
+                { name: 'mongodb', check: () => dbConnection !== null },
+                { name: 'status_consumer', check: () => isStatusConsumerRunning() }
+            ],
+            livenessChecks: [
+                { name: 'process', check: () => true }
+            ]
+        });
+        await probeServer.start();
 
         // Register shutdown handlers
         registerShutdownHandlers();
