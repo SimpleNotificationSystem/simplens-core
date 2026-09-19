@@ -229,8 +229,8 @@ export const saveNpmAuth = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    const { token, registry_url } = validation.data;
-    const status = await NpmAuthService.saveNpmAuth(token, registry_url);
+    const { token, registry_url, scope } = validation.data;
+    const status = await NpmAuthService.saveNpmAuth(token, registry_url, scope);
     res.status(200).json({
       message: 'npm auth configuration saved successfully',
       status,
@@ -247,13 +247,16 @@ export const saveNpmAuth = async (req: Request, res: Response): Promise<void> =>
 
 /**
  * DELETE /api/plugins/npm-auth
- * Delete saved npm auth configuration
+ * Delete saved npm auth configuration (specific registry or all)
  */
-export const deleteNpmAuth = async (_req: Request, res: Response): Promise<void> => {
+export const deleteNpmAuth = async (req: Request, res: Response): Promise<void> => {
   try {
-    await NpmAuthService.deleteNpmAuth();
+    const target = (req.query.id as string) || (req.query.scope as string) || (req.body?.id as string);
+    await NpmAuthService.deleteNpmAuth(target);
     res.json({
-      message: 'npm auth configuration removed successfully',
+      message: target
+        ? `npm auth configuration for '${target}' removed successfully`
+        : 'npm auth configuration removed successfully',
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

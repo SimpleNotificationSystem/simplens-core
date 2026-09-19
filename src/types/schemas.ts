@@ -555,19 +555,42 @@ export const adminLoginSchema = z.object({
 });
 
 /**
+ * npm registry configuration schema for individual custom registries/scopes
+ */
+export const npmRegistryConfigSchema = z.object({
+  id: z.string().optional(),
+  scope: z.string().trim().optional(),
+  registry_url: z.string().url("Invalid registry URL").default("https://registry.npmjs.org/"),
+  token: z.string().min(1, "npm token cannot be empty"),
+});
+
+/**
+ * npm registry status item for public/dashboard display
+ */
+export const npmRegistryStatusSchema = z.object({
+  id: z.string(),
+  scope: z.string().optional(),
+  registry_url: z.string(),
+  masked_token: z.string(),
+  updated_at: z.string(),
+});
+
+/**
  * npm registry authentication config schema
  */
 export const npmAuthConfigSchema = z.object({
   token: z.string().min(1, "npm token cannot be empty"),
   registry_url: z.string().url("Invalid registry URL").default("https://registry.npmjs.org/"),
+  scope: z.string().trim().optional(),
 });
 
 /**
- * npm registry auth status schema (safe to return to UI with masked token)
+ * npm registry auth status schema (safe to return to UI with masked token and registry list)
  */
 export const npmAuthStatusSchema = z.object({
   is_configured: z.boolean(),
-  registry_url: z.string().optional(),
+  registries: z.array(npmRegistryStatusSchema).default([]),
+  default_registry: z.string().optional(),
   masked_token: z.string().optional(),
 });
 
@@ -580,6 +603,7 @@ export const installPluginPayloadSchema = z.object({
   auth: z.object({
     token: z.string().optional(),
     registry_url: z.string().url("Invalid registry URL").optional(),
+    scope: z.string().optional(),
     save_token: z.boolean().default(true),
   }).optional(),
 });

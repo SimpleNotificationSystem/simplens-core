@@ -132,6 +132,8 @@ import {
     partialOperationalSettingsSchema,
     adminSetupSchema,
     adminLoginSchema,
+    npmRegistryConfigSchema,
+    npmRegistryStatusSchema,
     npmAuthConfigSchema,
     npmAuthStatusSchema,
     installPluginPayloadSchema,
@@ -201,6 +203,8 @@ export type provider_manifest = z.infer<typeof providerManifestSchema>;
 export type plugin_document = z.infer<typeof pluginSchema>;
 export type provider_document = z.infer<typeof providerSchema>;
 export type channel_routing_document = z.infer<typeof channelRoutingSchema>;
+export type npm_registry_config = z.infer<typeof npmRegistryConfigSchema>;
+export type npm_registry_status = z.infer<typeof npmRegistryStatusSchema>;
 export type npm_auth_config = z.infer<typeof npmAuthConfigSchema>;
 export type npm_auth_status = z.infer<typeof npmAuthStatusSchema>;
 export type install_plugin_payload = z.infer<typeof installPluginPayloadSchema>;

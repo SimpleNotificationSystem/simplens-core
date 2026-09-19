@@ -86,13 +86,14 @@ export class PluginManagerService {
     version?: string,
     auth?: install_plugin_payload['auth']
   ): Promise<plugin_document> {
+    const scope = extractScope(packageName);
     if (auth?.token) {
-      const scope = extractScope(packageName);
+      const targetScope = auth.scope || scope;
       if (auth.save_token !== false) {
-        await NpmAuthService.saveNpmAuth(auth.token, auth.registry_url);
+        await NpmAuthService.saveNpmAuth(auth.token, auth.registry_url, targetScope);
       } else {
         await NpmAuthService.syncNpmrc({
-          scope,
+          scope: targetScope,
           registryUrl: auth.registry_url,
           token: auth.token,
         });

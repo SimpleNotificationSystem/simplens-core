@@ -31,6 +31,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Download, Package, RefreshCw, Trash2, ArrowUpDown, Loader2, ExternalLink, Info, Search, Lock, ShieldCheck, Eye, EyeOff, Check } from "lucide-react";
 import { toast } from "sonner";
 
@@ -50,17 +51,74 @@ export function InstalledPluginsTab() {
   const [customPkg, setCustomPkg] = useState("");
   const [customVersion, setCustomVersion] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
-  const [useSavedToken, setUseSavedToken] = useState(true);
   const [npmToken, setNpmToken] = useState("");
   const [showToken, setShowToken] = useState(false);
   const [enterpriseRegistryUrl, setEnterpriseRegistryUrl] = useState("");
   const [saveToken, setSaveToken] = useState(true);
+  const [overrideToken, setOverrideToken] = useState(false);
   const [isInstallingCustom, setIsInstallingCustom] = useState(false);
 
   const { data: npmAuth, mutate: mutateNpmAuth } = useSWR<NpmAuthStatus>(
     installModalOpen ? "/api/plugins/npm-auth" : null,
     () => pluginService.getNpmAuth()
   );
+
+  const detectedScope = useMemo(() => {
+    const match = customPkg.trim().match(/^(@[a-zA-Z0-9~_.-]+)\//);
+    return match ? match[1].toLowerCase() : undefined;
+  }, [customPkg]);
+
+  const matchedAuth = useMemo(() => {
+    if (!npmAuth?.is_configured) return null;
+    const regList = npmAuth.registries || [];
+
+    // 1. Check scope match
+    if (detectedScope) {
+      const scopeMatch = regList.find(
+        (r) => r.scope?.toLowerCase() === detectedScope
+      );
+      if (scopeMatch) return scopeMatch;
+    }
+
+    // 2. Check registry URL match if entered
+    const regUrl = enterpriseRegistryUrl.trim();
+    if (regUrl) {
+      try {
+        const inputUrl = regUrl.startsWith("http") ? regUrl : `https://${regUrl}`;
+        const inputHost = new URL(inputUrl).host.toLowerCase();
+        const urlMatch = regList.find((r) => {
+          try {
+            return new URL(r.registry_url).host.toLowerCase() === inputHost;
+          } catch {
+            return false;
+          }
+        });
+        if (urlMatch) return urlMatch;
+      } catch {
+        // invalid URL
+      }
+    }
+
+    // 3. Check default npmjs match if no custom scope and no custom url
+    if (!detectedScope && !regUrl) {
+      const defaultMatch = regList.find(
+        (r) => !r.scope && r.registry_url.includes("registry.npmjs.org")
+      );
+      if (defaultMatch) return defaultMatch;
+    }
+
+    // 4. Fallback if single global/legacy token exists and neither custom scope nor custom url
+    if (!detectedScope && !regUrl && npmAuth.masked_token) {
+      return regList[0] || {
+        id: "default",
+        registry_url: npmAuth.default_registry || "https://registry.npmjs.org/",
+        masked_token: npmAuth.masked_token,
+        updated_at: "",
+      };
+    }
+
+    return null;
+  }, [npmAuth, detectedScope, enterpriseRegistryUrl]);
 
   const { data: officialCatalog = [], isLoading: officialLoading, error: officialError } = useSWR<PluginCatalogItem[]>(
     installModalOpen && catalogTab === "official" ? "plugin-catalog-official" : null,
@@ -114,15 +172,17 @@ export function InstalledPluginsTab() {
     };
 
     if (isPrivate) {
-      const token = useSavedToken && npmAuth?.is_configured ? undefined : npmToken.trim();
-      if (!useSavedToken && !token) {
+      const hasConfiguredAuth = matchedAuth && !overrideToken;
+      const token = hasConfiguredAuth ? undefined : npmToken.trim();
+      if (!hasConfiguredAuth && !token) {
         toast.error("Please enter an npm authentication token for this private package");
         return;
       }
-      if (token || enterpriseRegistryUrl.trim()) {
+      if (token || enterpriseRegistryUrl.trim() || detectedScope) {
         payload.auth = {
           token: token || undefined,
           registry_url: enterpriseRegistryUrl.trim() || undefined,
+          scope: detectedScope,
           save_token: saveToken,
         };
       }
@@ -140,6 +200,8 @@ export function InstalledPluginsTab() {
       setCustomPkg("");
       setCustomVersion("");
       setNpmToken("");
+      setEnterpriseRegistryUrl("");
+      setOverrideToken(false);
       setIsPrivate(false);
       setInstallModalOpen(false);
     } catch (err: unknown) {
@@ -637,32 +699,86 @@ export function InstalledPluginsTab() {
 
                       {isPrivate && (
                         <div className="pt-3 border-t space-y-3">
-                          {npmAuth?.is_configured && (
-                            <div className="flex items-center justify-between rounded-md bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-xs">
-                              <div className="flex items-center gap-2">
+                          {matchedAuth && !overrideToken ? (
+                            <div className="flex items-center justify-between rounded-md bg-emerald-500/10 border border-emerald-500/20 px-3.5 py-2.5 text-xs">
+                              <div className="flex items-center gap-2.5">
                                 <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                                <span>
-                                  Saved token active: <code className="font-mono font-semibold">{npmAuth.masked_token}</code>
-                                </span>
+                                <div className="space-y-0.5">
+                                  <div className="font-medium text-foreground">
+                                    Configured: Using saved credentials for {matchedAuth.scope || matchedAuth.registry_url}
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground font-mono">
+                                    Active Token: <span className="font-semibold">{matchedAuth.masked_token}</span>
+                                  </div>
+                                </div>
                               </div>
-                              <label className="text-[11px] text-muted-foreground cursor-pointer flex items-center gap-1.5">
-                                <input
-                                  type="checkbox"
-                                  checked={useSavedToken}
-                                  onChange={(e) => setUseSavedToken(e.target.checked)}
-                                  className="rounded text-primary h-3.5 w-3.5"
-                                />
-                                Use saved token
-                              </label>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => setOverrideToken(true)}
+                              >
+                                Change Token
+                              </Button>
                             </div>
-                          )}
-
-                          {(!useSavedToken || !npmAuth?.is_configured) && (
+                          ) : (
                             <div className="space-y-3">
+                              {overrideToken && (
+                                <div className="flex items-center justify-between text-xs pb-1">
+                                  <span className="text-muted-foreground">
+                                    Updating credentials for <strong>{detectedScope || "this registry"}</strong>
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 text-[11px] text-muted-foreground hover:text-foreground"
+                                    onClick={() => {
+                                      setOverrideToken(false);
+                                      setNpmToken("");
+                                    }}
+                                  >
+                                    Cancel and use saved token
+                                  </Button>
+                                </div>
+                              )}
+
                               <div className="space-y-1.5">
-                                <Label htmlFor="custom-npm-token" className="text-xs font-semibold">
-                                  npm Access Token <span className="text-destructive">*</span>
-                                </Label>
+                                <div className="flex items-center gap-1.5">
+                                  <Label htmlFor="custom-npm-token" className="text-xs font-semibold">
+                                    npm Access Token <span className="text-destructive">*</span>
+                                  </Label>
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <button
+                                        type="button"
+                                        className="text-muted-foreground hover:text-foreground inline-flex items-center cursor-pointer"
+                                        aria-label="npm token requirements info"
+                                      >
+                                        <Info className="h-3.5 w-3.5" />
+                                      </button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-80 p-3.5 text-xs space-y-2.5" side="top">
+                                      <div className="font-semibold text-foreground flex items-center gap-1.5">
+                                        <Info className="h-4 w-4 text-primary" />
+                                        <span>Token Requirements & Compatibility</span>
+                                      </div>
+                                      <ul className="list-disc pl-4 space-y-1.5 text-muted-foreground text-[11px] leading-relaxed">
+                                        <li>
+                                          <strong className="text-foreground">CI & Automation (No 2FA):</strong> SimpleNS runs installs in headless background processes. For npmjs.com, generate an <em>Automation</em> token (Classic token type &quot;Automation&quot;) or a <em>Granular Access Token</em> configured with <em>No 2FA prompt on install</em> and <em>Read-only</em> permissions.
+                                        </li>
+                                        <li>
+                                          <strong className="text-foreground">Scope Reusability:</strong> A single organization or user token covers all private packages under that scope (e.g. <code>@my-org/*</code>). You do not need a separate token for each package.
+                                        </li>
+                                        <li>
+                                          <strong className="text-foreground">Enterprise Registries:</strong> For Verdaccio, Nexus, or Artifactory, enter an API key or service account token with read permissions.
+                                        </li>
+                                      </ul>
+                                    </PopoverContent>
+                                  </Popover>
+                                </div>
+
                                 <div className="relative">
                                   <Input
                                     id="custom-npm-token"
@@ -670,14 +786,14 @@ export function InstalledPluginsTab() {
                                     placeholder="npm_xxxxxxxxxxxxxxxxxxxxxxxx"
                                     value={npmToken}
                                     onChange={(e) => setNpmToken(e.target.value)}
-                                    required={isPrivate && (!useSavedToken || !npmAuth?.is_configured)}
+                                    required={isPrivate && (!matchedAuth || overrideToken)}
                                     className="pr-10 font-mono text-xs"
                                     disabled={isInstallingCustom}
                                   />
                                   <button
                                     type="button"
                                     onClick={() => setShowToken(!showToken)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
                                     tabIndex={-1}
                                   >
                                     {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -708,7 +824,7 @@ export function InstalledPluginsTab() {
                                   disabled={isInstallingCustom}
                                 />
                                 <Label htmlFor="save-token-check" className="text-xs font-normal cursor-pointer text-muted-foreground">
-                                  Save token in SimpleNS for background processors and future updates
+                                  Save credentials for {detectedScope || "this registry"} in SimpleNS for background processors and future packages
                                 </Label>
                               </div>
                             </div>

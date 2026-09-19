@@ -161,9 +161,10 @@ export const pluginService = {
   uninstall: (packageName: string): Promise<{ message: string }> =>
     apiClient.delete(`/api/plugins/${encodeURIComponent(packageName)}`),
   getNpmAuth: (): Promise<NpmAuthStatus> => apiClient.get('/api/plugins/npm-auth'),
-  saveNpmAuth: (payload: { token: string; registry_url?: string }): Promise<{ message: string; status: NpmAuthStatus }> =>
+  saveNpmAuth: (payload: { token: string; registry_url?: string; scope?: string }): Promise<{ message: string; status: NpmAuthStatus }> =>
     apiClient.post('/api/plugins/npm-auth', payload),
-  deleteNpmAuth: (): Promise<{ message: string }> => apiClient.delete('/api/plugins/npm-auth'),
+  deleteNpmAuth: (idOrScope?: string): Promise<{ message: string }> =>
+    apiClient.delete('/api/plugins/npm-auth', { params: idOrScope ? { id: idOrScope } : undefined }),
 };
 
 export const providerService = {

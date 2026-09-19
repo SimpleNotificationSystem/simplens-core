@@ -251,9 +251,18 @@ export interface PluginCatalogItem {
   versions?: string[];
 }
 
+export interface NpmRegistryStatus {
+  id: string;
+  scope?: string;
+  registry_url: string;
+  masked_token: string;
+  updated_at: string;
+}
+
 export interface NpmAuthStatus {
   is_configured: boolean;
-  registry_url?: string;
+  registries?: NpmRegistryStatus[];
+  default_registry?: string;
   masked_token?: string;
 }
 
@@ -263,6 +272,7 @@ export interface InstallPluginPayload {
   auth?: {
     token?: string;
     registry_url?: string;
+    scope?: string;
     save_token?: boolean;
   };
 }

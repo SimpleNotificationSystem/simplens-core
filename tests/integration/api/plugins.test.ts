@@ -46,45 +46,55 @@ describe('Plugins API Integration', () => {
   });
 
   describe('GET /api/plugins/npm-auth', () => {
-    it('should return npm auth status', async () => {
+    it('should return npm auth status with registries list', async () => {
       vi.mocked(NpmAuthService.getAuthStatus).mockResolvedValue({
-        configured: true,
-        masked_token: 'npm_****cdef',
-        registry_url: 'https://registry.npmjs.org/',
+        is_configured: true,
+        registries: [
+          {
+            id: 'scope:@corp-a',
+            scope: '@corp-a',
+            registry_url: 'https://npm.corp-a.com/',
+            masked_token: 'npm_****1234',
+            updated_at: new Date().toISOString(),
+          },
+        ],
+        masked_token: 'npm_****1234',
+        default_registry: 'https://registry.npmjs.org/',
       });
 
       const res = await request(app).get('/api/plugins/npm-auth');
 
       expect(res.status).toBe(200);
-      expect(res.body).toEqual({
-        configured: true,
-        masked_token: 'npm_****cdef',
-        registry_url: 'https://registry.npmjs.org/',
-      });
+      expect(res.body.is_configured).toBe(true);
+      expect(res.body.registries).toHaveLength(1);
+      expect(res.body.registries[0].scope).toBe('@corp-a');
       expect(NpmAuthService.getAuthStatus).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('POST /api/plugins/npm-auth', () => {
-    it('should save npm auth configuration with valid payload', async () => {
+    it('should save npm auth configuration with scope', async () => {
       vi.mocked(NpmAuthService.saveNpmAuth).mockResolvedValue({
-        configured: true,
+        is_configured: true,
+        registries: [],
         masked_token: 'npm_****7890',
-        registry_url: 'https://registry.npmjs.org/',
+        default_registry: 'https://npm.corp.internal/',
       });
 
       const res = await request(app)
         .post('/api/plugins/npm-auth')
         .send({
           token: 'npm_1234567890',
-          registry_url: 'https://registry.npmjs.org/',
+          registry_url: 'https://npm.corp.internal/',
+          scope: '@myenterprise',
         });
 
       expect(res.status).toBe(200);
-      expect(res.body.status.configured).toBe(true);
+      expect(res.body.status.is_configured).toBe(true);
       expect(NpmAuthService.saveNpmAuth).toHaveBeenCalledWith(
         'npm_1234567890',
-        'https://registry.npmjs.org/'
+        'https://npm.corp.internal/',
+        '@myenterprise'
       );
     });
 
@@ -102,14 +112,24 @@ describe('Plugins API Integration', () => {
   });
 
   describe('DELETE /api/plugins/npm-auth', () => {
-    it('should delete npm auth configuration', async () => {
+    it('should delete npm auth configuration for a specific registry id', async () => {
+      vi.mocked(NpmAuthService.deleteNpmAuth).mockResolvedValue(undefined);
+
+      const res = await request(app).delete('/api/plugins/npm-auth?id=scope:@corp-a');
+
+      expect(res.status).toBe(200);
+      expect(res.body.message).toContain('scope:@corp-a');
+      expect(NpmAuthService.deleteNpmAuth).toHaveBeenCalledWith('scope:@corp-a');
+    });
+
+    it('should delete all npm auth configurations when no target specified', async () => {
       vi.mocked(NpmAuthService.deleteNpmAuth).mockResolvedValue(undefined);
 
       const res = await request(app).delete('/api/plugins/npm-auth');
 
       expect(res.status).toBe(200);
       expect(res.body.message).toContain('removed successfully');
-      expect(NpmAuthService.deleteNpmAuth).toHaveBeenCalledTimes(1);
+      expect(NpmAuthService.deleteNpmAuth).toHaveBeenCalledWith(undefined);
     });
   });
 
