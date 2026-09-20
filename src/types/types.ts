@@ -516,4 +516,26 @@ export interface HealthProbeServer {
     stop: () => Promise<void>;
 }
 
+// ============================================================================
+// PROCESSOR CONSUMER HEALTH TYPES
+// ============================================================================
 
+export interface ConsumerHealthState {
+    channel: string;
+    isRunning: boolean;
+    hasCrashed: boolean;
+    crashReason?: string;
+    lastHeartbeat: number;
+}
+
+export interface ConsumerHealthDetails {
+    running: boolean;
+    crashed: boolean;
+    error?: string;
+    secondsSinceHeartbeat: number;
+}
+
+export interface ConsumerHealthCheckResult {
+    healthy: boolean;
+    details: Record<string, ConsumerHealthDetails>;
+}

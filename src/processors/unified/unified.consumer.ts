@@ -10,7 +10,7 @@
  * - Retry queue management
  */
 
-import { Consumer, EachMessagePayload } from 'kafkajs';
+import { Consumer, EachMessagePayload, ConsumerCrashEvent } from 'kafkajs';
 import { kafka, ensureChannelTopic } from '@src/config/kafka.config.js';
 import { NOTIFICATION_STATUS_SF } from '@src/types/types.js';
 import { env } from '@src/config/env.config.js';
@@ -23,7 +23,13 @@ import {
     resolveFallbackProviderId,
     validateNotificationForProvider
 } from '@src/plugins/index.js';
-import type { BaseNotification, DeliveryResult } from '@src/types/types.js';
+import type {
+    BaseNotification,
+    DeliveryResult,
+    ConsumerHealthState,
+    ConsumerHealthCheckResult,
+    ConsumerHealthDetails
+} from '@src/types/types.js';
 
 // Shared utilities
 import { tryAcquireProcessingLock, setDelivered, setFailed, setRateLimited } from '@src/processors/shared/idempotency.js';
@@ -33,9 +39,14 @@ import { publishDelayed, buildDelayedPayloadGeneric } from '@src/processors/shar
 import { handleSchemaValidationFailure } from '../shared/schema-failure-handler.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 import status_outbox_model from '@src/database/models/status-outbox.models.js';
-// Track active consumers by channel
+
+// Re-export consumer health types
+export type { ConsumerHealthState, ConsumerHealthCheckResult, ConsumerHealthDetails };
+
+// Track active consumers and their health status by channel
 const consumers: Map<string, Consumer> = new Map();
 const consumingState: Map<string, boolean> = new Map();
+const consumerHealthState: Map<string, ConsumerHealthState> = new Map();
 
 /**
  * Get Kafka topic name for a channel
@@ -462,6 +473,71 @@ export const startUnifiedConsumer = async (channel: string): Promise<void> => {
         rebalanceTimeout: 60000,
         heartbeatInterval: 3000,
     });
+
+    const health: ConsumerHealthState = {
+        channel,
+        isRunning: false,
+        hasCrashed: false,
+        lastHeartbeat: Date.now(),
+    };
+    consumerHealthState.set(channel, health);
+
+    // Register Kafka lifecycle and crash event listeners
+    if (typeof consumer.on === 'function' && consumer.events) {
+        consumer.on(consumer.events.HEARTBEAT, () => {
+            const h = consumerHealthState.get(channel);
+            if (h) {
+                h.lastHeartbeat = Date.now();
+            }
+        });
+
+        consumer.on(consumer.events.CRASH, async (event: ConsumerCrashEvent) => {
+            const h = consumerHealthState.get(channel);
+            const crashError = event?.payload?.error;
+            const errorMsg = crashError ? String(crashError.message || crashError) : 'Unknown crash';
+            if (h) {
+                h.hasCrashed = true;
+                h.isRunning = false;
+                h.crashReason = errorMsg;
+            }
+            logger.error(`[${channel}] Consumer CRASHED: ${errorMsg}`, crashError);
+
+            void AdminAlertService.sendAlert(
+                'service_health',
+                `🔴 KAFKA CONSUMER CRASHED - Unified Processor\n` +
+                `Channel: ${channel}\n` +
+                `Group: ${groupId}\n` +
+                `Restartable: ${Boolean(event?.payload?.restart)}\n` +
+                `Error: ${errorMsg}\n` +
+                `Action: Kubernetes liveness probe will detect failure and restart container.`,
+                { severity: 'critical' }
+            );
+        });
+
+        consumer.on(consumer.events.STOP, () => {
+            const h = consumerHealthState.get(channel);
+            if (h) {
+                h.isRunning = false;
+            }
+            logger.warn(`[${channel}] Consumer stopped event received`);
+        });
+
+        consumer.on(consumer.events.DISCONNECT, () => {
+            const h = consumerHealthState.get(channel);
+            if (h) {
+                h.isRunning = false;
+            }
+            logger.warn(`[${channel}] Consumer disconnected`);
+        });
+
+        consumer.on(consumer.events.CONNECT, () => {
+            const h = consumerHealthState.get(channel);
+            if (h) {
+                h.isRunning = true;
+                h.lastHeartbeat = Date.now();
+            }
+        });
+    }
     
     await consumer.connect();
     await consumer.subscribe({ topic, fromBeginning: false });
@@ -475,6 +551,11 @@ export const startUnifiedConsumer = async (channel: string): Promise<void> => {
             try{
                 if (!consumingState.get(channel)) {
                     return; // Consumer is stopping
+                }
+
+                const h = consumerHealthState.get(channel);
+                if (h) {
+                    h.lastHeartbeat = Date.now();
                 }
     
                 const shouldCommit = await processMessage(channel, payload);
@@ -494,6 +575,9 @@ export const startUnifiedConsumer = async (channel: string): Promise<void> => {
         }
     });
 
+    health.isRunning = true;
+    health.lastHeartbeat = Date.now();
+
     logger.success(`[${channel}] Consumer started`);
 };
 
@@ -508,12 +592,17 @@ export const stopUnifiedConsumer = async (channel: string): Promise<void> => {
 
     logger.info(`[${channel}] Stopping consumer...`);
     consumingState.set(channel, false);
+    const health = consumerHealthState.get(channel);
+    if (health) {
+        health.isRunning = false;
+    }
 
     try {
         await consumer.stop();
         await consumer.disconnect();
         consumers.delete(channel);
         consumingState.delete(channel);
+        consumerHealthState.delete(channel);
         logger.info(`[${channel}] Consumer stopped`);
     } catch (err) {
         logger.error(`[${channel}] Error stopping consumer:`, err);
@@ -535,4 +624,87 @@ export const stopAllConsumers = async (): Promise<void> => {
  */
 export const getActiveConsumerChannels = (): string[] => {
     return Array.from(consumers.keys());
+};
+
+/**
+ * Check whether consumers for specified channels (or all active consumers) are healthy.
+ * 
+ * @param expectedChannels Optional list of channels expected to be running.
+ * @param maxHeartbeatStalenessMs Max ms since last heartbeat before marking stalled (default 90s).
+ */
+export const areUnifiedConsumersHealthy = (
+    expectedChannels?: string[],
+    maxHeartbeatStalenessMs = 90000
+): ConsumerHealthCheckResult => {
+    const details: Record<string, ConsumerHealthDetails> = {};
+    const now = Date.now();
+    let allHealthy = true;
+
+    const channelsToCheck = expectedChannels && expectedChannels.length > 0
+        ? expectedChannels
+        : Array.from(consumers.keys());
+
+    // In standby mode (no channels expected/running), considered healthy
+    if (channelsToCheck.length === 0) {
+        return { healthy: true, details: {} };
+    }
+
+    for (const channel of channelsToCheck) {
+        const health = consumerHealthState.get(channel);
+        const consumer = consumers.get(channel);
+
+        if (!health || !consumer) {
+            details[channel] = {
+                running: false,
+                crashed: false,
+                error: 'Consumer not initialized or missing',
+                secondsSinceHeartbeat: -1
+            };
+            allHealthy = false;
+            continue;
+        }
+
+        const secondsSinceHeartbeat = Math.round((now - health.lastHeartbeat) / 1000);
+
+        if (health.hasCrashed) {
+            details[channel] = {
+                running: false,
+                crashed: true,
+                error: health.crashReason || 'Consumer crashed',
+                secondsSinceHeartbeat
+            };
+            allHealthy = false;
+            continue;
+        }
+
+        if (!health.isRunning) {
+            details[channel] = {
+                running: false,
+                crashed: false,
+                error: 'Consumer is stopped or disconnected',
+                secondsSinceHeartbeat
+            };
+            allHealthy = false;
+            continue;
+        }
+
+        if (now - health.lastHeartbeat > maxHeartbeatStalenessMs) {
+            details[channel] = {
+                running: true,
+                crashed: false,
+                error: `Heartbeat stalled (${secondsSinceHeartbeat}s ago)`,
+                secondsSinceHeartbeat
+            };
+            allHealthy = false;
+            continue;
+        }
+
+        details[channel] = {
+            running: true,
+            crashed: false,
+            secondsSinceHeartbeat
+        };
+    }
+
+    return { healthy: allHealthy, details };
 };

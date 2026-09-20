@@ -26,6 +26,7 @@ import {
   stopUnifiedConsumer,
   stopAllConsumers,
   getActiveConsumerChannels,
+  areUnifiedConsumersHealthy,
 } from './unified.consumer.js';
 import { unifiedProcessorLogger as logger } from './unified.logger.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
@@ -62,20 +63,30 @@ const getChannelConfig = (): string[] | 'all' => {
 };
 
 /**
+ * Compute the list of channels this processor is currently configured to handle
+ */
+const getExpectedChannels = (): string[] => {
+  const loadedChannels = PluginRegistry.getChannels();
+  const channelConfig = getChannelConfig();
+
+  if (channelConfig === 'all') {
+    return loadedChannels;
+  }
+
+  return channelConfig.filter((ch) => loadedChannels.includes(ch));
+};
+
+/**
  * Check for new channels and start consumers if configured
  */
 const syncActiveConsumers = async (): Promise<void> => {
   if (isShuttingDown) return;
 
-  const loadedChannels = PluginRegistry.getChannels();
   const currentRunning = getActiveConsumerChannels();
-  const channelConfig = getChannelConfig();
+  const expectedChannels = getExpectedChannels();
 
-  for (const channel of loadedChannels) {
-    const shouldRun =
-      channelConfig === 'all' || (Array.isArray(channelConfig) && channelConfig.includes(channel));
-
-    if (shouldRun && !currentRunning.includes(channel)) {
+  for (const channel of expectedChannels) {
+    if (!currentRunning.includes(channel)) {
       try {
         logger.info(`Starting dynamic consumer for new channel: ${channel}`);
         await startUnifiedConsumer(channel);
@@ -88,9 +99,9 @@ const syncActiveConsumers = async (): Promise<void> => {
     }
   }
 
-  // If a channel was removed from PluginRegistry, stop its consumer
+  // If a channel was removed or is no longer expected, stop its consumer
   for (const runningChannel of currentRunning) {
-    if (!loadedChannels.includes(runningChannel)) {
+    if (!expectedChannels.includes(runningChannel)) {
       logger.info(`Stopping consumer for removed channel: ${runningChannel}`);
       await stopUnifiedConsumer(runningChannel);
       const index = activeChannels.indexOf(runningChannel);
@@ -249,20 +260,10 @@ const main = async (): Promise<void> => {
     await initDelayedProducer();
 
     // 6. Determine which channels to process
-    const channelConfig = getChannelConfig();
-    let channelsToProcess: string[] = [];
-
-    if (channelConfig === 'all') {
-      channelsToProcess = loadedChannels;
+    const channelsToProcess = getExpectedChannels();
+    if (getChannelConfig() === 'all') {
       logger.info('Configured for multi-channel mode (all channels)');
     } else {
-      channelsToProcess = channelConfig.filter((ch) => {
-        if (!loadedChannels.includes(ch)) {
-          logger.warn(`Channel '${ch}' not found in loaded plugins, skipping`);
-          return false;
-        }
-        return true;
-      });
       logger.info(`Configured for single-channel mode: ${channelsToProcess.join(', ')}`);
     }
 
@@ -282,17 +283,44 @@ const main = async (): Promise<void> => {
     probeServer = createHealthProbeServer({
       serviceName: 'unified-processor',
       readinessChecks: [
-        { name: 'mongodb', check: () => dbConnection !== null },
-        { name: 'redis', check: () => {
-          try {
-            return getRedisClient().status === 'ready';
-          } catch {
-            return false;
+        { name: 'mongodb', check: () => !isShuttingDown && dbConnection !== null },
+        {
+          name: 'redis',
+          check: () => {
+            if (isShuttingDown) return false;
+            try {
+              return getRedisClient().status === 'ready';
+            } catch {
+              return false;
+            }
           }
-        }}
+        },
+        {
+          name: 'kafka_consumers',
+          check: () => {
+            if (isShuttingDown) return false;
+            const expected = getExpectedChannels();
+            const result = areUnifiedConsumersHealthy(expected);
+            return result.healthy;
+          }
+        }
       ],
       livenessChecks: [
-        { name: 'process', check: () => true }
+        {
+          name: 'process',
+          check: () => !isShuttingDown
+        },
+        {
+          name: 'kafka_consumers',
+          check: () => {
+            if (isShuttingDown) return false;
+            const expected = getExpectedChannels();
+            // Standby mode (no channels configured yet) is considered healthy
+            if (expected.length === 0) return true;
+            const result = areUnifiedConsumersHealthy(expected);
+            return result.healthy;
+          }
+        }
       ]
     });
     await probeServer.start();

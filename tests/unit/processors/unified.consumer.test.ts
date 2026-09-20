@@ -36,6 +36,14 @@ const kafkaConsumerMock = {
     commitOffsets: commitOffsetsMock,
     stop: vi.fn().mockResolvedValue(undefined),
     disconnect: vi.fn().mockResolvedValue(undefined),
+    on: vi.fn(),
+    events: {
+        CRASH: 'consumer.crash',
+        HEARTBEAT: 'consumer.heartbeat',
+        STOP: 'consumer.stop',
+        DISCONNECT: 'consumer.disconnect',
+        CONNECT: 'consumer.connect',
+    },
 };
 
 vi.mock('../../../src/config/kafka.config.js', () => ({
@@ -346,5 +354,68 @@ describe('processMessage via consumer run loop', () => {
         );
         expect(publishDelayedMock).not.toHaveBeenCalled();
         expect(commitOffsetsMock).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('areUnifiedConsumersHealthy', () => {
+    beforeEach(() => {
+        vi.resetModules();
+        vi.clearAllMocks();
+    });
+
+    it('should report healthy when in standby mode with no expected channels', async () => {
+        const { areUnifiedConsumersHealthy } = await import('../../../src/processors/unified/unified.consumer.js');
+        const result = areUnifiedConsumersHealthy([]);
+        expect(result.healthy).toBe(true);
+        expect(result.details).toEqual({});
+    });
+
+    it('should report unhealthy if expected channel has no consumer running', async () => {
+        const { areUnifiedConsumersHealthy } = await import('../../../src/processors/unified/unified.consumer.js');
+        const result = areUnifiedConsumersHealthy(['email']);
+        expect(result.healthy).toBe(false);
+        expect(result.details.email.running).toBe(false);
+        expect(result.details.email.error).toContain('not initialized or missing');
+    });
+
+    it('should report healthy once consumer starts and receives heartbeat', async () => {
+        const { startUnifiedConsumer, areUnifiedConsumersHealthy, stopAllConsumers } = await import('../../../src/processors/unified/unified.consumer.js');
+        await startUnifiedConsumer('email');
+
+        const result = areUnifiedConsumersHealthy(['email']);
+        expect(result.healthy).toBe(true);
+        expect(result.details.email.running).toBe(true);
+        expect(result.details.email.crashed).toBe(false);
+
+        await stopAllConsumers();
+    });
+
+    it('should report unhealthy if consumer has crashed', async () => {
+        let crashListener: ((event: unknown) => void) | undefined;
+        kafkaConsumerMock.on.mockImplementation((event: string, listener: (e: unknown) => void) => {
+            if (event === 'consumer.crash') {
+                crashListener = listener;
+            }
+        });
+
+        const { startUnifiedConsumer, areUnifiedConsumersHealthy, stopAllConsumers } = await import('../../../src/processors/unified/unified.consumer.js');
+        await startUnifiedConsumer('email');
+
+        // Simulate Kafka consumer crash event
+        if (crashListener) {
+            crashListener({
+                payload: {
+                    error: new Error('Kafka broker connection lost'),
+                    restart: false,
+                }
+            });
+        }
+
+        const result = areUnifiedConsumersHealthy(['email']);
+        expect(result.healthy).toBe(false);
+        expect(result.details.email.crashed).toBe(true);
+        expect(result.details.email.error).toContain('Kafka broker connection lost');
+
+        await stopAllConsumers();
     });
 });
