@@ -110,6 +110,9 @@ notification_schema.index(
   }
 );
 
+// Compound index for fast duplicate checking and status queries
+notification_schema.index({ request_id: 1, channel: 1, status: 1 });
+
 const notification_model = mongoose.model<notification>('Notification', notification_schema);
 
 export default notification_model;

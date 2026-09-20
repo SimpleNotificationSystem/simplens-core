@@ -406,6 +406,7 @@ export const process_notifications = async (
     session.startTransaction();
 
     const notification_ids: mongoose.Types.ObjectId[] = [];
+    const notifications_to_insert: InstanceType<typeof notification_model>[] = [];
     const outbox_entries: outbox[] = [];
     const duplicate_keys: { request_id: string; channel: string }[] = [];
 
@@ -415,7 +416,13 @@ export const process_notifications = async (
         .findOne({
           request_id: notification.request_id,
           channel: notification.channel,
-          status: { $ne: NOTIFICATION_STATUS.failed }, // Allow retrying failed notifications
+          status: {
+            $in: [
+              NOTIFICATION_STATUS.pending,
+              NOTIFICATION_STATUS.processing,
+              NOTIFICATION_STATUS.delivered,
+            ],
+          },
         })
         .session(session);
 
@@ -427,12 +434,11 @@ export const process_notifications = async (
         continue;
       }
 
-      // Create notification document within transaction
+      // Create notification document within transaction (generates _id)
       const notification_doc = new notification_model(notification);
-      await notification_doc.save({ session });
-
       const notification_id = notification_doc._id as mongoose.Types.ObjectId;
       notification_ids.push(notification_id);
+      notifications_to_insert.push(notification_doc);
 
       // Create outbox entry
       const outbox_entry = convert_notification_schema_to_outbox_schema(
@@ -454,6 +460,11 @@ export const process_notifications = async (
         "All notifications are duplicates",
         duplicate_keys,
       );
+    }
+
+    // Insert notifications in bulk within transaction
+    if (notifications_to_insert.length > 0) {
+      await notification_model.insertMany(notifications_to_insert, { session });
     }
 
     // Insert outbox entries in bulk within transaction

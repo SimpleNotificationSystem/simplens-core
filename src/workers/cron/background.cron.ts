@@ -21,28 +21,32 @@ const state: OutboxCronState = {
 
 /**
  * Atomically claim a batch of pending outbox entries for this worker.
- * Uses findOneAndUpdate in a loop to ensure no two workers claim the same event.
- * Also reclaims stale entries from crashed workers.
+ * Uses a 2-phase batch claim to eliminate sequential round trips and lock contention:
+ * 1. Fast-path: query up to OUTBOX_BATCH_SIZE pending entries in FIFO order using index { status: 1, created_at: 1 }
+ * 2. Atomically update matching pending IDs to 'processing' with claimed_by and claimed_at
+ * 3. Fallback: if fewer than batch size claimed, reclaim stale entries from crashed workers
  */
 const claimOutboxEntries = async (): Promise<OutboxDocument[]> => {
     const claimedEntries: OutboxDocument[] = [];
     const now = new Date();
-    const staleThreshold = new Date(now.getTime() - env.OUTBOX_CLAIM_TIMEOUT_MS);
+    const batchSize = env.OUTBOX_BATCH_SIZE;
 
-    // Claim entries one at a time atomically (or use bulkWrite for better performance)
-    for (let i = 0; i < env.OUTBOX_BATCH_SIZE; i++) {
-        // Try to claim a pending entry, or reclaim a stale processing entry
-        const entry = await outbox_model.findOneAndUpdate(
+    // 1. Fast-path: Find pending entries in FIFO order
+    const pendingCandidates = await outbox_model
+        .find({ status: OUTBOX_STATUS.pending })
+        .sort({ created_at: 1 })
+        .limit(batchSize)
+        .select('_id')
+        .lean();
+
+    if (pendingCandidates.length > 0) {
+        const candidateIds = pendingCandidates.map(c => c._id);
+
+        // Atomically claim entries that are still pending
+        await outbox_model.updateMany(
             {
-                $or: [
-                    // Unclaimed pending entries
-                    { status: OUTBOX_STATUS.pending },
-                    // Stale entries from crashed workers (claimed but not processed in time)
-                    {
-                        status: OUTBOX_STATUS.processing,
-                        claimed_at: { $lt: staleThreshold }
-                    }
-                ]
+                _id: { $in: candidateIds },
+                status: OUTBOX_STATUS.pending
             },
             {
                 $set: {
@@ -50,22 +54,69 @@ const claimOutboxEntries = async (): Promise<OutboxDocument[]> => {
                     claimed_by: env.WORKER_ID,
                     claimed_at: now
                 }
-            },
-            {
-                returnDocument: 'after',
-                sort: { created_at: 1 } // FIFO order
             }
         );
 
-        if (!entry) break; // No more entries to claim
-        claimedEntries.push(entry);
+        // Retrieve entries successfully claimed by this worker
+        const claimed = await outbox_model.find({
+            _id: { $in: candidateIds },
+            claimed_by: env.WORKER_ID,
+            claimed_at: now
+        });
+
+        claimedEntries.push(...claimed);
+    }
+
+    // 2. Fallback: If quota remaining, reclaim stale entries from crashed workers
+    const remainingQuota = batchSize - claimedEntries.length;
+    if (remainingQuota > 0) {
+        const staleThreshold = new Date(now.getTime() - env.OUTBOX_CLAIM_TIMEOUT_MS);
+
+        const staleCandidates = await outbox_model
+            .find({
+                status: OUTBOX_STATUS.processing,
+                claimed_at: { $lt: staleThreshold }
+            })
+            .sort({ created_at: 1 })
+            .limit(remainingQuota)
+            .select('_id')
+            .lean();
+
+        if (staleCandidates.length > 0) {
+            const staleIds = staleCandidates.map(c => c._id);
+
+            await outbox_model.updateMany(
+                {
+                    _id: { $in: staleIds },
+                    status: OUTBOX_STATUS.processing,
+                    claimed_at: { $lt: staleThreshold }
+                },
+                {
+                    $set: {
+                        status: OUTBOX_STATUS.processing,
+                        claimed_by: env.WORKER_ID,
+                        claimed_at: now
+                    }
+                }
+            );
+
+            const reclaimed = await outbox_model.find({
+                _id: { $in: staleIds },
+                claimed_by: env.WORKER_ID,
+                claimed_at: now
+            });
+
+            claimedEntries.push(...reclaimed);
+        }
     }
 
     return claimedEntries;
 };
 
 /**
- * Poll the outbox collection for pending events and send them to Kafka
+ * Poll the outbox collection for pending events and send them to Kafka.
+ * Continuously drains backlog while full batches are retrieved, preventing
+ * idle intervals during high ingestion load.
  */
 const pollOutbox = async (): Promise<void> => {
     if (state.isPolling || state.shouldStop) return;
@@ -73,15 +124,22 @@ const pollOutbox = async (): Promise<void> => {
     state.isPolling = true;
 
     try {
-        // Atomically claim entries for this worker
-        const claimedEntries = await claimOutboxEntries();
+        while (!state.shouldStop) {
+            // Atomically claim entries for this worker
+            const claimedEntries = await claimOutboxEntries();
 
-        if (claimedEntries.length === 0) return;
+            if (claimedEntries.length === 0) break;
 
-        logger.info(`Claimed ${claimedEntries.length} outbox entries (worker: ${env.WORKER_ID})`);
+            logger.info(`Claimed ${claimedEntries.length} outbox entries (worker: ${env.WORKER_ID})`);
 
-        const result = await sendOutboxEvents(claimedEntries);
-        logger.info(`Processed: ${result.successCount} success, ${result.failedCount} failed`);
+            const result = await sendOutboxEvents(claimedEntries);
+            logger.info(`Processed: ${result.successCount} success, ${result.failedCount} failed`);
+
+            // If we claimed fewer than batch size, queue is drained for now
+            if (claimedEntries.length < env.OUTBOX_BATCH_SIZE) {
+                break;
+            }
+        }
     } catch (err) {
         logger.error("Error polling outbox:", err);
     } finally {
@@ -126,41 +184,95 @@ const waitForOperationsToComplete = async (): Promise<void> => {
 
 /**
  * Atomically claim a batch of pending status outbox entries for this worker.
+ * Uses 2-phase atomic batch claim to avoid sequential findOneAndUpdate round trips.
  */
 const claimStatusOutboxEntries = async (): Promise<status_outbox[]> => {
     const claimedEntries: status_outbox[] = [];
     const now = new Date();
-    const staleThreshold = new Date(now.getTime() - env.OUTBOX_CLAIM_TIMEOUT_MS);
+    const batchSize = env.OUTBOX_BATCH_SIZE;
 
-    for (let i = 0; i < env.OUTBOX_BATCH_SIZE; i++) {
-        const entry = await status_outbox_model.findOneAndUpdate(
+    // 1. Fast-path: Find unprocessed status outbox entries
+    const pendingCandidates = await status_outbox_model
+        .find({ processed: false, claimed_by: null })
+        .sort({ created_at: 1 })
+        .limit(batchSize)
+        .select('_id')
+        .lean();
+
+    if (pendingCandidates.length > 0) {
+        const candidateIds = pendingCandidates.map(c => c._id);
+
+        await status_outbox_model.updateMany(
             {
-                $or: [
-                    { processed: false, claimed_by: null },
-                    { processed: false, claimed_at: { $lt: staleThreshold } }
-                ]
+                _id: { $in: candidateIds },
+                processed: false,
+                claimed_by: null
             },
             {
                 $set: {
                     claimed_by: env.WORKER_ID,
                     claimed_at: now
                 }
-            },
-            {
-                returnDocument: 'after',
-                sort: { created_at: 1 }
             }
         );
 
-        if (!entry) break;
-        claimedEntries.push(entry);
+        const claimed = await status_outbox_model.find({
+            _id: { $in: candidateIds },
+            claimed_by: env.WORKER_ID,
+            claimed_at: now
+        });
+
+        claimedEntries.push(...claimed);
+    }
+
+    // 2. Fallback: Check for stale processing entries
+    const remainingQuota = batchSize - claimedEntries.length;
+    if (remainingQuota > 0) {
+        const staleThreshold = new Date(now.getTime() - env.OUTBOX_CLAIM_TIMEOUT_MS);
+
+        const staleCandidates = await status_outbox_model
+            .find({
+                processed: false,
+                claimed_at: { $lt: staleThreshold }
+            })
+            .sort({ created_at: 1 })
+            .limit(remainingQuota)
+            .select('_id')
+            .lean();
+
+        if (staleCandidates.length > 0) {
+            const staleIds = staleCandidates.map(c => c._id);
+
+            await status_outbox_model.updateMany(
+                {
+                    _id: { $in: staleIds },
+                    processed: false,
+                    claimed_at: { $lt: staleThreshold }
+                },
+                {
+                    $set: {
+                        claimed_by: env.WORKER_ID,
+                        claimed_at: now
+                    }
+                }
+            );
+
+            const reclaimed = await status_outbox_model.find({
+                _id: { $in: staleIds },
+                claimed_by: env.WORKER_ID,
+                claimed_at: now
+            });
+
+            claimedEntries.push(...reclaimed);
+        }
     }
 
     return claimedEntries;
 };
 
 /**
- * Poll and process status outbox entries
+ * Poll and process status outbox entries.
+ * Continuously drains backlog while full batches are retrieved.
  */
 const pollStatusOutbox = async (): Promise<void> => {
     if (state.isPollingStatus || state.shouldStop) return;
@@ -168,15 +280,21 @@ const pollStatusOutbox = async (): Promise<void> => {
     state.isPollingStatus = true;
 
     try {
-        const claimedEntries = await claimStatusOutboxEntries();
-        if (claimedEntries.length === 0) {
-            return;
+        while (!state.shouldStop) {
+            const claimedEntries = await claimStatusOutboxEntries();
+            if (claimedEntries.length === 0) {
+                break;
+            }
+
+            logger.info(`Claimed ${claimedEntries.length} status outbox entries (worker: ${env.WORKER_ID})`);
+
+            const result = await sendStatusOutboxEvents(claimedEntries);
+            logger.info(`Status outbox: ${result.successCount} success, ${result.failedCount} failed`);
+
+            if (claimedEntries.length < env.OUTBOX_BATCH_SIZE) {
+                break;
+            }
         }
-
-        logger.info(`Claimed ${claimedEntries.length} status outbox entries (worker: ${env.WORKER_ID})`);
-
-        const result = await sendStatusOutboxEvents(claimedEntries);
-        logger.info(`Status outbox: ${result.successCount} success, ${result.failedCount} failed`);
     } catch (err) {
         logger.error("Error polling status outbox:", err);
     } finally {

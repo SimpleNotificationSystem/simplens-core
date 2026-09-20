@@ -46,6 +46,7 @@ const status_outbox_schema = new mongoose.Schema<status_outbox>(
 
 // Index for efficient polling of unprocessed entries
 status_outbox_schema.index({ processed: 1, created_at: 1 });
+status_outbox_schema.index({ processed: 1, claimed_by: 1, created_at: 1 });
 // Index for claiming stale entries
 status_outbox_schema.index({ processed: 1, claimed_at: 1 });
 
