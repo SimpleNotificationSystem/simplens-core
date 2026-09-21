@@ -498,6 +498,27 @@ export default function SettingsPage() {
                                         Active processing mutex duration (default: 120s)
                                     </span>
                                 </div>
+
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs">Rate Limit Retry Delay (ms)</Label>
+                                    <Input
+                                        type="number"
+                                        min={100}
+                                        max={60000}
+                                        value={settings.retry.rate_limit_retry_delay_ms}
+                                        onChange={(e) =>
+                                            updateGroupField(
+                                                "retry",
+                                                "rate_limit_retry_delay_ms",
+                                                parseInt(e.target.value) || 0
+                                            )
+                                        }
+                                        className="h-9 font-mono text-xs"
+                                    />
+                                    <span className="text-[10px] text-muted-foreground">
+                                        Delay when all cascade providers are rate-limited (Safe: 100 - 60,000 ms)
+                                    </span>
+                                </div>
                             </CardContent>
                         </Card>
 

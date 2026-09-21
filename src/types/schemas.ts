@@ -514,6 +514,7 @@ export const operationalSettingsSchema = z.object({
     max_retry_count: z.number().int().min(1).max(30).default(5),
     idempotency_ttl_seconds: z.number().int().min(60).max(2592000).default(86400),
     processing_ttl_seconds: z.number().int().min(10).max(1800).default(120),
+    rate_limit_retry_delay_ms: z.number().int().min(100).max(60000).default(5000),
   }),
   delayed: z.object({
     delayed_poll_interval_ms: z.number().int().min(200).max(30000).default(1000),

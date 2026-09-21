@@ -35,6 +35,7 @@ export const SYSTEM_DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
     max_retry_count: 5,
     idempotency_ttl_seconds: 86400,
     processing_ttl_seconds: 120,
+    rate_limit_retry_delay_ms: 5000,
   },
   delayed: {
     delayed_poll_interval_ms: 1000,

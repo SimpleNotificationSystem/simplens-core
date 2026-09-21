@@ -323,6 +323,7 @@ export interface OperationalSettings {
     max_retry_count: number;
     idempotency_ttl_seconds: number;
     processing_ttl_seconds: number;
+    rate_limit_retry_delay_ms: number;
   };
   delayed: {
     delayed_poll_interval_ms: number;

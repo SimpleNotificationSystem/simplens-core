@@ -6,6 +6,7 @@
  */
 
 import { getRedisClient } from '@src/config/redis.config.js';
+import { env } from '@src/config/env.config.js';
 import { getRateLimitConfig as getPluginRateLimitConfig } from '@src/plugins/index.js';
 import { rateLimiterLogger as logger } from '@src/workers/utils/logger.js';
 import type { RateLimitConfig, RefillInterval, RateLimitResult } from '@src/types/types.js';
@@ -67,31 +68,29 @@ const buildKeys = (providerId: string): { tokensKey: string; lastRefillKey: stri
 };
 
 /**
- * Token Bucket Algorithm Result
- */
-/**
  * Try to consume a token from the bucket
- * Uses Redis Lua script for atomic operation with queue-based staggering
+ * Uses Redis Lua script for atomic operation with fixed retry delay
  */
 export const consumeToken = async (providerId: string): Promise<RateLimitResult> => {
     const redis = getRedisClient();
     const config = getConfig(providerId);
     const normalizedRate = normalizeRefillRate(config);
-    const { tokensKey, lastRefillKey, queueKey } = buildKeys(providerId);
+    const { tokensKey, lastRefillKey } = buildKeys(providerId);
+    const fixedRetryDelay = env.RATE_LIMIT_RETRY_DELAY_MS;
 
     // Debug logging
-    logger.debug(`Provider: ${providerId}, Config: maxTokens=${config.maxTokens}, refillRate=${config.refillRate}/${config.refillInterval || 'second'} (normalized: ${normalizedRate.toFixed(6)}/sec)`);
+    logger.debug(`Provider: ${providerId}, Config: maxTokens=${config.maxTokens}, refillRate=${config.refillRate}/${config.refillInterval || 'second'} (normalized: ${normalizedRate.toFixed(6)}/sec), retryDelay=${fixedRetryDelay}ms`);
 
     const now = Date.now();
 
-    // Lua script for atomic token bucket operation with queue position tracking
+    // Lua script for atomic token bucket operation with fixed retry delay
     const luaScript = `
         local tokens_key = KEYS[1]
         local last_refill_key = KEYS[2]
-        local queue_key = KEYS[3]
         local max_tokens = tonumber(ARGV[1])
         local refill_rate = tonumber(ARGV[2])
         local now = tonumber(ARGV[3])
+        local fixed_retry_delay = tonumber(ARGV[4])
         
         -- Get current state
         local current_tokens = tonumber(redis.call('GET', tokens_key)) or max_tokens
@@ -107,41 +106,29 @@ export const consumeToken = async (providerId: string): Promise<RateLimitResult>
             new_tokens = new_tokens - 1
             redis.call('SET', tokens_key, new_tokens)
             redis.call('SET', last_refill_key, now)
-            -- Reset queue position when tokens are available (batch consumed)
-            redis.call('SET', queue_key, 0)
-            redis.call('EXPIRE', queue_key, 86400)
-            return { 1, new_tokens, 0, 0 }  -- allowed, remaining, wait_time, queue_position
+            return { 1, new_tokens, 0 }
         else
-            -- Rate limited: calculate staggered delay based on queue position
-            local time_per_token = 1000 / refill_rate  -- ms per token
-            local queue_position = redis.call('INCR', queue_key) - 1
-            redis.call('EXPIRE', queue_key, 86400)  -- 24h TTL
-            
-            -- Staggered delay: (position + 1) × time_per_token
-            local staggered_delay = (queue_position + 1) * time_per_token
-            
-            return { 0, new_tokens, staggered_delay, queue_position }  -- denied, remaining, wait_time, queue_position
+            return { 0, new_tokens, fixed_retry_delay }
         end
     `;
 
     const result = await redis.eval(
         luaScript,
-        3,  // 3 keys now
+        2,
         tokensKey,
         lastRefillKey,
-        queueKey,
         config.maxTokens.toString(),
         normalizedRate.toString(),
-        now.toString()
-    ) as [number, number, number, number];
+        now.toString(),
+        fixedRetryDelay.toString()
+    ) as [number, number, number];
 
-    const [allowed, remainingTokens, retryAfterMs, queuePosition] = result;
+    const [allowed, remainingTokens, retryAfterMs] = result;
 
     return {
         allowed: allowed === 1,
         remainingTokens: Math.floor(remainingTokens),
         retryAfterMs: retryAfterMs > 0 ? Math.ceil(retryAfterMs) : undefined,
-        queuePosition: allowed === 0 ? queuePosition : undefined
     };
 };
 

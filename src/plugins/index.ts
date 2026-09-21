@@ -30,6 +30,7 @@ export {
     sendToProvider,
     validateNotification,
     validateNotificationForProvider,
+    getProviderCascade,
     resolveFallbackProviderId,
     getRateLimitConfig
 } from './loader/router.js';

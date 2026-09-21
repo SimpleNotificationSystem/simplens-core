@@ -20,12 +20,14 @@ import { unifiedProcessorLogger as logger } from './unified.logger.js';
 import {
     sendWithFallback,
     PluginRegistry,
+    getProviderCascade,
     resolveFallbackProviderId,
     validateNotificationForProvider
 } from '@src/plugins/index.js';
 import type {
     BaseNotification,
     DeliveryResult,
+    RateLimitResult,
     ConsumerHealthState,
     ConsumerHealthCheckResult,
     ConsumerHealthDetails
@@ -119,7 +121,8 @@ export const scheduleFallbackProviderHandoff = async (
     channel: string,
     notification: BaseNotification,
     currentProviderId: string | undefined,
-    errorMessage: string
+    errorMessage: string,
+    delayMs?: number
 ): Promise<boolean> => {
     const fallbackProviderId = resolveFallbackProviderId(channel, currentProviderId);
 
@@ -145,17 +148,29 @@ export const scheduleFallbackProviderHandoff = async (
     }
 
     await setFailed(notification.notification_id.toString(), notification.retry_count);
-    const delayedPayload = buildDelayedPayloadGeneric(
-        validationResult.data as unknown as Record<string, unknown>,
-        channel,
-        0
-    );
+    const delayedPayload = delayMs !== undefined
+        ? buildDelayedPayloadGeneric(
+            validationResult.data as unknown as Record<string, unknown>,
+            channel,
+            0,
+            delayMs
+        )
+        : buildDelayedPayloadGeneric(
+            validationResult.data as unknown as Record<string, unknown>,
+            channel,
+            0
+        );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await publishDelayed(delayedPayload as any);
 
+    const isRateLimit = errorMessage.toLowerCase().includes('rate limit');
+    const alertTitle = isRateLimit
+        ? `INFO: RATE LIMIT EXCEEDED, SWITCHING TO FALLBACK\n`
+        : `INFO: RETRY BUDGET EXHAUSTED, SWITCHING TO FALLBACK\n`;
+
     void AdminAlertService.sendAlert(
         'service_health',
-        `INFO: RETRY BUDGET EXHAUSTED, SWITCHING TO FALLBACK\n` +
+        alertTitle +
         `Notification ID: ${notification.notification_id}\n` +
         `Channel: ${channel}\n` +
         `Primary provider: ${currentProviderId || 'default'}\n` +
@@ -166,8 +181,7 @@ export const scheduleFallbackProviderHandoff = async (
     );
 
     logger.warn(
-        `[${channel}] Retry budget exhausted for provider ${currentProviderId || 'default'}, ` +
-        `scheduled fallback handoff to ${fallbackProviderId}: ${notification.notification_id}`
+        `[${channel}] Fallback handoff scheduled for provider ${currentProviderId || 'default'} to ${fallbackProviderId}: ${notification.notification_id}`
     );
     return true;
 };
@@ -273,34 +287,50 @@ const processMessage = async (
             logger.info(`[${channel}] Retrying previously failed: ${notificationId}`);
         }
 
-        // 4. Rate limit check - uses provider ID for per-provider rate limiting
-        const rateLimitResult = await consumeToken(providerId!);
+        // 4. Rate limit check across the provider cascade
+        const cascade = getProviderCascade(channel, rawData.provider);
+        let selectedProviderId: string | null = null;
+        let lastRateLimitResult: RateLimitResult | null = null;
 
-        if (!rateLimitResult.allowed) {
-            logger.warn(`[${channel}] Rate limited: ${notificationId}, retry after ${rateLimitResult.retryAfterMs}ms`);
+        for (let i = 0; i < cascade.length; i++) {
+            const candidateId = cascade[i];
+            const rateLimitResult = await consumeToken(candidateId);
+
+            if (rateLimitResult.allowed) {
+                selectedProviderId = candidateId;
+                if (i > 0) {
+                    logger.info(`[${channel}] Cascade failover: '${cascade[0]}' rate-limited, using fallback '${candidateId}': ${notificationId}`);
+                    void AdminAlertService.sendAlert('service_health',
+                        `ℹ️ RATE LIMIT CASCADE: USING FALLBACK (${i + 1}/${cascade.length})\n` +
+                        `Channel: ${channel}\n` +
+                        `Notification ID: ${notificationId}\n` +
+                        `Rate-limited providers: ${cascade.slice(0, i).join(', ')}\n` +
+                        `Active fallback: ${candidateId}\n` +
+                        `Action: Check primary provider rate limits if this persists.`,
+                        { severity: 'info', notificationId, channel });
+                }
+                break;
+            } else {
+                lastRateLimitResult = rateLimitResult;
+                logger.warn(`[${channel}] Provider '${candidateId}' rate limited (${i + 1}/${cascade.length}): ${notificationId}`);
+            }
+        }
+
+        if (!selectedProviderId) {
+            // All providers in cascade are rate-limited
+            logger.warn(`[${channel}] All providers in cascade rate-limited: ${notificationId}`);
 
             const newRetryCount = notification.retry_count + 1;
             if (newRetryCount > env.MAX_RETRY_COUNT) {
                 const currentProviderId = notification.provider || PluginRegistry.getDefaultProviderId(channel);
-                const handoffScheduled = await scheduleFallbackProviderHandoff(
-                    channel,
-                    notification,
-                    currentProviderId,
-                    `Rate limited after ${env.MAX_RETRY_COUNT} retries`
-                );
-
-                if (handoffScheduled) {
-                    return true;
-                }
-
-                logger.error(`[${channel}] Max retries exceeded (rate limited): ${notificationId}`);
+                logger.error(`[${channel}] Max retries exceeded (all cascade providers rate limited): ${notificationId}`);
 
                 void AdminAlertService.sendAlert('failed_notification',
                     `❌ MAX RETRIES EXCEEDED (RATE LIMITED)\n` +
                     `Notification ID: ${notificationId}\n` +
                     `Channel: ${channel}\n` +
                     `Provider: ${currentProviderId || providerId || 'default'}\n` +
-                    `Root cause: Provider rate limit exhausted after ${env.MAX_RETRY_COUNT} retries\n` +
+                    `Root cause: All cascade providers rate limit exhausted after ${env.MAX_RETRY_COUNT} retries\n` +
                     `Action: Check provider rate limits in simplens.config.yaml. Consider increasing limits or adding fallback provider.`,
                     { severity: 'critical', notificationId, channel });
 
@@ -309,18 +339,24 @@ const processMessage = async (
                 return true;
             }
 
-            // Push to delayed queue using rate limiter's retryAfterMs
+            // Push to delayed queue using fixed retry delay from rate limiter
             await setRateLimited(notificationId, validationResult.data.retry_count);
+            const retryDelay = lastRateLimitResult?.retryAfterMs ?? env.RATE_LIMIT_RETRY_DELAY_MS;
             const delayedPayload = buildDelayedPayloadGeneric(
                 notification as unknown as Record<string, unknown>,
                 channel,
                 newRetryCount,
-                rateLimitResult.retryAfterMs // Use exact delay from rate limiter
+                retryDelay
             );
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             await publishDelayed(delayedPayload as any);
-            logger.info(`[${channel}] Rate limited, scheduled retry in ${rateLimitResult.retryAfterMs}ms: ${notificationId} (retry ${newRetryCount})`);
+            logger.info(`[${channel}] Rate limited, scheduled retry in ${retryDelay}ms: ${notificationId} (retry ${newRetryCount})`);
             return true;
+        }
+
+        // If selected fallback provider differs from original provider, update notification provider
+        if (selectedProviderId !== notification.provider) {
+            notification.provider = selectedProviderId;
         }
 
         // 5. Send via plugin router (with auto-fallback)

@@ -10,6 +10,7 @@ const publishDelayedMock = vi.fn().mockResolvedValue(undefined);
 const publishStatusMock = vi.fn().mockResolvedValue(undefined);
 const consumeTokenMock = vi.fn();
 const resolveFallbackProviderIdMock = vi.fn();
+const getProviderCascadeMock = vi.fn();
 const validateNotificationForProviderMock = vi.fn();
 const sendWithFallbackMock = vi.fn();
 
@@ -59,6 +60,7 @@ vi.mock('../../../src/plugins/index.js', () => ({
         getDefaultProviderId: pluginRegistryGetDefaultProviderIdMock,
     },
     sendWithFallback: sendWithFallbackMock,
+    getProviderCascade: getProviderCascadeMock,
     resolveFallbackProviderId: resolveFallbackProviderIdMock,
     validateNotificationForProvider: validateNotificationForProviderMock,
 }));
@@ -135,6 +137,9 @@ describe('scheduleFallbackProviderHandoff', () => {
         });
         tryAcquireProcessingLockMock.mockResolvedValue({ canProcess: true, isRetry: false });
         consumeTokenMock.mockResolvedValue({ allowed: true });
+        getProviderCascadeMock.mockImplementation((_channel: string, currentProviderId?: string) => {
+            return currentProviderId ? [currentProviderId] : ['primary'];
+        });
         sendWithFallbackMock.mockResolvedValue({ success: true, messageId: 'msg-1' });
 
         buildDelayedPayloadGenericMock.mockReturnValue({
@@ -287,6 +292,21 @@ describe('processMessage via consumer run loop', () => {
         await stopUnifiedConsumer('email');
     };
 
+    beforeEach(() => {
+        vi.clearAllMocks();
+        sendWithFallbackMock.mockResolvedValue({ success: true, messageId: 'msg-1' });
+        consumeTokenMock.mockResolvedValue({ allowed: true });
+        getProviderCascadeMock.mockImplementation((_channel: string, currentProviderId?: string) => {
+            return currentProviderId ? [currentProviderId] : ['primary'];
+        });
+        resolveFallbackProviderIdMock.mockReturnValue(undefined);
+        tryAcquireProcessingLockMock.mockResolvedValue({ canProcess: true, isRetry: false });
+        providerSafeParseMock.mockImplementation((notification) => ({
+            success: true,
+            data: notification,
+        }));
+    });
+
     it('should set failed, publish failure status, and alert for non-retryable provider errors', async () => {
         sendWithFallbackMock.mockResolvedValue({
             success: false,
@@ -313,34 +333,52 @@ describe('processMessage via consumer run loop', () => {
         expect(commitOffsetsMock).toHaveBeenCalledTimes(1);
     });
 
-    it('should hand off to fallback when rate-limit retry budget is exceeded', async () => {
-        consumeTokenMock.mockResolvedValue({ allowed: false, retryAfterMs: 1000 });
-        resolveFallbackProviderIdMock.mockReturnValue('fallback');
-        validateNotificationForProviderMock.mockImplementation((_providerId, notification) => ({
-            success: true,
-            data: notification,
-        }));
+    it('should cascade to fallback provider in real time when primary is rate-limited and deliver immediately', async () => {
+        getProviderCascadeMock.mockReturnValue(['primary', 'fallback']);
+        consumeTokenMock.mockImplementation(async (providerId) => {
+            if (providerId === 'primary') {
+                return { allowed: false, retryAfterMs: 5000 };
+            }
+            return { allowed: true, remainingTokens: 10 };
+        });
 
-        await startAndProcess(createNotification({ retry_count: Number.MAX_SAFE_INTEGER }));
+        await startAndProcess(createNotification());
 
-        expect(resolveFallbackProviderIdMock).toHaveBeenCalledWith('email', 'primary');
-        expect(buildDelayedPayloadGenericMock).toHaveBeenCalledWith(
-            expect.objectContaining({ provider: 'fallback' }),
+        expect(consumeTokenMock).toHaveBeenCalledWith('primary');
+        expect(consumeTokenMock).toHaveBeenCalledWith('fallback');
+        expect(sendWithFallbackMock).toHaveBeenCalledWith(
             'email',
-            0
+            expect.objectContaining({ provider: 'fallback' })
         );
-        expect(publishDelayedMock).toHaveBeenCalledTimes(1);
-        expect(publishStatusMock).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'failed' }));
+        expect(setDeliveredMock).toHaveBeenCalledWith('notif-123', 0);
         expect(commitOffsetsMock).toHaveBeenCalledTimes(1);
     });
 
-    it('should set failed when retry budget exceeded and current provider is fallback', async () => {
-        consumeTokenMock.mockResolvedValue({ allowed: false, retryAfterMs: 1000 });
-        resolveFallbackProviderIdMock.mockReturnValue(undefined);
+    it('should push to delayed queue with fixed delay when all cascade providers are rate limited', async () => {
+        getProviderCascadeMock.mockReturnValue(['primary', 'fallback']);
+        consumeTokenMock.mockResolvedValue({ allowed: false, retryAfterMs: 5000 });
 
-        await startAndProcess(createNotification({ provider: 'fallback', retry_count: Number.MAX_SAFE_INTEGER }));
+        await startAndProcess(createNotification({ retry_count: 0 }));
 
-        expect(resolveFallbackProviderIdMock).toHaveBeenCalledWith('email', 'fallback');
+        expect(consumeTokenMock).toHaveBeenCalledWith('primary');
+        expect(consumeTokenMock).toHaveBeenCalledWith('fallback');
+        expect(setRateLimitedMock).toHaveBeenCalledWith('notif-123', 0);
+        expect(buildDelayedPayloadGenericMock).toHaveBeenCalledWith(
+            expect.anything(),
+            'email',
+            1,
+            5000
+        );
+        expect(publishDelayedMock).toHaveBeenCalledTimes(1);
+        expect(commitOffsetsMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('should set failed when retry budget exceeded and all cascade providers are rate-limited', async () => {
+        getProviderCascadeMock.mockReturnValue(['primary', 'fallback']);
+        consumeTokenMock.mockResolvedValue({ allowed: false, retryAfterMs: 5000 });
+
+        await startAndProcess(createNotification({ retry_count: Number.MAX_SAFE_INTEGER }));
+
         expect(setFailedMock).toHaveBeenCalledWith('notif-123', Number.MAX_SAFE_INTEGER);
         expect(publishStatusMock).toHaveBeenCalledWith(expect.objectContaining({
             notification_id: 'notif-123',

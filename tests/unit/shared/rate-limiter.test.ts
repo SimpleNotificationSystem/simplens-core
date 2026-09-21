@@ -21,6 +21,7 @@ vi.mock('../../../src/config/redis.config.js', () => ({
 
 vi.mock('../../../src/config/env.config.js', () => ({
     env: {
+        RATE_LIMIT_RETRY_DELAY_MS: 5000,
         EMAIL_RATE_LIMIT_TOKENS: 100,
         EMAIL_RATE_LIMIT_REFILL_RATE: 10,
         WHATSAPP_RATE_LIMIT_TOKENS: 50,
@@ -37,8 +38,8 @@ describe('Rate Limiter Module', () => {
         it('should return allowed: true when tokens are available', async () => {
             const { consumeToken } = await import('../../../src/processors/shared/rate-limiter.js');
 
-            // Mock: Lua script returns [1, 99, 0, 0] meaning allowed with 99 remaining
-            mockRedisClient.eval.mockResolvedValue([1, 99, 0, 0]);
+            // Mock: Lua script returns [1, 99, 0] meaning allowed with 99 remaining
+            mockRedisClient.eval.mockResolvedValue([1, 99, 0]);
 
             const result = await consumeToken('email');
 
@@ -47,48 +48,46 @@ describe('Rate Limiter Module', () => {
             expect(result.retryAfterMs).toBeUndefined();
         });
 
-        it('should return allowed: false when rate limited', async () => {
+        it('should return allowed: false with fixed retry delay when rate limited', async () => {
             const { consumeToken } = await import('../../../src/processors/shared/rate-limiter.js');
 
-            // Mock: Lua script returns [0, 0, 100, 0] meaning denied, 0 tokens, retry in 100ms, queue position 0
-            mockRedisClient.eval.mockResolvedValue([0, 0, 100, 0]);
+            // Mock: Lua script returns [0, 0, 5000] meaning denied, 0 tokens, retry in 5000ms
+            mockRedisClient.eval.mockResolvedValue([0, 0, 5000]);
 
             const result = await consumeToken('email');
 
             expect(result.allowed).toBe(false);
             expect(result.remainingTokens).toBe(0);
-            expect(result.retryAfterMs).toBe(100);
+            expect(result.retryAfterMs).toBe(5000);
         });
 
         it('should use email config for email channel', async () => {
             const { consumeToken } = await import('../../../src/processors/shared/rate-limiter.js');
 
-            mockRedisClient.eval.mockResolvedValue([1, 99, 0, 0]);
+            mockRedisClient.eval.mockResolvedValue([1, 99, 0]);
 
             await consumeToken('email');
 
             // Verify the Lua script was called with email configuration
-            // eval(script, numKeys, key1, key2, arg1, arg2, arg3)
-            // arg1=maxTokens, arg2=refillRate, arg3=now
+            // eval(script, numKeys=2, key1, key2, arg1=maxTokens, arg2=refillRate, arg3=now, arg4=fixedRetryDelay)
             expect(mockRedisClient.eval).toHaveBeenCalled();
             const callArgs = mockRedisClient.eval.mock.calls[0];
-            // eval(script, numKeys=3, key1, key2, key3, arg1=maxTokens, arg2=refillRate, arg3=now)
-            expect(callArgs[5]).toBe('100'); // maxTokens for email (ARGV[1])
-            expect(callArgs[6]).toBe('10');  // refillRate for email (ARGV[2])
+            expect(callArgs[4]).toBe('100'); // maxTokens for email (ARGV[1])
+            expect(callArgs[5]).toBe('10');  // refillRate for email (ARGV[2])
+            expect(callArgs[7]).toBe('5000'); // fixed retry delay (ARGV[4])
         });
 
         it('should use default config for whatsapp channel', async () => {
             const { consumeToken } = await import('../../../src/processors/shared/rate-limiter.js');
 
-            mockRedisClient.eval.mockResolvedValue([1, 99, 0, 0]);
+            mockRedisClient.eval.mockResolvedValue([1, 99, 0]);
 
             await consumeToken('whatsapp');
 
             const callArgs = mockRedisClient.eval.mock.calls[0];
-            // eval(script, numKeys=3, key1, key2, key3, arg1=maxTokens, arg2=refillRate, arg3=now)
             // Plugin system defaults all channels to same config now
-            expect(callArgs[5]).toBe('100'); // maxTokens (default)
-            expect(callArgs[6]).toBe('10');  // refillRate (default)
+            expect(callArgs[4]).toBe('100'); // maxTokens (default)
+            expect(callArgs[5]).toBe('10');  // refillRate (default)
         });
     });
 
@@ -101,7 +100,7 @@ describe('Rate Limiter Module', () => {
 
             const count = await getTokenCount('email');
 
-            expect(count).toBe(100); // EMAIL_RATE_LIMIT_TOKENS
+            expect(count).toBe(100);
         });
 
         it('should return current token count from Redis', async () => {
@@ -113,7 +112,6 @@ describe('Rate Limiter Module', () => {
 
             const count = await getTokenCount('email');
 
-            // Should be approximately 50 (may have slight variation due to timing)
             expect(count).toBeGreaterThanOrEqual(50);
             expect(count).toBeLessThanOrEqual(100);
         });
@@ -127,7 +125,6 @@ describe('Rate Limiter Module', () => {
 
             const count = await getTokenCount('email');
 
-            // Should be 50 + 10 = 60 (approximately)
             expect(count).toBeGreaterThanOrEqual(59);
             expect(count).toBeLessThanOrEqual(61);
         });
@@ -150,13 +147,11 @@ describe('Rate Limiter Module', () => {
     });
 
     describe('refillInterval normalization', () => {
-        // Mock the plugin registry to return different interval configs
         beforeEach(() => {
             vi.resetModules();
         });
 
         it('should normalize refillInterval: minute to per-second rate', async () => {
-            // Mock plugin to return minute config
             vi.doMock('../../../src/plugins/index.js', () => ({
                 getRateLimitConfig: vi.fn().mockReturnValue({
                     maxTokens: 60,
@@ -166,14 +161,13 @@ describe('Rate Limiter Module', () => {
             }));
 
             const { consumeToken } = await import('../../../src/processors/shared/rate-limiter.js');
-            mockRedisClient.eval.mockResolvedValue([1, 59, 0, 0]);
+            mockRedisClient.eval.mockResolvedValue([1, 59, 0]);
 
             await consumeToken('test-provider');
 
             const callArgs = mockRedisClient.eval.mock.calls[0];
-            // eval(script, numKeys=3, key1, key2, key3, arg1=maxTokens, arg2=refillRate, arg3=now)
-            expect(callArgs[5]).toBe('60'); // maxTokens
-            expect(callArgs[6]).toBe('1');  // 60/minute = 1/second
+            expect(callArgs[4]).toBe('60'); // maxTokens
+            expect(callArgs[5]).toBe('1');  // 60/minute = 1/second
         });
 
         it('should normalize refillInterval: hour to per-second rate', async () => {
@@ -186,14 +180,13 @@ describe('Rate Limiter Module', () => {
             }));
 
             const { consumeToken } = await import('../../../src/processors/shared/rate-limiter.js');
-            mockRedisClient.eval.mockResolvedValue([1, 3599, 0, 0]);
+            mockRedisClient.eval.mockResolvedValue([1, 3599, 0]);
 
             await consumeToken('test-provider');
 
             const callArgs = mockRedisClient.eval.mock.calls[0];
-            // eval(script, numKeys=3, key1, key2, key3, arg1=maxTokens, arg2=refillRate, arg3=now)
-            expect(callArgs[5]).toBe('3600'); // maxTokens
-            expect(callArgs[6]).toBe('1');    // 3600/hour = 1/second
+            expect(callArgs[4]).toBe('3600'); // maxTokens
+            expect(callArgs[5]).toBe('1');    // 3600/hour = 1/second
         });
 
         it('should normalize refillInterval: day to per-second rate', async () => {
@@ -206,15 +199,13 @@ describe('Rate Limiter Module', () => {
             }));
 
             const { consumeToken } = await import('../../../src/processors/shared/rate-limiter.js');
-            mockRedisClient.eval.mockResolvedValue([1, 499, 0, 0]);
+            mockRedisClient.eval.mockResolvedValue([1, 499, 0]);
 
             await consumeToken('test-provider');
 
             const callArgs = mockRedisClient.eval.mock.calls[0];
-            // eval(script, numKeys=3, key1, key2, key3, arg1=maxTokens, arg2=refillRate, arg3=now)
-            expect(callArgs[5]).toBe('500'); // maxTokens
-            // 500/day = 500/86400 ≈ 0.005787 per second
-            const normalizedRate = parseFloat(callArgs[6]);
+            expect(callArgs[4]).toBe('500'); // maxTokens
+            const normalizedRate = parseFloat(callArgs[5]);
             expect(normalizedRate).toBeCloseTo(500 / 86400, 5);
         });
 
@@ -223,19 +214,17 @@ describe('Rate Limiter Module', () => {
                 getRateLimitConfig: vi.fn().mockReturnValue({
                     maxTokens: 100,
                     refillRate: 10
-                    // No refillInterval specified
                 })
             }));
 
             const { consumeToken } = await import('../../../src/processors/shared/rate-limiter.js');
-            mockRedisClient.eval.mockResolvedValue([1, 99, 0, 0]);
+            mockRedisClient.eval.mockResolvedValue([1, 99, 0]);
 
             await consumeToken('test-provider');
 
             const callArgs = mockRedisClient.eval.mock.calls[0];
-            // eval(script, numKeys=3, key1, key2, key3, arg1=maxTokens, arg2=refillRate, arg3=now)
-            expect(callArgs[5]).toBe('100'); // maxTokens
-            expect(callArgs[6]).toBe('10');  // 10/second (no normalization needed)
+            expect(callArgs[4]).toBe('100'); // maxTokens
+            expect(callArgs[5]).toBe('10');  // 10/second
         });
     });
 });

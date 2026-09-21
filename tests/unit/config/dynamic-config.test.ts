@@ -112,13 +112,18 @@ describe('Dynamic Operational Configuration', () => {
         worker: {
           outbox_batch_size: 42,
         },
+        retry: {
+          rate_limit_retry_delay_ms: 3000,
+        },
         logging: {
           log_level: 'debug',
         },
       });
 
       expect(dynamicConfig.get('worker').outbox_batch_size).toBe(42);
+      expect(dynamicConfig.get('retry').rate_limit_retry_delay_ms).toBe(3000);
       expect(env.OUTBOX_BATCH_SIZE).toBe(42);
+      expect(env.RATE_LIMIT_RETRY_DELAY_MS).toBe(3000);
       expect(env.LOG_LEVEL).toBe('debug');
       expect(changeFired).toBe(true);
 
@@ -128,7 +133,9 @@ describe('Dynamic Operational Configuration', () => {
     it('should reset settings to system defaults', async () => {
       await dynamicConfig.resetSettings();
       expect(dynamicConfig.get('worker').outbox_batch_size).toBe(SYSTEM_DEFAULT_OPERATIONAL_SETTINGS.worker.outbox_batch_size);
+      expect(dynamicConfig.get('retry').rate_limit_retry_delay_ms).toBe(5000);
       expect(env.OUTBOX_BATCH_SIZE).toBe(SYSTEM_DEFAULT_OPERATIONAL_SETTINGS.worker.outbox_batch_size);
+      expect(env.RATE_LIMIT_RETRY_DELAY_MS).toBe(5000);
       expect(env.LOG_LEVEL).toBe(SYSTEM_DEFAULT_OPERATIONAL_SETTINGS.logging.log_level);
     });
   });

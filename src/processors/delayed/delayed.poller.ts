@@ -16,6 +16,7 @@ import { publishDLQFailureStatus } from './dlq.status.js';
 import { delayedWorkerLogger as logger } from '@src/workers/utils/logger.js';
 import type { DelayedEventWithRetries } from '@src/types/types.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
+import { calculateExponentialBackoff } from '@src/utils/backoff.utils.js';
 
 let pollerInterval: NodeJS.Timeout | null = null;
 let isPolling = false;
@@ -29,9 +30,7 @@ let isPolling = false;
  * @returns Delay in milliseconds (5s, 10s, 20s, 40s, capped at 60s)
  */
 const calculateBackoff = (retryCount: number): number => {
-    const baseDelay = 5000; // 5 seconds
-    const maxDelay = 60000; // 60 seconds
-    return Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
+    return calculateExponentialBackoff(retryCount, 5000, 60000);
 };
 
 /**

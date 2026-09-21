@@ -26,6 +26,10 @@ vi.mock('../../../src/processors/unified/unified.logger.js', () => ({
     },
 }));
 
+vi.mock('../../../src/processors/shared/rate-limiter.js', () => ({
+    consumeToken: vi.fn().mockResolvedValue({ allowed: true }),
+}));
+
 // Create a mock provider factory
 function createMockProvider(options: {
     name: string;
@@ -72,6 +76,7 @@ describe('Provider Router', () => {
     let validateNotification: typeof import('../../../src/plugins/loader/router.js').validateNotification;
     let validateNotificationForProvider: typeof import('../../../src/plugins/loader/router.js').validateNotificationForProvider;
     let resolveFallbackProviderId: typeof import('../../../src/plugins/loader/router.js').resolveFallbackProviderId;
+    let getProviderCascade: typeof import('../../../src/plugins/loader/router.js').getProviderCascade;
     let getRateLimitConfig: typeof import('../../../src/plugins/loader/router.js').getRateLimitConfig;
 
     beforeEach(async () => {
@@ -85,6 +90,7 @@ describe('Provider Router', () => {
         validateNotification = routerModule.validateNotification;
         validateNotificationForProvider = routerModule.validateNotificationForProvider;
         resolveFallbackProviderId = routerModule.resolveFallbackProviderId;
+        getProviderCascade = routerModule.getProviderCascade;
         getRateLimitConfig = routerModule.getRateLimitConfig;
 
         PluginRegistry.clear();
@@ -375,6 +381,35 @@ describe('Provider Router', () => {
             PluginRegistry.setChannelConfig('email', { default: 'primary', fallback: 'fallback' });
 
             expect(resolveFallbackProviderId('email', 'fallback')).toBeUndefined();
+        });
+    });
+
+    describe('getProviderCascade', () => {
+        it('should return full cascade of primary and fallback providers', () => {
+            const primary = createMockProvider({ name: 'primary', channel: 'email' });
+            const fb1 = createMockProvider({ name: 'fb1', channel: 'email' });
+            const fb2 = createMockProvider({ name: 'fb2', channel: 'email' });
+
+            PluginRegistry.register(primary as any, 'primary', 3);
+            PluginRegistry.register(fb1 as any, 'fb1', 2);
+            PluginRegistry.register(fb2 as any, 'fb2', 1);
+            PluginRegistry.setChannelConfig('email', { default: 'primary', fallback: ['fb1', 'fb2'] });
+
+            expect(getProviderCascade('email')).toEqual(['primary', 'fb1', 'fb2']);
+        });
+
+        it('should return cascade starting from currentProviderId onwards', () => {
+            const primary = createMockProvider({ name: 'primary', channel: 'email' });
+            const fb1 = createMockProvider({ name: 'fb1', channel: 'email' });
+            const fb2 = createMockProvider({ name: 'fb2', channel: 'email' });
+
+            PluginRegistry.register(primary as any, 'primary', 3);
+            PluginRegistry.register(fb1 as any, 'fb1', 2);
+            PluginRegistry.register(fb2 as any, 'fb2', 1);
+            PluginRegistry.setChannelConfig('email', { default: 'primary', fallback: ['fb1', 'fb2'] });
+
+            expect(getProviderCascade('email', 'fb1')).toEqual(['fb1', 'fb2']);
+            expect(getProviderCascade('email', 'fb2')).toEqual(['fb2']);
         });
     });
 

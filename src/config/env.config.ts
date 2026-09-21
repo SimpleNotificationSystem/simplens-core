@@ -76,6 +76,9 @@ export const env = {
     get PROCESSING_TTL_SECONDS(): number {
         return dynamicConfig?.get?.('retry')?.processing_ttl_seconds ?? 120;
     },
+    get RATE_LIMIT_RETRY_DELAY_MS(): number {
+        return dynamicConfig?.get?.('retry')?.rate_limit_retry_delay_ms ?? 5000;
+    },
 
     // Delayed Worker
     get MAX_POLLER_RETRIES(): number {

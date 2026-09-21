@@ -9,6 +9,7 @@ import type { DeliveryResult, BaseNotification } from '@src/types/types.js';
 import { unifiedProcessorLogger as logger } from '@src/processors/unified/unified.logger.js';
 import { handleSchemaValidationFailure } from '@src/processors/shared/schema-failure-handler.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
+import { consumeToken } from '@src/processors/shared/rate-limiter.js';
 
 /**
  * Try fallback providers when primary fails with non-retryable error.
@@ -26,9 +27,10 @@ async function tryFallback<T extends BaseNotification>(
         return null;
     }
 
-    const candidateIds = fallbackIds.filter(id => id !== currentProviderId);
+    const currentIndex = currentProviderId ? fallbackIds.indexOf(currentProviderId) : -1;
+    const candidateIds = currentIndex >= 0 ? fallbackIds.slice(currentIndex + 1) : fallbackIds.filter(id => id !== currentProviderId);
     if (candidateIds.length === 0) {
-        logger.debug(`[ProviderRouter] Fallback providers match current provider (${currentProviderId}), skipping fallback`);
+        logger.debug(`[ProviderRouter] No further fallback providers in cascade after ${currentProviderId}`);
         return null;
     }
 
@@ -39,6 +41,18 @@ async function tryFallback<T extends BaseNotification>(
         const fallbackProvider = PluginRegistry.get(fallbackId);
         if (!fallbackProvider) {
             logger.warn(`[ProviderRouter] Fallback provider '${fallbackId}' not found in registry, continuing cascade`);
+            continue;
+        }
+
+        // Check rate limiting before attempting to send via fallback
+        const rateLimitResult = await consumeToken(fallbackId);
+        if (!rateLimitResult.allowed) {
+            logger.warn(`[ProviderRouter] Fallback provider '${fallbackId}' is rate limited, continuing cascade`);
+            lastError = {
+                code: 'FALLBACK_RATE_LIMITED',
+                message: `Fallback provider '${fallbackId}' is rate limited`,
+                retryable: true
+            };
             continue;
         }
 
@@ -118,6 +132,29 @@ async function tryFallback<T extends BaseNotification>(
             retryable: false,
         },
     };
+}
+
+/**
+ * Get ordered provider cascade for a channel starting from currentProviderId (or default provider).
+ */
+export function getProviderCascade(
+    channel: string,
+    currentProviderId?: string
+): string[] {
+    const defaultId = PluginRegistry.getDefaultProviderId(channel);
+    const fallbackIds = PluginRegistry.getFallbackProviderIds(channel) || [];
+    const allProviders = defaultId ? [defaultId, ...fallbackIds] : [...fallbackIds];
+
+    if (!currentProviderId) {
+        return allProviders;
+    }
+
+    const currentIndex = allProviders.indexOf(currentProviderId);
+    if (currentIndex >= 0) {
+        return allProviders.slice(currentIndex);
+    }
+
+    return allProviders;
 }
 
 /**

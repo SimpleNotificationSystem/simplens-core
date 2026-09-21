@@ -6,6 +6,8 @@ import { Producer, Partitioners } from 'kafkajs';
 import { kafka } from '@src/config/kafka.config.js';
 import { CORE_TOPICS, getTopicForChannel, type delayed_notification_topic } from '@src/types/types.js';
 
+import { calculateExponentialBackoff } from '@src/utils/backoff.utils.js';
+
 let producer: Producer | null = null;
 
 /**
@@ -28,9 +30,7 @@ export const initDelayedProducer = async (): Promise<void> => {
  * Calculate exponential backoff delay in milliseconds
  */
 const calculateBackoffDelay = (retryCount: number): number => {
-    const baseDelay = 1000; // 1 second
-    const maxDelay = 300000; // 5 minutes
-    return Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
+    return calculateExponentialBackoff(retryCount, 1000, 300000);
 };
 
 /**
