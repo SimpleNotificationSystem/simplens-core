@@ -25,6 +25,7 @@ import type {
   encrypted_credentials,
 } from '@src/types/types.js';
 import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
+import { resetRateLimiter } from '@src/processors/shared/rate-limiter.js';
 
 export type { ProviderResponseDto } from '@src/types/types.js';
 
@@ -255,6 +256,9 @@ export class ProviderManagerService {
     await Provider.deleteOne({ id });
     ProviderManagerService.invalidateCredentialCache(id);
     PluginRegistry.unregister(id);
+    await resetRateLimiter(id).catch((err) => {
+      logger.warn(`Failed to clean up rate limiter keys for deleted provider '${id}':`, err);
+    });
 
     await PluginSyncService.publish('PROVIDER_DELETED', {
       provider_id: id,

@@ -140,6 +140,11 @@ import {
     npmAuthConfigSchema,
     npmAuthStatusSchema,
     installPluginPayloadSchema,
+    providerRateLimitConfigDetailsSchema,
+    providerRateLimitRealtimeStatusSchema,
+    providerRateLimitStatusSchema,
+    providerRateLimitSummarySchema,
+    providerRateLimitListResponseSchema,
 } from "./schemas.js";
 
 // ============================================================================
@@ -544,3 +549,14 @@ export interface ConsumerHealthCheckResult {
     healthy: boolean;
     details: Record<string, ConsumerHealthDetails>;
 }
+
+// ============================================================================
+// PROVIDER RATE LIMIT STATUS TYPES
+// ============================================================================
+
+export type ProviderRateLimitConfigDetails = z.infer<typeof providerRateLimitConfigDetailsSchema>;
+export type ProviderRateLimitRealtimeStatus = z.infer<typeof providerRateLimitRealtimeStatusSchema>;
+export type ProviderRateLimitStatus = z.infer<typeof providerRateLimitStatusSchema>;
+export type ProviderRateLimitSummary = z.infer<typeof providerRateLimitSummarySchema>;
+export type ProviderRateLimitListResponse = z.infer<typeof providerRateLimitListResponseSchema>;
+

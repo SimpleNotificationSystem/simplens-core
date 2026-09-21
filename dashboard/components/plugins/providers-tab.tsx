@@ -1,15 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import useSWR from "swr";
 import { providerService, pluginService } from "@/lib/api-client";
-import type { ProviderDto, InstalledPlugin } from "@/lib/types";
+import type { ProviderDto, InstalledPlugin, ProviderRateLimitStatus, ProviderRateLimitListResponse } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -49,8 +54,12 @@ import {
   Server,
   Eye,
   EyeOff,
+  Gauge,
+  RotateCcw,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 type AdditionalOption = {
   id: string;
@@ -66,6 +75,188 @@ const createAdditionalOption = (key = "", value = ""): AdditionalOption => ({
   value,
 });
 
+function ProviderRateLimitRing({
+  rateLimit,
+  onReset,
+  isResetting,
+}: {
+  rateLimit?: ProviderRateLimitStatus;
+  onReset: () => void;
+  isResetting?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (!rateLimit) {
+    return null;
+  }
+
+  const { config, status } = rateLimit;
+  const maxTokens = config.max_tokens;
+  const remaining = status.remaining_tokens;
+  const used = status.used_tokens;
+  const isExhausted = status.is_exhausted;
+
+  const remainingPct = maxTokens > 0 ? Math.min(100, Math.max(0, Math.round((remaining / maxTokens) * 100))) : 0;
+  const usedPct = 100 - remainingPct;
+
+  let strokeColor = "text-emerald-500";
+  let statusBadgeClass = "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
+  let statusText = "Healthy";
+
+  if (isExhausted) {
+    strokeColor = "text-rose-500";
+    statusBadgeClass = "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30";
+    statusText = "Exhausted";
+  } else if (remainingPct <= 30) {
+    strokeColor = "text-amber-500";
+    statusBadgeClass = "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30";
+    statusText = "Low Capacity";
+  }
+
+  const size = 32;
+  const strokeWidth = 3;
+  const center = size / 2;
+  const radius = center - strokeWidth;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (remainingPct / 100) * circumference;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onMouseEnter={() => setOpen(true)}
+          onMouseLeave={() => setOpen(false)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((prev) => !prev);
+          }}
+          className={cn(
+            "relative flex items-center justify-center rounded-full transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer p-0.5",
+            isExhausted && "animate-pulse"
+          )}
+          aria-label={`Rate limit: ${remaining}/${maxTokens} tokens remaining`}
+        >
+          <svg width={size} height={size} className="transform -rotate-90">
+            <circle
+              cx={center}
+              cy={center}
+              r={radius}
+              className="text-muted/40 stroke-current"
+              strokeWidth={strokeWidth}
+              fill="transparent"
+            />
+            <circle
+              cx={center}
+              cy={center}
+              r={radius}
+              className={cn("stroke-current transition-all duration-500 ease-in-out", strokeColor)}
+              strokeWidth={strokeWidth}
+              strokeDasharray={circumference}
+              strokeDashoffset={strokeDashoffset}
+              strokeLinecap="round"
+              fill="transparent"
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <span
+              className={cn(
+                "text-[9px] font-bold font-mono tracking-tighter leading-none",
+                isExhausted ? "text-rose-600 dark:text-rose-400" : "text-foreground"
+              )}
+            >
+              {isExhausted ? "0" : `${remainingPct}%`}
+            </span>
+          </div>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-80 p-4 space-y-3 z-50 text-xs shadow-xl rounded-xl"
+        align="end"
+        sideOffset={6}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b pb-2">
+          <div className="flex items-center gap-1.5 font-semibold text-sm">
+            <Gauge className="h-4 w-4 text-primary" />
+            <span>Rate Limit Details</span>
+          </div>
+          <Badge variant="outline" className={cn("text-[10px] px-2 py-0.5 font-medium", statusBadgeClass)}>
+            {statusText}
+          </Badge>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex justify-between items-center text-xs">
+            <span className="text-muted-foreground">Tokens Remaining:</span>
+            <span className="font-semibold font-mono">{remaining} / {maxTokens}</span>
+          </div>
+          <div className="w-full bg-muted/60 rounded-full h-2 overflow-hidden">
+            <div
+              className={cn(
+                "h-full transition-all duration-500",
+                isExhausted ? "bg-rose-500" : remainingPct <= 30 ? "bg-amber-500" : "bg-emerald-500"
+              )}
+              style={{ width: `${remainingPct}%` }}
+            />
+          </div>
+          <div className="flex justify-between items-center text-[11px] text-muted-foreground">
+            <span>Used: <strong className="font-mono text-foreground">{used}</strong> ({usedPct}%)</span>
+            <span>Capacity: <strong className="font-mono text-foreground">{maxTokens}</strong></span>
+          </div>
+        </div>
+
+        <div className="bg-muted/40 rounded-lg p-2.5 space-y-1.5 text-[11px]">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Refill Cadence:</span>
+            <span className="font-mono font-medium">+{config.refill_rate} / {config.refill_interval}</span>
+          </div>
+          {status.is_exhausted ? (
+            <div className="flex items-center gap-1.5 text-rose-500 font-medium pt-1">
+              <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+              <span>Next token in {(status.resets_in_ms / 1000).toFixed(1)}s</span>
+            </div>
+          ) : remaining < maxTokens ? (
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span>Full bucket in:</span>
+              <span className="font-mono font-medium text-foreground">{(status.full_refill_in_ms / 1000).toFixed(1)}s</span>
+            </div>
+          ) : (
+            <div className="text-emerald-600 dark:text-emerald-400 font-medium">
+              Bucket is at full capacity
+            </div>
+          )}
+          {status.exhausted_count > 0 && (
+            <div className="flex items-center justify-between text-muted-foreground pt-1 border-t border-muted/60">
+              <span>Exhaustion events:</span>
+              <span className="font-mono font-semibold text-rose-500">{status.exhausted_count}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="pt-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full text-xs gap-1.5 h-8"
+            onClick={onReset}
+            disabled={isResetting}
+          >
+            {isResetting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+            Refill / Reset Bucket
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function ProvidersTab() {
   const {
     data: providersData,
@@ -77,6 +268,41 @@ export function ProvidersTab() {
     "/api/plugins/installed",
     () => pluginService.listInstalled()
   );
+
+  const {
+    data: rateLimitsData,
+    mutate: mutateRateLimits,
+  } = useSWR<ProviderRateLimitListResponse>(
+    "/api/providers/rate-limits",
+    () => providerService.getRateLimits(),
+    { refreshInterval: 5000, revalidateOnFocus: true }
+  );
+
+  const rateLimitsMap = useMemo(() => {
+    const map = new Map<string, ProviderRateLimitStatus>();
+    if (rateLimitsData?.providers) {
+      for (const rl of rateLimitsData.providers) {
+        map.set(rl.provider_id, rl);
+      }
+    }
+    return map;
+  }, [rateLimitsData]);
+
+  const [resettingProviderId, setResettingProviderId] = useState<string | null>(null);
+
+  const handleResetRateLimit = async (id: string) => {
+    try {
+      setResettingProviderId(id);
+      await providerService.resetRateLimit(id);
+      toast.success(`Rate limit for provider '${id}' reset successfully`);
+      await mutateRateLimits();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to reset rate limit";
+      toast.error(message);
+    } finally {
+      setResettingProviderId(null);
+    }
+  };
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<ProviderDto | null>(null);
@@ -264,6 +490,7 @@ export function ProvidersTab() {
       setModalOpen(false);
       resetForm();
       mutateProviders();
+      mutateRateLimits();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to save provider";
       toast.error(message);
@@ -281,6 +508,7 @@ export function ProvidersTab() {
       setDeleteDialogOpen(false);
       setProviderToDelete(null);
       mutateProviders();
+      mutateRateLimits();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to delete provider";
       toast.error(message);
@@ -294,6 +522,7 @@ export function ProvidersTab() {
       await providerService.update(provider.id, { enabled: newEnabled });
       toast.success(`Provider '${provider.id}' ${newEnabled ? "enabled" : "disabled"}`);
       mutateProviders();
+      mutateRateLimits();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to update provider status";
       toast.error(message);
@@ -316,7 +545,10 @@ export function ProvidersTab() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => mutateProviders()}
+            onClick={() => {
+              mutateProviders();
+              mutateRateLimits();
+            }}
             disabled={providersLoading}
             className="gap-2"
           >
@@ -392,9 +624,16 @@ export function ProvidersTab() {
                       {p.plugin_name}
                     </p>
                   </div>
-                  <Badge variant={p.enabled ? "default" : "secondary"} className="text-xs">
-                    {p.enabled ? "Enabled" : "Disabled"}
-                  </Badge>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <ProviderRateLimitRing
+                      rateLimit={rateLimitsMap.get(p.id)}
+                      onReset={() => handleResetRateLimit(p.id)}
+                      isResetting={resettingProviderId === p.id}
+                    />
+                    <Badge variant={p.enabled ? "default" : "secondary"} className="text-xs">
+                      {p.enabled ? "Enabled" : "Disabled"}
+                    </Badge>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap text-xs">

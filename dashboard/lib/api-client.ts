@@ -27,6 +27,8 @@ import {
   ChannelRoutingDto,
   OperationalSettings,
   AdminAuthStatus,
+  ProviderRateLimitStatus,
+  ProviderRateLimitListResponse,
 } from './types';
 
 export class ApiError extends Error {
@@ -194,6 +196,12 @@ export const providerService = {
     options?: Record<string, unknown>;
   }): Promise<{ success: boolean; message: string }> =>
     apiClient.post('/api/providers/test', payload),
+  getRateLimits: (): Promise<ProviderRateLimitListResponse> =>
+    apiClient.get('/api/providers/rate-limits'),
+  getRateLimit: (id: string): Promise<{ rate_limit: ProviderRateLimitStatus }> =>
+    apiClient.get(`/api/providers/${id}/rate-limit`),
+  resetRateLimit: (id: string): Promise<{ message: string }> =>
+    apiClient.post(`/api/providers/${id}/rate-limit/reset`),
 };
 
 export const channelRoutingService = {

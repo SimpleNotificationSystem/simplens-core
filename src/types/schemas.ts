@@ -625,3 +625,58 @@ export const installPluginPayloadSchema = z.object({
   }).optional(),
 });
 
+/**
+ * Provider rate limit configuration schema
+ */
+export const providerRateLimitConfigDetailsSchema = z.object({
+  max_tokens: z.number(),
+  refill_rate: z.number(),
+  refill_interval: z.enum(['second', 'minute', 'hour', 'day']),
+  normalized_refill_rate: z.number(),
+});
+
+/**
+ * Provider rate limit real-time status schema
+ */
+export const providerRateLimitRealtimeStatusSchema = z.object({
+  remaining_tokens: z.number(),
+  used_tokens: z.number(),
+  usage_percentage: z.number(),
+  is_exhausted: z.boolean(),
+  resets_in_ms: z.number(),
+  full_refill_in_ms: z.number(),
+  last_refill_at: z.coerce.date().nullable(),
+  last_exhausted_at: z.coerce.date().nullable(),
+  exhausted_count: z.number(),
+});
+
+/**
+ * Provider rate limit status item schema
+ */
+export const providerRateLimitStatusSchema = z.object({
+  provider_id: z.string(),
+  channel: z.string(),
+  plugin_name: z.string(),
+  display_name: z.string().optional(),
+  enabled: z.boolean(),
+  config: providerRateLimitConfigDetailsSchema,
+  status: providerRateLimitRealtimeStatusSchema,
+});
+
+/**
+ * Provider rate limit summary schema
+ */
+export const providerRateLimitSummarySchema = z.object({
+  total_providers: z.number(),
+  exhausted_providers: z.number(),
+  healthy_providers: z.number(),
+});
+
+/**
+ * Provider rate limit list response schema
+ */
+export const providerRateLimitListResponseSchema = z.object({
+  providers: z.array(providerRateLimitStatusSchema),
+  summary: providerRateLimitSummarySchema,
+});
+

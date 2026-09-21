@@ -361,3 +361,44 @@ export interface AdminAuthStatus {
   isConfigured: boolean;
 }
 
+export interface ProviderRateLimitConfigDetails {
+  max_tokens: number;
+  refill_rate: number;
+  refill_interval: "second" | "minute" | "hour" | "day";
+  normalized_refill_rate: number;
+}
+
+export interface ProviderRateLimitRealtimeStatus {
+  remaining_tokens: number;
+  used_tokens: number;
+  usage_percentage: number;
+  is_exhausted: boolean;
+  resets_in_ms: number;
+  full_refill_in_ms: number;
+  last_refill_at: string | null;
+  last_exhausted_at: string | null;
+  exhausted_count: number;
+}
+
+export interface ProviderRateLimitStatus {
+  provider_id: string;
+  channel: string;
+  plugin_name: string;
+  display_name?: string;
+  enabled: boolean;
+  config: ProviderRateLimitConfigDetails;
+  status: ProviderRateLimitRealtimeStatus;
+}
+
+export interface ProviderRateLimitSummary {
+  total_providers: number;
+  exhausted_providers: number;
+  healthy_providers: number;
+}
+
+export interface ProviderRateLimitListResponse {
+  providers: ProviderRateLimitStatus[];
+  summary: ProviderRateLimitSummary;
+}
+
+

@@ -285,6 +285,20 @@ class PluginRegistryClass {
     }
 
     /**
+     * Get all registered provider entries
+     */
+    getAllRegistered(): RegisteredProvider[] {
+        return Array.from(this.providers.values());
+    }
+
+    /**
+     * Get registered provider entry by ID
+     */
+    getRegistered(id: string): RegisteredProvider | undefined {
+        return this.providers.get(id);
+    }
+
+    /**
      * Check if a channel has providers
      */
     hasChannel(channel: string): boolean {

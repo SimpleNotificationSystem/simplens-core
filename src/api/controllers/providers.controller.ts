@@ -186,3 +186,72 @@ export const testProvider = async (req: Request, res: Response): Promise<void> =
     });
   }
 };
+
+/**
+ * GET /api/providers/rate-limits
+ * Get real-time rate limit status across all configured providers
+ */
+export const getProvidersRateLimits = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const { getAllProvidersRateLimitStatus } = await import('@src/processors/shared/rate-limiter.js');
+    const result = await getAllProvidersRateLimitStatus();
+    res.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(`Error fetching providers rate limits: ${message}`);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to retrieve providers rate limits'
+    });
+  }
+};
+
+/**
+ * GET /api/providers/:id/rate-limit
+ * Get real-time rate limit status for a specific provider
+ */
+export const getProviderRateLimit = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { getProviderRateLimitStatus } = await import('@src/processors/shared/rate-limiter.js');
+    const rateLimitStatus = await getProviderRateLimitStatus(req.params.id);
+
+    if (!rateLimitStatus) {
+      res.status(404).json({
+        error: 'Not Found',
+        message: `Provider '${req.params.id}' rate limit status not found`
+      });
+      return;
+    }
+
+    res.json({ rate_limit: rateLimitStatus });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(`Error fetching provider '${req.params.id}' rate limit: ${message}`);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to retrieve provider rate limit'
+    });
+  }
+};
+
+/**
+ * POST /api/providers/:id/rate-limit/reset
+ * Manually reset rate limiter tokens and telemetry for a provider
+ */
+export const resetProviderRateLimit = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { resetRateLimiter } = await import('@src/processors/shared/rate-limiter.js');
+    await resetRateLimiter(req.params.id);
+    res.json({
+      message: `Rate limit for provider '${req.params.id}' has been reset successfully.`
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(`Error resetting provider '${req.params.id}' rate limit: ${message}`);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to reset provider rate limit'
+    });
+  }
+};
+

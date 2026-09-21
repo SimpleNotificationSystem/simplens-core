@@ -12,12 +12,18 @@ import {
   updateProvider,
   deleteProvider,
   testProvider,
+  getProvidersRateLimits,
+  getProviderRateLimit,
+  resetProviderRateLimit,
 } from '../controllers/providers.controller.js';
 
 const router = Router();
 
 router.get('/', listProviders);
 router.post('/test', testProvider);
+router.get('/rate-limits', getProvidersRateLimits);
+router.get('/:id/rate-limit', getProviderRateLimit);
+router.post('/:id/rate-limit/reset', resetProviderRateLimit);
 router.get('/:id', getProvider);
 router.post('/', createProvider);
 router.put('/:id', updateProvider);
