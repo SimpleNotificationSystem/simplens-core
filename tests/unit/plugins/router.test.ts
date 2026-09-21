@@ -165,6 +165,41 @@ describe('Provider Router', () => {
             expect(fallback.send).toHaveBeenCalled();
         });
 
+        it('should record execution attempts with timing, provider, and error details', async () => {
+            const primary = createMockProvider({
+                name: 'primary',
+                channel: 'email',
+                sendResult: {
+                    success: false,
+                    error: { code: 'AUTH_FAILED', message: 'Invalid API key', retryable: false }
+                }
+            });
+            const fallback = createMockProvider({ name: 'fallback', channel: 'email' });
+
+            PluginRegistry.register(primary as any, 'primary', 2);
+            PluginRegistry.register(fallback as any, 'fallback', 1);
+            PluginRegistry.setChannelConfig('email', { default: 'primary', fallback: 'fallback' });
+
+            const result = await sendWithFallback('email', createNotification('email'));
+
+            expect(result.success).toBe(true);
+            expect(result.provider).toBe('fallback');
+            expect(result.attempts).toHaveLength(2);
+            expect(result.attempts?.[0]).toMatchObject({
+                provider: 'primary',
+                status: 'failed',
+                error_code: 'AUTH_FAILED',
+                error_message: 'Invalid API key',
+                retryable: false,
+            });
+            expect(result.attempts?.[0].duration_ms).toBeDefined();
+            expect(result.attempts?.[1]).toMatchObject({
+                provider: 'fallback',
+                status: 'delivered',
+            });
+            expect(result.attempts?.[1].duration_ms).toBeDefined();
+        });
+
         it('should NOT try fallback on retryable error', async () => {
             const primary = createMockProvider({
                 name: 'primary',

@@ -22,6 +22,17 @@ export interface Recipient {
 // Generic content - structure depends on channel
 export type NotificationContent = Record<string, unknown>;
 
+export interface ProviderAttempt {
+  provider: string;
+  status: 'delivered' | 'failed' | 'rate_limited';
+  error_code?: string;
+  error_message?: string;
+  retryable?: boolean;
+  attempted_at: Date | string;
+  duration_ms?: number;
+  response?: unknown;
+}
+
 export interface Notification {
   _id: string;
   request_id: string;
@@ -29,6 +40,7 @@ export interface Notification {
   client_name?: string;
   channel: Channel;
   provider?: string; // Provider ID used for this notification
+  provider_history?: ProviderAttempt[];
   recipient: Recipient;
   content: NotificationContent;
   variables?: Record<string, string>;

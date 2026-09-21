@@ -40,6 +40,18 @@ const notification_schema = new mongoose.Schema<notification>(
       type: String,
       index: true,
     },
+    provider_history: [
+      {
+        provider: { type: String, required: true },
+        status: { type: String, enum: ['delivered', 'failed', 'rate_limited'], required: true },
+        error_code: { type: String },
+        error_message: { type: String },
+        retryable: { type: Boolean },
+        attempted_at: { type: Date, default: Date.now },
+        duration_ms: { type: Number },
+        response: { type: mongoose.Schema.Types.Mixed },
+      }
+    ],
     // Dynamic recipient schema - structure depends on channel
     recipient: {
       type: mongoose.Schema.Types.Mixed,

@@ -40,12 +40,24 @@ const hasNonEmptyContent = (
   content?: Record<string, Record<string, string>>,
 ) => !!content && Object.keys(content).length > 0;
 
+export const providerAttemptSchema = z.object({
+  provider: z.string(),
+  status: z.enum(['delivered', 'failed', 'rate_limited']),
+  error_code: z.string().optional(),
+  error_message: z.string().optional(),
+  retryable: z.boolean().optional(),
+  attempted_at: z.coerce.date(),
+  duration_ms: z.number().optional(),
+  response: z.unknown().optional(),
+});
+
 const notificationPayloadFields = {
   request_id: UUIDV4Schema,
   client_id: UUIDV4Schema,
   client_name: z.string().optional(),
   channel: z.string(),
   provider: z.string().optional(),
+  provider_history: z.array(providerAttemptSchema).optional(),
   recipient: z.record(z.string(), z.unknown()),
   content: z.record(z.string(), z.unknown()),
   variables: variablesSchema.optional(),
@@ -112,6 +124,8 @@ export const notificationStatusTopicSchema = z.object({
   request_id: UUIDV4Schema,
   client_id: UUIDV4Schema,
   channel: z.string(),
+  provider: z.string().optional(),
+  provider_history: z.array(providerAttemptSchema).optional(),
   status: z.enum(NOTIFICATION_STATUS_SF),
   message: z.string(),
   retry_count: z.number().int().min(0),
@@ -178,6 +192,8 @@ export const statusOutboxSchema = z.object({
   _id: objectIdSchema,
   notification_id: objectIdSchema,
   status: z.enum(NOTIFICATION_STATUS_SF),
+  provider: z.string().optional(),
+  provider_history: z.array(providerAttemptSchema).optional(),
   processed: z.boolean().default(false),
   claimed_by: z.string().nullable().optional(),
   claimed_at: z.coerce.date().nullable().optional(),

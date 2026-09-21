@@ -45,7 +45,7 @@ import status_outbox_model from '@src/database/models/status-outbox.models.js';
 // Re-export consumer health types
 export type { ConsumerHealthState, ConsumerHealthCheckResult, ConsumerHealthDetails };
 
-// Track active consumers and their health status by channel
+// State tracking for graceful shutdown & health
 const consumers: Map<string, Consumer> = new Map();
 const consumingState: Map<string, boolean> = new Map();
 const consumerHealthState: Map<string, ConsumerHealthState> = new Map();
@@ -78,6 +78,8 @@ const publishSuccessStatus = async (
         request_id: notification.request_id,
         client_id: notification.client_id,
         channel: channel,
+        provider: notification.provider,
+        provider_history: notification.provider_history,
         status: NOTIFICATION_STATUS_SF.delivered,
         message: messageId ? `Delivered via ${messageId}` : 'Notification sent successfully',
         retry_count: notification.retry_count,
@@ -102,6 +104,8 @@ const publishFailureStatus = async (
         request_id: notification.request_id,
         client_id: notification.client_id,
         channel: channel,
+        provider: notification.provider,
+        provider_history: notification.provider_history,
         status: NOTIFICATION_STATUS_SF.failed,
         message: errorMessage,
         retry_count: notification.retry_count,
@@ -272,6 +276,9 @@ const processMessage = async (
         }
 
         const notification = validationResult.data as BaseNotification;
+        if (!notification.provider_history) {
+            notification.provider_history = [];
+        }
         const notificationId = notification.notification_id.toString();
 
         logger.info(`[${channel}] Processing notification: ${notificationId} (retry: ${notification.retry_count})`);
@@ -312,6 +319,15 @@ const processMessage = async (
                 break;
             } else {
                 lastRateLimitResult = rateLimitResult;
+                const retryDelay = rateLimitResult.retryAfterMs ?? env.RATE_LIMIT_RETRY_DELAY_MS;
+                notification.provider_history.push({
+                    provider: candidateId,
+                    status: 'rate_limited',
+                    error_code: 'RATE_LIMITED',
+                    error_message: `Provider '${candidateId}' rate limit exceeded (retry after ${retryDelay}ms)`,
+                    retryable: true,
+                    attempted_at: new Date()
+                });
                 logger.warn(`[${channel}] Provider '${candidateId}' rate limited (${i + 1}/${cascade.length}): ${notificationId}`);
             }
         }
@@ -362,6 +378,16 @@ const processMessage = async (
         // 5. Send via plugin router (with auto-fallback)
         const result: DeliveryResult = await sendWithFallback(channel, notification);
 
+        // Merge router dispatch attempts into provider_history
+        if (result.attempts && result.attempts.length > 0) {
+            notification.provider_history.push(...result.attempts);
+        }
+
+        // Update notification provider if result specifies the delivering/failing provider
+        if (result.provider && result.provider !== notification.provider) {
+            notification.provider = result.provider;
+        }
+
         if (result.success) {
             // 6a. Success
             try {
@@ -390,6 +416,8 @@ const processMessage = async (
                     await status_outbox_model.create({
                         notification_id: notificationId,
                         status: NOTIFICATION_STATUS_SF.delivered,
+                        provider: notification.provider,
+                        provider_history: notification.provider_history,
                         processed: false
                     });
                     logger.info(`[${channel}] Created status_outbox fallback for: ${notificationId}`);

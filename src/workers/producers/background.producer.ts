@@ -182,6 +182,8 @@ export const sendStatusOutboxEvents = async (statusEntries: status_outbox[]): Pr
                 request_id: notification.request_id,
                 client_id: notification.client_id,
                 channel: notification.channel,
+                provider: entry.provider || notification.provider,
+                provider_history: entry.provider_history || notification.provider_history,
                 status: entry.status as NOTIFICATION_STATUS_SF,
                 message: entry.status === 'delivered'
                     ? 'Recovered by recovery service - ghost delivery'

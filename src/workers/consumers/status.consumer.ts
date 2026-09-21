@@ -113,6 +113,14 @@ const processStatusMessage = async ({ partition, message }: EachMessagePayload):
             updated_at: new Date()
         };
 
+        if (data.provider) {
+            updateData.provider = data.provider;
+        }
+
+        if (data.provider_history && data.provider_history.length > 0) {
+            updateData.provider_history = data.provider_history;
+        }
+
         // Store error message if failed
         if (newStatus === NOTIFICATION_STATUS.failed) {
             updateData.error_message = data.message;

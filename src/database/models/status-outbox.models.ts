@@ -21,6 +21,21 @@ const status_outbox_schema = new mongoose.Schema<status_outbox>(
             enum: Object.values(NOTIFICATION_STATUS_SF),
             required: true,
         },
+        provider: {
+            type: String,
+        },
+        provider_history: [
+            {
+                provider: { type: String, required: true },
+                status: { type: String, enum: ['delivered', 'failed', 'rate_limited'], required: true },
+                error_code: { type: String },
+                error_message: { type: String },
+                retryable: { type: Boolean },
+                attempted_at: { type: Date, default: Date.now },
+                duration_ms: { type: Number },
+                response: { type: mongoose.Schema.Types.Mixed },
+            }
+        ],
         processed: {
             type: Boolean,
             default: false,

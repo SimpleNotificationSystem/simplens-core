@@ -351,6 +351,18 @@ describe('processMessage via consumer run loop', () => {
             expect.objectContaining({ provider: 'fallback' })
         );
         expect(setDeliveredMock).toHaveBeenCalledWith('notif-123', 0);
+        expect(publishStatusMock).toHaveBeenCalledWith(expect.objectContaining({
+            notification_id: 'notif-123',
+            status: 'delivered',
+            provider: 'fallback',
+            provider_history: expect.arrayContaining([
+                expect.objectContaining({
+                    provider: 'primary',
+                    status: 'rate_limited',
+                    error_code: 'RATE_LIMITED'
+                })
+            ])
+        }));
         expect(commitOffsetsMock).toHaveBeenCalledTimes(1);
     });
 

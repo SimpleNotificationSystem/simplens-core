@@ -68,12 +68,14 @@ export type RefillInterval = 'second' | 'minute' | 'hour' | 'day';
 export interface DeliveryResult {
     success: boolean;
     messageId?: string;
+    provider?: string;
     providerResponse?: unknown;
     error?: {
         code: string;
         message: string;
         retryable: boolean;
     };
+    attempts?: ProviderAttempt[];
 }
 
 export interface ProviderConfig {
@@ -110,6 +112,7 @@ import {
     baseNotificationRequestSchema,
     baseBatchNotificationRequestSchema,
     baseNotificationSchema,
+    providerAttemptSchema,
     // Admin channel schemas
     adminChannelSchema,
     systemConfigSchema,
@@ -160,6 +163,8 @@ export type alert = z.infer<typeof alertSchema>;
 export type status_outbox = z.infer<typeof statusOutboxSchema>;
 
 export type base_notification = z.infer<typeof baseNotificationSchema>;
+
+export type ProviderAttempt = z.infer<typeof providerAttemptSchema>;
 
 export type BaseNotification = Omit<base_notification, 'notification_id'> & {
     notification_id: string;

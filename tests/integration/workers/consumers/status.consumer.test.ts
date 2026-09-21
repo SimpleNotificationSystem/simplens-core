@@ -281,6 +281,46 @@ describe('Status Consumer', () => {
             );
         });
 
+        it('should update provider and provider_history in MongoDB when provided', async () => {
+            const history = [
+                {
+                    provider: 'primary',
+                    status: 'rate_limited',
+                    error_code: 'RATE_LIMITED',
+                    error_message: 'Rate limit exceeded',
+                    retryable: true,
+                    attempted_at: new Date().toISOString(),
+                },
+                {
+                    provider: 'fallback',
+                    status: 'delivered',
+                    attempted_at: new Date().toISOString(),
+                    duration_ms: 120,
+                }
+            ];
+            const statusData = createStatusMessage({
+                status: 'delivered',
+                provider: 'fallback',
+                provider_history: history,
+            });
+            const kafkaMessage = createKafkaMessage(statusData);
+
+            await capturedMessageHandler!(kafkaMessage);
+
+            expect(mockFindByIdAndUpdate).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    status: 'delivered',
+                    provider: 'fallback',
+                    provider_history: expect.arrayContaining([
+                        expect.objectContaining({ provider: 'primary', status: 'rate_limited' }),
+                        expect.objectContaining({ provider: 'fallback', status: 'delivered' }),
+                    ]),
+                }),
+                expect.anything()
+            );
+        });
+
         it('should send webhook callback when webhook_url is provided', async () => {
             const statusData = createStatusMessage({
                 webhook_url: 'https://example.com/webhook',
