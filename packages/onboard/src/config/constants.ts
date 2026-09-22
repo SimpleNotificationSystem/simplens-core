@@ -35,7 +35,20 @@ export const DOCKER_TIMEOUTS = {
 } as const;
 
 /**
- * Critical environment variables that always need user input
+ * Legacy critical environment variables (SimpleNS <= 1.3.0)
+ */
+export const LEGACY_CRITICAL_ENV_KEYS = [
+    'NS_API_KEY',
+    'MONGO_URI',
+    'BROKERS',
+    'REDIS_URL',
+    'AUTH_SECRET',
+    'ADMIN_PASSWORD',
+    'VERSION',
+];
+
+/**
+ * Critical environment variables that always need user input (SimpleNS > 1.3.0)
  */
 export const CRITICAL_ENV_KEYS = [
     'NS_API_KEY',
@@ -43,9 +56,7 @@ export const CRITICAL_ENV_KEYS = [
     'BROKERS',
     'REDIS_URL',
     'AUTH_SECRET',
-    'ADMIN_PASSWORD',
-    'CORE_VERSION',
-    'DASHBOARD_VERSION',
+    'VERSION',
 ];
 
 /**
