@@ -20,6 +20,11 @@ import { registerNotificationsManagementTools } from './notifications-management
 import { registerResolveAlertsRetryTools } from './resolve-alerts-retry.js';
 import { registerDashboardTools } from './dashboard.js';
 import { registerAdminChannelsTools } from './admin-channels.js';
+import { registerChannelRoutingTools } from './channel-routing.js';
+import { registerProviderTools } from './providers.js';
+import { registerSettingsTools } from './settings.js';
+import { registerPluginsManagementTools } from './plugins-management.js';
+import { registerAdminAuthTools } from './admin-auth.js';
 
 export function registerAllTools(server: McpServer, getCredentials: () => UserCredentials) {
     registerSendNotification(server, getCredentials);
@@ -35,4 +40,9 @@ export function registerAllTools(server: McpServer, getCredentials: () => UserCr
     registerResolveAlertsRetryTools(server, getCredentials);
     registerDashboardTools(server, getCredentials);
     registerAdminChannelsTools(server, getCredentials);
+    registerChannelRoutingTools(server, getCredentials);
+    registerProviderTools(server, getCredentials);
+    registerSettingsTools(server, getCredentials);
+    registerPluginsManagementTools(server, getCredentials);
+    registerAdminAuthTools(server, getCredentials);
 }

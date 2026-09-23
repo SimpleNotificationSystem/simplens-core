@@ -8,7 +8,7 @@ A Model Context Protocol (MCP) server for the SimpleNS notification orchestratio
 
 - **Streamable HTTP Transport**: Connect remote or local MCP clients via HTTP (`/mcp`).
 - **Stdio Transport**: Local execution via command line (`--stdio`).
-- **Full Tool Suite (29 Tools)**: Comprehensive coverage for notifications, templates, alerts, logs, metrics, and channel configuration.
+- **Full Tool Suite (54 Tools)**: Comprehensive coverage for notifications, templates, alerts, logs, metrics, channel routing, providers, rate limits, dynamic settings, plugin lifecycle, and admin configuration.
 
 ---
 
@@ -87,7 +87,7 @@ Add to your MCP Client configuration:
 
 ---
 
-## Complete Tools Reference (29 Tools)
+## Complete Tools Reference (54 Tools)
 
 ### 1. Notification Dispatch
 | Tool | Description |
@@ -145,3 +145,49 @@ Add to your MCP Client configuration:
 | `delete_admin_channel` | Delete an admin channel configuration. |
 | `test_admin_channel` | Execute a live connection and credential test for an admin channel. |
 | `validate_admin_channel_config` | Validate configuration parameters against provider requirements before saving. |
+
+### 8. Channel Routing & Kafka Partition Scaling
+| Tool | Description |
+| :--- | :--- |
+| `list_channel_routings` | List all configured channel routings showing default provider, fallback cascade, and partition counts. |
+| `get_channel_routing` | Retrieve routing configuration and fallback chain for a specific channel (e.g. email, sms). |
+| `set_channel_routing` | Configure default provider, ordered cascading fallback providers, and Kafka partitions for a channel. |
+| `delete_channel_routing` | Remove routing rules for a channel. |
+
+### 9. Provider Management & Real-Time Rate Limiting
+| Tool | Description |
+| :--- | :--- |
+| `list_providers` | List all configured provider instances with their enabled status and options. |
+| `get_provider` | Retrieve detailed configuration and status for a single provider instance (supports optional decrypted view). |
+| `create_provider` | Instantiate and register a new provider instance with credentials and rate limit options. |
+| `update_provider` | Update credentials, options, or toggle enabled state of an existing provider. |
+| `delete_provider` | Remove a provider instance (verifies no active channel routings depend on it). |
+| `test_provider` | Test connection and credentials for an existing provider or unpersisted configuration. |
+| `get_providers_rate_limits` | Real-time token bucket capacity, refill rates, and metrics across all providers. |
+| `get_provider_rate_limit` | Real-time rate limit status and remaining token capacity for a specific provider instance. |
+| `reset_provider_rate_limit` | Manually reset rate limiter tokens and telemetry counters for a specific provider in Redis. |
+
+### 10. Dynamic Operational Settings
+| Tool | Description |
+| :--- | :--- |
+| `get_operational_settings` | Retrieve active operational settings (worker concurrency, retry limits, polling intervals, DLQ thresholds). |
+| `update_operational_settings` | Hot-update operational settings cluster-wide via Redis pub/sub with zero service restarts. |
+| `reset_operational_settings` | Reset all dynamic operational configuration parameters to system defaults. |
+
+### 11. Plugin Lifecycle & NPM Registry Management
+| Tool | Description |
+| :--- | :--- |
+| `list_installed_plugins` | List all installed npm plugin packages stored in MongoDB with version and installation timestamp. |
+| `get_plugin_catalog` | Browse available plugins from the public catalog by category (`official` or `community`). |
+| `install_plugin` | Download, validate, and hot-load an npm provider plugin package with optional private auth. |
+| `change_plugin_version` | Upgrade or downgrade an installed plugin to a specified semver version. |
+| `uninstall_plugin` | Uninstall an installed plugin package and clean up associated resources. |
+| `get_npm_auth` | Check configured npm registry authentication status and masked tokens. |
+| `save_npm_auth` | Save private npm registry credentials (auth token, registry URL, optional scope). |
+| `delete_npm_auth` | Remove saved npm registry authentication credentials. |
+
+### 12. Admin Setup Status
+| Tool | Description |
+| :--- | :--- |
+| `get_admin_auth_status` | Check whether SimpleNS administrator credentials have been configured or require initial setup. |
+
