@@ -45,10 +45,10 @@ describe('Admin Auth Routes Integration', () => {
     });
   });
 
-  describe('POST /api/admin/auth/setup', () => {
+  describe('POST /api/admin/auth/signup', () => {
     it('should reject setup with validation error if password too short', async () => {
       const res = await request(app)
-        .post('/api/admin/auth/setup')
+        .post('/api/admin/auth/signup')
         .send({ username: 'admin', password: '123' });
 
       expect(res.status).toBe(400);
@@ -57,7 +57,7 @@ describe('Admin Auth Routes Integration', () => {
 
     it('should reject setup with validation error if password exceeds max length', async () => {
       const res = await request(app)
-        .post('/api/admin/auth/setup')
+        .post('/api/admin/auth/signup')
         .send({ username: 'admin', password: 'a'.repeat(65) });
 
       expect(res.status).toBe(400);
@@ -71,7 +71,7 @@ describe('Admin Auth Routes Integration', () => {
       } as any);
 
       const res = await request(app)
-        .post('/api/admin/auth/setup')
+        .post('/api/admin/auth/signup')
         .send({ username: 'admin', password: 'supersecretpassword123' });
 
       expect(res.status).toBe(400);
@@ -83,26 +83,68 @@ describe('Admin Auth Routes Integration', () => {
       vi.mocked(system_config_model.create).mockResolvedValue({} as any);
 
       const res = await request(app)
-        .post('/api/admin/auth/setup')
+        .post('/api/admin/auth/signup')
         .send({ username: 'superuser', password: 'supersecretpassword123' });
 
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
+      expect(res.body.token).toBeDefined();
+      expect(typeof res.body.token).toBe('string');
       expect(res.body.user.username).toBe('superuser');
       expect(system_config_model.create).toHaveBeenCalled();
+      expect(res.headers['set-cookie']).toBeDefined();
+      expect(res.headers['set-cookie'].some((c: string) => c.includes('simplens_session='))).toBe(true);
     });
   });
 
-  describe('POST /api/admin/auth/verify', () => {
+  describe('POST /api/admin/auth/login', () => {
     it('should reject invalid credentials', async () => {
       vi.mocked(system_config_model.findOne).mockResolvedValue(null);
 
       const res = await request(app)
-        .post('/api/admin/auth/verify')
+        .post('/api/admin/auth/login')
         .send({ username: 'wrong', password: 'wrongpassword' });
 
       expect(res.status).toBe(401);
       expect(res.body.isValid).toBe(false);
+    });
+
+    it('should verify correct credentials and return token', async () => {
+      const crypto = await import('crypto');
+      const salt = crypto.randomBytes(32).toString('hex');
+      const password_hash = crypto.scryptSync('supersecretpassword123', salt, 64).toString('hex');
+
+      vi.mocked(system_config_model.findOne).mockResolvedValue({
+        key: 'admin_credentials',
+        value: {
+          username: 'admin',
+          password_hash,
+          salt,
+          created_at: new Date().toISOString(),
+        },
+      } as any);
+
+      const res = await request(app)
+        .post('/api/admin/auth/login')
+        .send({ username: 'admin', password: 'supersecretpassword123' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.isValid).toBe(true);
+      expect(res.body.token).toBeDefined();
+      expect(typeof res.body.token).toBe('string');
+      expect(res.body.user.username).toBe('admin');
+      expect(res.headers['set-cookie']).toBeDefined();
+      expect(res.headers['set-cookie'].some((c: string) => c.includes('simplens_session='))).toBe(true);
+    });
+  });
+
+  describe('POST /api/admin/auth/logout', () => {
+    it('should clear session cookie and return 200', async () => {
+      const res = await request(app).post('/api/admin/auth/logout');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.headers['set-cookie']).toBeDefined();
     });
   });
 });

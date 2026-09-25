@@ -3,17 +3,26 @@
  */
 
 import { Router } from 'express';
-import { getAuthStatus, setupAdmin, verifyAdmin } from '../controllers/admin-auth.controller.js';
+import {
+    signupAdmin,
+    loginAdmin,
+    logoutAdmin,
+    getAuthStatus,
+} from '../controllers/admin-auth.controller.js';
 
 const router = Router();
 
-// GET /api/admin/auth/status - Check if admin credentials are configured
+// 1. Signup - Initial administrator account creation (only allowed if no admin exists)
+router.post('/signup', signupAdmin);
+
+// 2. Login - Verify administrator credentials and set session cookie
+router.post('/login', loginAdmin);
+
+// 3. Logout - Clear session cookie
+router.post('/logout', logoutAdmin);
+
+// Check if admin credentials are configured (used by onboarding / MCP server)
 router.get('/status', getAuthStatus);
 
-// POST /api/admin/auth/setup - Initial administrator configuration
-router.post('/setup', setupAdmin);
-
-// POST /api/admin/auth/verify - Verify administrator credentials
-router.post('/verify', verifyAdmin);
 
 export default router;

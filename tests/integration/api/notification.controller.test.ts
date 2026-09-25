@@ -129,6 +129,7 @@ vi.mock("../../../src/api/utils/utils.js", () => {
     InvalidProviderChannelError,
     InvalidContentSchemaError,
     ProviderNotFoundError,
+    updateApiKeyNotificationUsage: vi.fn(),
   };
 });
 

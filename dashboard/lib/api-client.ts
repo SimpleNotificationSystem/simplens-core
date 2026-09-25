@@ -29,6 +29,10 @@ import {
   AdminAuthStatus,
   ProviderRateLimitStatus,
   ProviderRateLimitListResponse,
+  ApiKey,
+  CreateApiKeyPayload,
+  CreateApiKeyResponse,
+  ApiKeyUsageDetailResponse,
 } from './types';
 
 export class ApiError extends Error {
@@ -47,6 +51,7 @@ export const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
 
 // Dynamic Base URL Resolution
@@ -79,15 +84,16 @@ apiClient.interceptors.response.use(
 
 // Service Modules
 export const authService = {
-  login: (payload: Record<string, unknown>): Promise<{ success: boolean; redirectUrl: string }> => 
+  signup: (payload: { username: string; password: string }): Promise<{ success: boolean; message?: string; redirectUrl?: string }> =>
+    apiClient.post('/api/auth/setup', payload),
+  setup: (payload: { username: string; password: string }): Promise<{ success: boolean; message?: string; redirectUrl?: string }> =>
+    apiClient.post('/api/auth/setup', payload),
+  login: (payload: Record<string, unknown>): Promise<{ success: boolean; isValid?: boolean; message?: string; redirectUrl?: string }> => 
     apiClient.post('/api/auth/login', payload),
-  logout: (): Promise<unknown> => apiClient.post('/api/auth/logout'),
-  getSession: (): Promise<{ authenticated: boolean; user?: { id: string; username: string } }> => 
-    apiClient.get('/api/auth/session'),
+  logout: (): Promise<{ success: boolean; message?: string }> => 
+    apiClient.post('/api/auth/logout'),
   getAuthStatus: (): Promise<AdminAuthStatus> =>
     apiClient.get('/api/auth/status'),
-  setup: (payload: { username: string; password: string }): Promise<{ success: boolean; redirectUrl: string; message?: string }> =>
-    apiClient.post('/api/auth/setup', payload),
 };
 
 export const settingsService = {
@@ -236,4 +242,16 @@ export const dashboardService = {
   getStats: (): Promise<DashboardStats> => apiClient.get('/api/dashboard/stats'),
   getTrends: (period?: string): Promise<DashboardTrendsResponse> => 
     apiClient.get('/api/dashboard/trends', { params: { period } }),
+};
+
+export const apiKeyService = {
+  list: (): Promise<{ keys: ApiKey[] }> => apiClient.get('/api/keys'),
+  create: (payload: CreateApiKeyPayload): Promise<CreateApiKeyResponse> => 
+    apiClient.post('/api/keys', payload),
+  getUsage: (id: string): Promise<ApiKeyUsageDetailResponse> => 
+    apiClient.get(`/api/keys/${id}`),
+  revoke: (id: string): Promise<{ success: boolean; message: string; key: ApiKey }> => 
+    apiClient.post(`/api/keys/${id}/revoke`),
+  delete: (id: string): Promise<{ success: boolean; message: string }> => 
+    apiClient.delete(`/api/keys/${id}`),
 };

@@ -145,6 +145,12 @@ import {
     providerRateLimitStatusSchema,
     providerRateLimitSummarySchema,
     providerRateLimitListResponseSchema,
+    apiKeyUsageSchema,
+    apiKeyStatusSchema,
+    apiKeyDocSchema,
+    createApiKeySchema,
+    apiKeyResponseSchema,
+    createApiKeyResponseSchema,
 } from "./schemas.js";
 
 // ============================================================================
@@ -559,4 +565,23 @@ export type ProviderRateLimitRealtimeStatus = z.infer<typeof providerRateLimitRe
 export type ProviderRateLimitStatus = z.infer<typeof providerRateLimitStatusSchema>;
 export type ProviderRateLimitSummary = z.infer<typeof providerRateLimitSummarySchema>;
 export type ProviderRateLimitListResponse = z.infer<typeof providerRateLimitListResponseSchema>;
+
+// ============================================================================
+// API KEY & ADMIN AUTH TYPES
+// ============================================================================
+
+export interface AdminJwtPayload {
+    sub: string;
+    username: string;
+    role: 'admin';
+    iat?: number;
+    exp?: number;
+}
+
+export type ApiKeyStatus = z.infer<typeof apiKeyStatusSchema>;
+export type ApiKeyUsage = z.infer<typeof apiKeyUsageSchema>;
+export type ApiKeyDoc = z.infer<typeof apiKeyDocSchema>;
+export type CreateApiKeyInput = z.infer<typeof createApiKeySchema>;
+export type ApiKeyResponse = z.infer<typeof apiKeyResponseSchema>;
+export type CreateApiKeyResponse = z.infer<typeof createApiKeyResponseSchema>;
 

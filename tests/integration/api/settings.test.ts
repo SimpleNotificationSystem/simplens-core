@@ -4,6 +4,7 @@ import express from 'express';
 import settings_router from '@src/api/routes/settings.routes.js';
 import { auth_middleware } from '@src/api/middlewares/auth_middleware.js';
 import { dynamicConfig } from '@src/config/dynamic-config.service.js';
+import { generateAdminJwt } from '@src/api/utils/jwt.utils.js';
 
 vi.mock('@src/config/redis.config.js', () => ({
   getRedisClient: vi.fn(() => ({
@@ -29,6 +30,7 @@ vi.mock('@src/database/models/system-config.models.js', () => ({
 
 describe('Settings API Integration', () => {
   let app: express.Application;
+  const adminToken = generateAdminJwt({ id: 'admin-1', username: 'admin' });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -45,7 +47,7 @@ describe('Settings API Integration', () => {
   it('should return operational settings with valid authorization', async () => {
     const res = await request(app)
       .get('/api/settings')
-      .set('Authorization', `Bearer ${process.env.NS_API_KEY}`);
+      .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -55,7 +57,7 @@ describe('Settings API Integration', () => {
   it('should update operational settings with valid authorization', async () => {
     const res = await request(app)
       .put('/api/settings')
-      .set('Authorization', `Bearer ${process.env.NS_API_KEY}`)
+      .set('Authorization', `Bearer ${adminToken}`)
       .send({
         worker: {
           outbox_batch_size: 150,
@@ -74,7 +76,7 @@ describe('Settings API Integration', () => {
   it('should reject update with invalid schema bounds', async () => {
     const res = await request(app)
       .put('/api/settings')
-      .set('Authorization', `Bearer ${process.env.NS_API_KEY}`)
+      .set('Authorization', `Bearer ${adminToken}`)
       .send({
         worker: {
           outbox_batch_size: 99999, // exceeds max 2000
@@ -88,7 +90,7 @@ describe('Settings API Integration', () => {
   it('should reset operational settings to system defaults', async () => {
     const res = await request(app)
       .post('/api/settings/reset')
-      .set('Authorization', `Bearer ${process.env.NS_API_KEY}`);
+      .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);

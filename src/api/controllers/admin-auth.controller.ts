@@ -11,8 +11,21 @@ import system_config_model from '@src/database/models/system-config.models.js';
 import { adminSetupSchema, adminLoginSchema } from '@src/types/schemas.js';
 import type { AdminCredentialsDoc } from '@src/types/types.js';
 import { apiLogger as logger } from '@src/workers/utils/logger.js';
+import { generateAdminJwt } from '../utils/jwt.utils.js';
 
 export const ADMIN_CREDENTIALS_KEY = 'admin_credentials';
+export const SESSION_COOKIE_NAME = 'simplens_session';
+const SESSION_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+const setSessionCookie = (res: Response, token: string): void => {
+    res.cookie(SESSION_COOKIE_NAME, token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: SESSION_COOKIE_MAX_AGE_MS,
+    });
+};
 
 /**
  * Check if the administrator credentials have been configured
@@ -74,13 +87,15 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
 
         logger.success(`Administrator account configured successfully for username: ${username}`);
 
+        const user = { id: 'admin-1', username };
+        const token = generateAdminJwt(user);
+        setSessionCookie(res, token);
+
         res.status(201).json({
             success: true,
             message: 'Administrator account configured successfully.',
-            user: {
-                id: 'admin-1',
-                username,
-            },
+            token,
+            user,
         });
     } catch (err) {
         logger.error('Error during administrator setup', err);
@@ -122,9 +137,13 @@ export const verifyAdmin = async (req: Request, res: Response): Promise<void> =>
             const computedHashBuf = Buffer.from(computedHash, 'hex');
 
             if (storedHashBuf.length === computedHashBuf.length && timingSafeEqual(storedHashBuf, computedHashBuf)) {
+                const user = { id: 'admin-1', username: credentials.username };
+                const token = generateAdminJwt(user);
+                setSessionCookie(res, token);
                 res.status(200).json({
                     isValid: true,
-                    user: { id: 'admin-1', username: credentials.username },
+                    token,
+                    user,
                 });
                 return;
             }
@@ -137,9 +156,13 @@ export const verifyAdmin = async (req: Request, res: Response): Promise<void> =>
         const envUser = process.env.ADMIN_USERNAME;
         const envPass = process.env.ADMIN_PASSWORD;
         if (envUser && envPass && username === envUser && password === envPass) {
+            const user = { id: 'admin-1', username: envUser };
+            const token = generateAdminJwt(user);
+            setSessionCookie(res, token);
             res.status(200).json({
                 isValid: true,
-                user: { id: 'admin-1', username: envUser },
+                token,
+                user,
             });
             return;
         }
@@ -150,3 +173,28 @@ export const verifyAdmin = async (req: Request, res: Response): Promise<void> =>
         res.status(500).json({ error: 'Failed to verify administrator credentials' });
     }
 };
+
+/**
+ * Log out administrator and clear session cookie
+ * POST /api/admin/auth/logout
+ */
+export const logoutAdmin = async (_req: Request, res: Response): Promise<void> => {
+    try {
+        res.clearCookie(SESSION_COOKIE_NAME, {
+            path: '/',
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+        });
+        res.status(200).json({
+            success: true,
+            message: 'Logged out successfully.',
+        });
+    } catch (err) {
+        logger.error('Error during logout', err);
+        res.status(500).json({ error: 'Failed to log out' });
+    }
+};
+
+export const signupAdmin = setupAdmin;
+export const loginAdmin = verifyAdmin;

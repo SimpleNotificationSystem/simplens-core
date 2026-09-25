@@ -401,4 +401,45 @@ export interface ProviderRateLimitListResponse {
   summary: ProviderRateLimitSummary;
 }
 
+// ============================================================================
+// API KEY MANAGEMENT TYPES
+// ============================================================================
+
+export interface ApiKeyUsage {
+  total_requests: number;
+  total_notifications: number;
+  by_channel: Record<string, number>;
+  last_used_at?: string | null;
+}
+
+export interface ApiKey {
+  key_id: string;
+  name: string;
+  key_prefix: string;
+  status: 'active' | 'revoked';
+  expires_at?: string | null;
+  usage: ApiKeyUsage;
+  created_at: string;
+}
+
+export interface CreateApiKeyPayload {
+  name: string;
+  expires_at?: string;
+}
+
+export interface CreateApiKeyResponse {
+  key: ApiKey;
+  raw_key: string;
+}
+
+export interface ApiKeyUsageDetailResponse {
+  key: ApiKey;
+  status_breakdown: {
+    pending: number;
+    processing: number;
+    delivered: number;
+    failed: number;
+  };
+}
+
 

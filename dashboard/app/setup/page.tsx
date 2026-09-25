@@ -202,7 +202,7 @@ export default function SetupPage() {
         setIsLoading(true);
 
         try {
-            await authService.setup({ username: trimmedUser, password });
+            await authService.signup({ username: trimmedUser, password });
             
             // Check if any plugins are already installed
             try {

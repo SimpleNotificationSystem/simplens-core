@@ -7,7 +7,7 @@
 
 import { randomUUID } from 'crypto';
 import type { Redis as RedisType } from 'ioredis';
-import { getRedisClient } from '@src/config/redis.config.js';
+import { getRedisClient, connectRedis } from '@src/config/redis.config.js';
 import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
 import type { PluginSyncAction, PluginSyncHandler, PluginSyncMessage, PluginSyncPayload } from '@src/types/types.js';
 
@@ -92,10 +92,25 @@ export class PluginSyncServiceClass {
     }
 
     try {
+      await connectRedis();
       const baseClient = getRedisClient();
       this.subClient = baseClient.duplicate();
 
-      await this.subClient.connect();
+      this.subClient.on('error', (err: Error) => {
+        logger.error('Plugin sync Redis subscriber error:', err);
+      });
+
+      this.subClient.on('close', () => {
+        this.isSubscribed = false;
+        logger.warn('Plugin sync Redis subscriber connection closed. Reconnecting in 3s...');
+        setTimeout(() => {
+          void this.startSubscriber();
+        }, 3000);
+      });
+
+      if (this.subClient.status !== 'ready' && this.subClient.status !== 'connecting') {
+        await this.subClient.connect();
+      }
       await this.subClient.subscribe(PLUGIN_SYNC_CHANNEL);
       this.isSubscribed = true;
 
@@ -140,6 +155,9 @@ export class PluginSyncServiceClass {
       logger.success(`Subscribed to plugin sync channel: ${PLUGIN_SYNC_CHANNEL}`);
     } catch (err) {
       logger.error('Failed to initialize Redis subscriber for plugin sync:', err);
+      setTimeout(() => {
+        void this.startSubscriber();
+      }, 3000);
     }
   }
 

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import axios from "axios";
-import { API_BASE_URL, NS_API_KEY } from "@/lib/api-config";
-import { createSession } from "@/lib/session";
+import { API_BASE_URL } from "@/lib/api-config";
 import { getBasePath } from "@/lib/utils";
 
 export async function POST(request: Request) {
@@ -32,26 +31,35 @@ export async function POST(request: Request) {
         }
 
         const response = await axios.post(
-            `${API_BASE_URL}/api/admin/auth/setup`,
+            `${API_BASE_URL}/api/admin/auth/signup`,
             { username, password },
             {
                 headers: {
-                    Authorization: `Bearer ${NS_API_KEY}`,
                     "Content-Type": "application/json",
                 },
                 timeout: 5000,
             }
         );
 
-        if (response.data.success && response.data.user) {
-            await createSession(response.data.user.id, response.data.user.username);
-        }
-
         const basePath = getBasePath();
-        return NextResponse.json({
+        const nextRes = NextResponse.json({
             success: true,
             redirectUrl: `${basePath}/dashboard`,
+            user: response.data?.user,
         });
+
+        const token = response.data?.token;
+        if (token) {
+            nextRes.cookies.set("simplens_session", token, {
+                httpOnly: true,
+                sameSite: "lax",
+                secure: process.env.NODE_ENV === "production",
+                maxAge: 7 * 24 * 60 * 60,
+                path: "/",
+            });
+        }
+
+        return nextRes;
     } catch (error: unknown) {
         console.error("Admin setup error:", error);
         if (axios.isAxiosError(error) && error.response?.data) {

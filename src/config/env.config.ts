@@ -23,7 +23,7 @@ export const env = {
 
     // API Server
     PORT: <number>parseInt(process.env.PORT || "3000"),
-    NS_API_KEY: <string>(process.env.NS_API_KEY || ""),
+    JWT_SECRET: <string>(process.env.JWT_SECRET || "simplens-default-jwt-secret-key-change-in-production"),
     DELAYED_PARTITION: <number>parseInt(process.env.DELAYED_PARTITION || "1"),
     NOTIFICATION_STATUS_PARTITION: <number>parseInt(process.env.NOTIFICATION_STATUS_PARTITION || "1"),
 

@@ -2,6 +2,7 @@ import express from 'express';
 import type { Request, Response } from 'express';
 import { env } from '@src/config/env.config.js';
 import { connectMongoDB } from '@src/config/db.config.js';
+import { connectRedis } from '@src/config/redis.config.js';
 import { exit } from 'process';
 import notification_router from './routes/notification.routes.js';
 import plugins_router from './routes/plugins.routes.js';
@@ -14,6 +15,7 @@ import alerts_router from './routes/alerts.routes.js';
 import dashboard_router from './routes/dashboard.routes.js';
 import settings_router from './routes/settings.routes.js';
 import admin_auth_router from './routes/admin-auth.routes.js';
+import api_keys_router from './routes/api-key.routes.js';
 import { dynamicConfig } from '@src/config/dynamic-config.service.js';
 import { auth_middleware } from './middlewares/auth_middleware.js';
 import http from 'http';
@@ -44,7 +46,10 @@ app.use(express.json({ limit: '1mb' }));
 
 app.use(helmet());
 
-app.use(cors({ origin: "*" })); //allows all origins
+app.use(cors({
+    origin: true,
+    credentials: true,
+}));
 
 app.get("/api", (req: Request, res: Response) => {
     res.json({
@@ -72,6 +77,7 @@ app.use('/api/channels/routing', auth_middleware, channel_routing_router);
 app.use('/api/admin-channels', auth_middleware, admin_channels_router);
 app.use('/api/templates', auth_middleware, notification_templates_router);
 app.use('/api/settings', auth_middleware, settings_router);
+app.use('/api/keys', auth_middleware, api_keys_router);
 app.use('/api/admin/auth', admin_auth_router);
 
 const start_server = async () => {
@@ -82,7 +88,8 @@ const start_server = async () => {
         // 0. Initialize Dynamic Configuration & seed defaults into MongoDB
         await dynamicConfig.initialize(true);
 
-        // 1. Initialize Redis subscriber & sync handlers for plugins
+        // 1. Connect Redis & initialize subscriber for plugins
+        await connectRedis();
         await PluginSyncService.startSubscriber();
         NpmAuthService.registerSyncHandlers();
         await NpmAuthService.syncNpmrc();

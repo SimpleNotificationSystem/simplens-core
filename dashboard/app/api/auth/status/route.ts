@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
 import axios from "axios";
-import { API_BASE_URL, NS_API_KEY } from "@/lib/api-config";
+import { API_BASE_URL } from "@/lib/api-config";
 
 export async function GET() {
     try {
         const response = await axios.get(`${API_BASE_URL}/api/admin/auth/status`, {
-            headers: {
-                Authorization: `Bearer ${NS_API_KEY}`,
-            },
             timeout: 5000,
         });
 

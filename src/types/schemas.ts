@@ -145,6 +145,7 @@ export const notificationSchema = z.object({
   status: z.enum(NOTIFICATION_STATUS),
   error_message: z.string().optional(),
   retry_count: z.number().int().min(0),
+  api_key_id: z.string().nullable().optional(),
   // Recovery claiming fields for horizontal scalability
   recovery_claimed_by: z.string().nullable().optional(),
   recovery_claimed_at: z.coerce.date().nullable().optional(),
@@ -678,5 +679,50 @@ export const providerRateLimitSummarySchema = z.object({
 export const providerRateLimitListResponseSchema = z.object({
   providers: z.array(providerRateLimitStatusSchema),
   summary: providerRateLimitSummarySchema,
+});
+
+// ============================================================================
+// API KEY & ADMIN AUTH SCHEMAS
+// ============================================================================
+
+export const apiKeyUsageSchema = z.object({
+  total_requests: z.number().int().min(0).default(0),
+  total_notifications: z.number().int().min(0).default(0),
+  by_channel: z.record(z.string(), z.number().int().min(0)).default({}),
+  last_used_at: z.coerce.date().nullable().optional(),
+});
+
+export const apiKeyStatusSchema = z.enum(['active', 'revoked']);
+
+export const apiKeyDocSchema = z.object({
+  key_id: z.string(),
+  name: z.string(),
+  key_prefix: z.string(),
+  key_hash: z.string(),
+  status: apiKeyStatusSchema,
+  expires_at: z.coerce.date().nullable().optional(),
+  usage: apiKeyUsageSchema,
+  created_at: z.coerce.date().optional(),
+  updated_at: z.coerce.date().optional(),
+});
+
+export const createApiKeySchema = z.object({
+  name: z.string().min(1, 'API key name is required').max(100),
+  expires_at: z.coerce.date().optional(),
+});
+
+export const apiKeyResponseSchema = z.object({
+  key_id: z.string(),
+  name: z.string(),
+  key_prefix: z.string(),
+  status: apiKeyStatusSchema,
+  expires_at: z.coerce.date().nullable().optional(),
+  usage: apiKeyUsageSchema,
+  created_at: z.coerce.date(),
+});
+
+export const createApiKeyResponseSchema = z.object({
+  key: apiKeyResponseSchema,
+  raw_key: z.string(),
 });
 

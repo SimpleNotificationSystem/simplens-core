@@ -86,6 +86,11 @@ const notification_schema = new mongoose.Schema<notification>(
       type: Number,
       default: 0,
     },
+    api_key_id: {
+      type: String,
+      default: null,
+      index: true,
+    },
     // Recovery claiming fields for horizontal scalability
     recovery_claimed_by: {
       type: String,
