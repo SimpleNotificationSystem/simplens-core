@@ -1,0 +1,16 @@
+meta {
+  name: Logout Admin Account
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{process.env.BASE_URL}}/api/admin/auth/logout
+  body: none
+  auth: none
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

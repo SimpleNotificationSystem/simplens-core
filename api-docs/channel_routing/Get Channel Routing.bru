@@ -1,0 +1,16 @@
+meta {
+  name: Get Channel Routing
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{process.env.BASE_URL}}/api/channels/routing/{{process.env.ROUTING_CHANNEL}}
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
