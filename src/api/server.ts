@@ -16,7 +16,16 @@ import dashboard_router from './routes/dashboard.routes.js';
 import settings_router from './routes/settings.routes.js';
 import admin_auth_router from './routes/admin-auth.routes.js';
 import api_keys_router from './routes/api-key.routes.js';
+import health_router from './routes/health.routes.js';
+import {
+  getApiReadinessChecks,
+  getApiLivenessChecks,
+  setAppShuttingDown
+} from './controllers/health.controller.js';
 import { dynamicConfig } from '@src/config/dynamic-config.service.js';
+import { disconnectRedis } from '@src/config/redis.config.js';
+import { createHealthProbeServer } from '@src/utils/k8s-health-probe.js';
+import type { HealthProbeServer } from '@src/types/types.js';
 import { auth_middleware } from './middlewares/auth_middleware.js';
 import http from 'http';
 import helmet from 'helmet';
@@ -39,6 +48,8 @@ import "@src/admin-alerts/channels/discord.channel.js";
 import "@src/admin-alerts/channels/telegram.channel.js";
 
 const app = express();
+let isShuttingDown = false;
+let probeServer: HealthProbeServer | null = null;
 
 //implement rate limiter with REDIS later
 
@@ -58,14 +69,8 @@ app.get("/api", (req: Request, res: Response) => {
     return;
 });
 
-// Health check endpoint for Docker/Kubernetes
-app.get("/api/health", (req: Request, res: Response) => {
-    res.status(200).json({
-        status: "healthy",
-        timestamp: new Date().toISOString()
-    });
-    return;
-});
+// Health check endpoints for Docker/Kubernetes and API consumers
+app.use('/api', health_router);
 
 app.use('/api/notification', auth_middleware, notification_router);
 app.use('/api/notifications', auth_middleware, notifications_management_router);
@@ -110,19 +115,43 @@ const start_server = async () => {
 
         const server = http.createServer(app);
         server.listen(env.PORT, () => logger.success(`Notification Service running at http://localhost:${env.PORT}`));
+
+        // 5. Start health probe server for Kubernetes
+        probeServer = createHealthProbeServer({
+            serviceName: 'api',
+            readinessChecks: getApiReadinessChecks(),
+            livenessChecks: getApiLivenessChecks()
+        });
+        await probeServer.start();
+
         const gracefulShutdown = async (err?: Error, reason?: string) => {
-            logger.error('Shutting down server', { reason: reason ?? '', error: err?.message ?? '' });
+            if (isShuttingDown) return;
+            isShuttingDown = true;
+            setAppShuttingDown(true);
+            logger.info(`Shutting down server (reason: ${reason ?? 'signal'})`);
             try {
-                server?.close(() => {
-                    logger.info('HTTP server closed');
-                });
+                if (probeServer) {
+                    await probeServer.stop();
+                }
+                if (server) {
+                    await new Promise<void>((resolve) => {
+                        server.close(() => {
+                            logger.info('HTTP server closed');
+                            resolve();
+                        });
+                    });
+                }
+                await disconnectRedis();
                 await db.disconnect();
             } catch (e) {
                 logger.error('Error during graceful shutdown', e);
             } finally {
-                process.exit(1);
+                process.exit(err ? 1 : 0);
             }
         };
+
+        process.on('SIGTERM', () => void gracefulShutdown(undefined, 'SIGTERM'));
+        process.on('SIGINT', () => void gracefulShutdown(undefined, 'SIGINT'));
 
         process.on('uncaughtException', (err) => {
             logger.error('Uncaught exception:', err);
@@ -134,7 +163,7 @@ const start_server = async () => {
                 `Action: Review error handling. Check for async operations without try-catch.`,
                 { severity: 'critical' });
 
-            gracefulShutdown(err, 'uncaughtException');
+            void gracefulShutdown(err, 'uncaughtException');
         });
 
         process.on('unhandledRejection', (reason) => {
@@ -146,7 +175,7 @@ const start_server = async () => {
                 `Action: Add .catch() handlers to promises. Review async/await error handling.`,
                 { severity: 'critical' });
 
-            gracefulShutdown(undefined, 'unhandledRejection');
+            void gracefulShutdown(undefined, 'unhandledRejection');
         });
 
         server.on('error', (err) => {
@@ -157,7 +186,7 @@ const start_server = async () => {
                 `Port: ${env.PORT}\n` +
                 `Action: Check if port is in use. Review server logs for stack trace.`,
                 { severity: 'critical' });
-            gracefulShutdown(err, 'serverError');
+            void gracefulShutdown(err, 'serverError');
         });
     }
     catch (err) {

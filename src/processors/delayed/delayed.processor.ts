@@ -10,12 +10,13 @@
  * - Atomic Lua script prevents duplicate processing across multiple workers
  */
 
+import mongoose from 'mongoose';
 import { connectMongoDB } from '@src/config/db.config.js';
 import { dynamicConfig } from '@src/config/dynamic-config.service.js';
 import { connectRedis, disconnectRedis } from '@src/config/redis.config.js';
-import { initTargetProducer, disconnectTargetProducer } from './target.producer.js';
-import { initDLQStatusProducer, disconnectDLQStatusProducer } from './dlq.status.js';
-import { startDelayedConsumer, stopDelayedConsumer, isConsumerActive } from './delayed.consumer.js';
+import { initTargetProducer, disconnectTargetProducer, isTargetProducerActive } from './target.producer.js';
+import { initDLQStatusProducer, disconnectDLQStatusProducer, isDLQProducerActive } from './dlq.status.js';
+import { startDelayedConsumer, stopDelayedConsumer, isDelayedConsumerHealthy } from './delayed.consumer.js';
 import { startDelayedPoller, stopDelayedPoller, isPollerActive } from './delayed.poller.js';
 import { delayedWorkerLogger as logger } from '@src/workers/utils/logger.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
@@ -156,18 +157,47 @@ const main = async (): Promise<void> => {
         probeServer = createHealthProbeServer({
             serviceName: 'delayed-processor',
             readinessChecks: [
-                { name: 'redis', check: () => {
-                    try {
-                        return getRedisClient().status === 'ready';
-                    } catch {
-                        return false;
+                {
+                    name: 'mongodb',
+                    check: () => !isShuttingDown && mongoose.connection.readyState === 1
+                },
+                {
+                    name: 'redis',
+                    check: () => {
+                        if (isShuttingDown) return false;
+                        try {
+                            return getRedisClient().status === 'ready';
+                        } catch {
+                            return false;
+                        }
                     }
-                }},
-                { name: 'delayed_consumer', check: () => isConsumerActive() },
-                { name: 'delayed_poller', check: () => isPollerActive() }
+                },
+                {
+                    name: 'delayed_consumer',
+                    check: () => !isShuttingDown && isDelayedConsumerHealthy()
+                },
+                {
+                    name: 'delayed_poller',
+                    check: () => !isShuttingDown && isPollerActive()
+                },
+                {
+                    name: 'kafka_producers',
+                    check: () => !isShuttingDown && isTargetProducerActive() && isDLQProducerActive()
+                }
             ],
             livenessChecks: [
-                { name: 'process', check: () => true }
+                {
+                    name: 'process',
+                    check: () => !isShuttingDown
+                },
+                {
+                    name: 'delayed_consumer',
+                    check: () => !isShuttingDown && isDelayedConsumerHealthy()
+                },
+                {
+                    name: 'delayed_poller',
+                    check: () => !isShuttingDown && isPollerActive()
+                }
             ]
         });
         await probeServer.start();

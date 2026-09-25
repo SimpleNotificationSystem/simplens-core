@@ -532,6 +532,18 @@ export interface HealthProbeServer {
     stop: () => Promise<void>;
 }
 
+export interface HealthCheckResultDetails {
+    ok: boolean;
+    results: Record<string, boolean>;
+}
+
+export interface ApiHealthResponse {
+    service?: string;
+    status: 'healthy' | 'unhealthy' | 'ready' | 'not_ready';
+    timestamp: string;
+    checks: Record<string, boolean>;
+}
+
 // ============================================================================
 // PROCESSOR CONSUMER HEALTH TYPES
 // ============================================================================

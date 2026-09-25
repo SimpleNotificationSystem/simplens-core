@@ -16,7 +16,7 @@ import mongoose from 'mongoose';
 import { env } from '@src/config/env.config.js';
 import { dynamicConfig } from '@src/config/dynamic-config.service.js';
 import { connectRedis, disconnectRedis, getRedisClient } from '@src/config/redis.config.js';
-import { startRecoveryCron, stopRecoveryCron, setHealthChecker } from './recovery.cron.js';
+import { startRecoveryCron, stopRecoveryCron, setHealthChecker, isRecoveryCronRunning } from './recovery.cron.js';
 import { recoveryLogger as logger, flushLogs } from '@src/workers/utils/logger.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 import { createHealthProbeServer } from '@src/utils/k8s-health-probe.js';
@@ -292,11 +292,13 @@ const main = async (): Promise<void> => {
     probeServer = createHealthProbeServer({
         serviceName: 'recovery-service',
         readinessChecks: [
-            { name: 'mongodb', check: () => isMongoHealthy() },
-            { name: 'redis', check: () => isRedisHealthy() }
+            { name: 'mongodb', check: () => !isShuttingDown && isMongoHealthy() },
+            { name: 'redis', check: () => !isShuttingDown && isRedisHealthy() },
+            { name: 'recovery_cron', check: () => !isShuttingDown && isRecoveryCronRunning() }
         ],
         livenessChecks: [
-            { name: 'process', check: () => true }
+            { name: 'process', check: () => !isShuttingDown },
+            { name: 'recovery_cron', check: () => !isShuttingDown && isRecoveryCronRunning() }
         ]
     });
     await probeServer.start();

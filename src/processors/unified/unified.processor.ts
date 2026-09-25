@@ -7,11 +7,12 @@
  * - Multi:  PROCESSOR_CHANNEL=all (or omit to process all configured channels)
  */
 
+import mongoose from 'mongoose';
 import { connectMongoDB } from '@src/config/db.config.js';
 import { dynamicConfig } from '@src/config/dynamic-config.service.js';
 import { connectRedis, disconnectRedis } from '@src/config/redis.config.js';
-import { initStatusProducer, disconnectStatusProducer } from '@src/processors/shared/status.producer.js';
-import { initDelayedProducer, disconnectDelayedProducer } from '@src/processors/shared/delayed.producer.js';
+import { initStatusProducer, disconnectStatusProducer, isStatusProducerActive } from '@src/processors/shared/status.producer.js';
+import { initDelayedProducer, disconnectDelayedProducer, isDelayedProducerActive } from '@src/processors/shared/delayed.producer.js';
 import {
   PluginRegistry,
   PluginSyncService,
@@ -283,7 +284,10 @@ const main = async (): Promise<void> => {
     probeServer = createHealthProbeServer({
       serviceName: 'unified-processor',
       readinessChecks: [
-        { name: 'mongodb', check: () => !isShuttingDown && dbConnection !== null },
+        {
+          name: 'mongodb',
+          check: () => !isShuttingDown && mongoose.connection.readyState === 1
+        },
         {
           name: 'redis',
           check: () => {
@@ -294,6 +298,10 @@ const main = async (): Promise<void> => {
               return false;
             }
           }
+        },
+        {
+          name: 'kafka_producers',
+          check: () => !isShuttingDown && isStatusProducerActive() && isDelayedProducerActive()
         },
         {
           name: 'kafka_consumers',

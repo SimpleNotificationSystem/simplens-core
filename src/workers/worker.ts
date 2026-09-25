@@ -1,8 +1,9 @@
+import mongoose from "mongoose";
 import { connectMongoDB } from "@src/config/db.config.js";
 import { dynamicConfig } from "@src/config/dynamic-config.service.js";
-import { initProducer, disconnectProducer } from "@src/workers/producers/background.producer.js";
-import { startCronJobs, stopCronJobs } from "@src/workers/cron/background.cron.js";
-import { startStatusConsumer, stopStatusConsumer, isStatusConsumerRunning } from "@src/workers/consumers/status.consumer.js";
+import { initProducer, disconnectProducer, isProducerActive } from "@src/workers/producers/background.producer.js";
+import { startCronJobs, stopCronJobs, isCronRunning } from "@src/workers/cron/background.cron.js";
+import { startStatusConsumer, stopStatusConsumer, isStatusConsumerHealthy } from "@src/workers/consumers/status.consumer.js";
 import { workerLogger as logger } from "@src/workers/utils/logger.js";
 import { AdminAlertService } from "@src/admin-alerts/admin-alert.service.js";
 import { createHealthProbeServer } from "@src/utils/k8s-health-probe.js";
@@ -129,11 +130,36 @@ const main = async (): Promise<void> => {
         probeServer = createHealthProbeServer({
             serviceName: 'worker',
             readinessChecks: [
-                { name: 'mongodb', check: () => dbConnection !== null },
-                { name: 'status_consumer', check: () => isStatusConsumerRunning() }
+                {
+                    name: 'mongodb',
+                    check: () => !isShuttingDown && mongoose.connection.readyState === 1
+                },
+                {
+                    name: 'status_consumer',
+                    check: () => !isShuttingDown && isStatusConsumerHealthy()
+                },
+                {
+                    name: 'cron_jobs',
+                    check: () => !isShuttingDown && isCronRunning()
+                },
+                {
+                    name: 'kafka_producer',
+                    check: () => !isShuttingDown && isProducerActive()
+                }
             ],
             livenessChecks: [
-                { name: 'process', check: () => true }
+                {
+                    name: 'process',
+                    check: () => !isShuttingDown
+                },
+                {
+                    name: 'status_consumer',
+                    check: () => !isShuttingDown && isStatusConsumerHealthy()
+                },
+                {
+                    name: 'cron_jobs',
+                    check: () => !isShuttingDown && isCronRunning()
+                }
             ]
         });
         await probeServer.start();

@@ -96,3 +96,10 @@ export const disconnectDelayedProducer = async (): Promise<void> => {
         producer = null;
     }
 };
+
+/**
+ * Check if delayed producer is active
+ */
+export const isDelayedProducerActive = (): boolean => {
+    return producer !== null;
+};

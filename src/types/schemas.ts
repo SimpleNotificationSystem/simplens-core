@@ -726,3 +726,10 @@ export const createApiKeyResponseSchema = z.object({
   raw_key: z.string(),
 });
 
+export const apiHealthResponseSchema = z.object({
+  service: z.string().optional(),
+  status: z.enum(['healthy', 'unhealthy', 'ready', 'not_ready']),
+  timestamp: z.string(),
+  checks: z.record(z.string(), z.boolean()),
+});
+

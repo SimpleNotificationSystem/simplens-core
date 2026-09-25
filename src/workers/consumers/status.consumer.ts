@@ -16,6 +16,10 @@ const state: KafkaConsumerState = {
     isConsuming: false
 };
 
+let lastHeartbeat = Date.now();
+let hasCrashed = false;
+let crashReason: string | undefined = undefined;
+
 /**
  * Map status from external format to internal notification status
  */
@@ -172,6 +176,40 @@ export const startStatusConsumer = async (): Promise<void> => {
     await state.consumer.connect();
     logger.info("Status consumer connected");
 
+    lastHeartbeat = Date.now();
+    hasCrashed = false;
+    crashReason = undefined;
+
+    if (typeof state.consumer.on === 'function' && state.consumer.events) {
+        state.consumer.on(state.consumer.events.HEARTBEAT, () => {
+            lastHeartbeat = Date.now();
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        state.consumer.on(state.consumer.events.CRASH, (event: any) => {
+            hasCrashed = true;
+            state.isConsuming = false;
+            const crashError = event?.payload?.error;
+            crashReason = crashError ? String(crashError.message || crashError) : 'Unknown crash';
+            logger.error(`Status consumer crashed: ${crashReason}`);
+        });
+
+        state.consumer.on(state.consumer.events.STOP, () => {
+            state.isConsuming = false;
+            logger.warn('Status consumer stopped event received');
+        });
+
+        state.consumer.on(state.consumer.events.DISCONNECT, () => {
+            state.isConsuming = false;
+            logger.warn('Status consumer disconnected');
+        });
+
+        state.consumer.on(state.consumer.events.CONNECT, () => {
+            state.isConsuming = true;
+            lastHeartbeat = Date.now();
+        });
+    }
+
     await state.consumer.subscribe({
         topic: CORE_TOPICS.notification_status,
         fromBeginning: false
@@ -183,6 +221,7 @@ export const startStatusConsumer = async (): Promise<void> => {
     await state.consumer.run({
         autoCommit: false,
         eachMessage: async (payload) => {
+            lastHeartbeat = Date.now();
             try {
                 const result = await processStatusMessage(payload);
 
@@ -224,6 +263,7 @@ export const stopStatusConsumer = async (): Promise<void> => {
 
     logger.info("Stopping status consumer...");
     state.isConsuming = false;
+    hasCrashed = false;
 
     try {
         await state.consumer.stop();
@@ -241,4 +281,15 @@ export const stopStatusConsumer = async (): Promise<void> => {
  */
 export const isStatusConsumerRunning = (): boolean => {
     return state.consumer !== null && state.isConsuming;
+};
+
+/**
+ * Check if the status consumer is healthy (running, not crashed, heartbeat fresh)
+ */
+export const isStatusConsumerHealthy = (maxHeartbeatStalenessMs = 90000): boolean => {
+    if (!state.consumer || !state.isConsuming || hasCrashed) {
+        return false;
+    }
+    const isStale = (Date.now() - lastHeartbeat) > maxHeartbeatStalenessMs;
+    return !isStale;
 };

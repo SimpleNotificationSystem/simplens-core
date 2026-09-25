@@ -218,3 +218,10 @@ export const sendStatusOutboxEvents = async (statusEntries: status_outbox[]): Pr
 
     return { successCount, failedCount };
 };
+
+/**
+ * Check if the Kafka producer is initialized and active
+ */
+export const isProducerActive = (): boolean => {
+    return producer !== null;
+};

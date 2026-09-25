@@ -8,7 +8,27 @@
  */
 
 import http from 'http';
-import type { HealthProbeOptions, HealthProbeServer } from '@src/types/types.js';
+import type { HealthCheckResultDetails, HealthProbeCheck, HealthProbeOptions, HealthProbeServer } from '@src/types/types.js';
+
+export const runHealthChecks = async (
+    checks: HealthProbeCheck[] = []
+): Promise<HealthCheckResultDetails> => {
+    const results: Record<string, boolean> = {};
+    let allOk = true;
+
+    for (const item of checks) {
+        try {
+            const passed = await item.check();
+            results[item.name] = Boolean(passed);
+            if (!passed) allOk = false;
+        } catch {
+            results[item.name] = false;
+            allOk = false;
+        }
+    }
+
+    return { ok: allOk, results };
+};
 
 export const createHealthProbeServer = (options: HealthProbeOptions): HealthProbeServer => {
     const port = options.port ?? parseInt(process.env.PROBE_PORT || '8080', 10);
@@ -18,30 +38,12 @@ export const createHealthProbeServer = (options: HealthProbeOptions): HealthProb
 
     let server: http.Server | null = null;
 
-    const runChecks = async (checks: typeof readinessChecks): Promise<{ ok: boolean; results: Record<string, boolean> }> => {
-        const results: Record<string, boolean> = {};
-        let allOk = true;
-
-        for (const item of checks) {
-            try {
-                const passed = await item.check();
-                results[item.name] = passed;
-                if (!passed) allOk = false;
-            } catch {
-                results[item.name] = false;
-                allOk = false;
-            }
-        }
-
-        return { ok: allOk, results };
-    };
-
     const requestListener: http.RequestListener = async (req, res) => {
         const url = req.url || '';
 
         // Liveness probe
         if (url === '/healthz' || url === '/livez') {
-            const { ok, results } = await runChecks(livenessChecks);
+            const { ok, results } = await runHealthChecks(livenessChecks);
             const status = ok ? 200 : 503;
             res.writeHead(status, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
@@ -55,7 +57,7 @@ export const createHealthProbeServer = (options: HealthProbeOptions): HealthProb
 
         // Readiness probe
         if (url === '/readyz' || url === '/ready') {
-            const { ok, results } = await runChecks(readinessChecks);
+            const { ok, results } = await runHealthChecks(readinessChecks);
             const status = ok ? 200 : 503;
             res.writeHead(status, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
