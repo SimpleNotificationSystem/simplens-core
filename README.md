@@ -85,6 +85,8 @@ npx -y @simlpens/mcp --stdio
 ```
 *(Supports both `streamable-http` and `stdio` transports)*
 
+Read the [documentation here](https://www.simplens.in/docs/mcp/getting-started) to get started with SimpleNS MCP
+
 ---
 
 ## Architecture
@@ -110,26 +112,11 @@ SimpleNS is built around a strictly **decoupled, API-first model**:
 
 ### Plugin System
 
-SimpleNS Core handles **orchestration**; plugins handle **delivery**.
+SimpleNS Core handles **orchestration**,  plugins handle **delivery**.
 
-Plugins are automatically installed at runtime based on your `simplens.config.yaml` configuration. Use the **Config Generator CLI** to create or update your config:
+Plugins can be installed directly from the dashboard, via API and MCP server
 
-```bash
-# Generate config for a plugin
-npx @simplens/config-gen generate @simplens/mock
 
-# Generate config for multiple plugins
-npx @simplens/config-gen gen @simplens/nodemailer-gmail @simplens/twilio-sms
-
-# Add a plugin to existing config
-npx @simplens/config-gen gen @simplens/nodemailer-gmail -c simplens.config.yaml
-
-# List available official plugins
-npx @simplens/config-gen list --offical
-
-#List available community plugins
-npx @simplens/config-gen list --community
-```
 
 #### Building Custom Plugins
 
@@ -207,7 +194,7 @@ Expected response:
 **Using the Dashboard (recommended):**
 
 1. Open [http://localhost:3002](http://localhost:3002)
-2. Login with your configured credentials (default: `admin` / `<your-password-from-env>`)
+2. At startup, it lets you to create an admin account, install official and community plugins, setup their corresponding providers and credentials. Then go to dashboard home and create an API key for the external services to access the SimpleNS API server.
 3. Navigate to **Send**, select a channel/provider, fill in the fields, and click **Send Notification**
 
 **Using cURL:**
@@ -215,7 +202,7 @@ Expected response:
 ```bash
 curl -X POST http://localhost:3000/api/notification \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <YOUR-NS-API-KEY>" \
+  -H "Authorization: Bearer <YOUR-API-KEY>" \
   -d '{
     "request_id": "550e8400-e29b-41d4-a716-446655440000",
     "client_id": "55283667-1f58-467d-86a1-47f7f0e059f2",
@@ -246,17 +233,8 @@ curl -X POST http://localhost:3000/api/notification \
 | API Server | [http://localhost:3000](http://localhost:3000) | Notification API |
 | Admin Dashboard | [http://localhost:3002](http://localhost:3002) | Monitoring & management |
 | Grafana | [http://localhost:3001](http://localhost:3001) | Log visualization |
-| Kafka UI | [http://localhost:8080](http://localhost:8080) | Kafka topic monitoring |
 
-### Add More Plugins
 
-```bash
-# Add Gmail email provider
-npx @simplens/config-gen generate @simplens/nodemailer-gmail -c simplens.config.yaml
-
-# List available plugins
-npx @simplens/config-gen list --official
-```
 
 > For production deployments, see the [Self-Hosting Guide](https://simplens.in/docs/core/self-hosting) which covers distributed deployments, cloud infrastructure integration, and security hardening.
 
@@ -266,35 +244,6 @@ npx @simplens/config-gen list --official
 
 SimpleNS provides a comprehensive, authenticated REST API that powers both external clients and the Admin Dashboard. Because the core engine is decoupled from the UI, every action possible in the dashboard can be automated or integrated via REST endpoints.
 
-| Category | Route | Method | Description |
-|---|---|---|---|
-| **System** | `/api` | `GET` | API Server status |
-| | `/api/health` | `GET` | Health check probe (Docker / K8s) |
-| **Notifications** | `/api/notification` | `POST` | Dispatch single notification |
-| | `/api/notification/batch` | `POST` | Dispatch batch notification |
-| | `/api/notification` | `GET` | Notification endpoint health |
-| **Management** | `/api/notifications` | `GET` | Search & filter notification history |
-| | `/api/notifications/recent` | `GET` | Activity feed of latest notifications |
-| | `/api/notifications/:id` | `GET` | Fetch single notification details |
-| | `/api/notifications/:id/retry` | `POST` | Reset failed notification for retry |
-| | `/api/notifications/:id` | `DELETE` | Delete notification record |
-| **Templates** | `/api/templates/create` | `POST` | Create reusable notification template |
-| | `/api/templates` | `GET` | List all templates (or filter by package) |
-| | `/api/templates/:template_id` | `GET` | Fetch template by ID |
-| | `/api/templates/:template_id` | `PUT` | Update notification template |
-| | `/api/templates/:template_id` | `DELETE` | Delete notification template |
-| **Plugins** | `/api/plugins` | `GET` | Dynamic plugin metadata & schemas |
-| **Alerts** | `/api/alerts` | `GET` | List system alerts |
-| | `/api/alerts/:id/resolve` | `POST` | Resolve alert and retry notification |
-| | `/api/alerts/bulk-resolve` | `POST` | Bulk resolve alerts and retry |
-| | `/api/alerts/:id` | `DELETE` | Dismiss alert without retrying |
-| **Dashboard** | `/api/dashboard/stats` | `GET` | Notification counts by status & channel |
-| | `/api/dashboard/trends` | `GET` | Historical time-series trend data |
-| **Admin Channels** | `/api/admin-channels/providers` | `GET` | Available alerting channel providers |
-| | `/api/admin-channels/validate` | `POST` | Validate channel configuration schema |
-| | `/api/admin-channels/test` | `POST` | Test live webhook or bot connection |
-| | `/api/admin-channels` | `GET` / `POST` | List or create admin alert channels |
-| | `/api/admin-channels/:id` | `GET` / `PATCH` / `DELETE` | Manage individual admin alert channels |
 
 > 📖 **Interactive API Collection**: A complete [Bruno](https://www.usebruno.com/) collection is available in [`/api-docs`](./api-docs) with preconfigured environments and sample requests for all endpoints.
 
@@ -311,17 +260,17 @@ The Admin Dashboard is an independent Next.js application built strictly as a **
 - 🏢 **Headless Ready**: Because the dashboard is fully decoupled, you can operate SimpleNS headless in backend environments, deploy custom frontends, or interact via CI/CD and AI tools without running the dashboard.
 
 **Key Dashboard Features:**
-- 🏠 **Dashboard Home** — Status overview powered by `/api/dashboard/stats`
-- 📡 **Channel Cards** — Visual status for each configured delivery channel
-- 📋 **Events Explorer** — Paginated event table with live filtering via `/api/notifications`
-- 🔴 **Failed Events** — Dedicated view with one-click retries via `/api/notifications/:id/retry`
-- 🚨 **Alerts** — System health and orphaned recovery alerts via `/api/alerts`
-- 📈 **Analytics** — 24h, 7d, and 30d time-series trends via `/api/dashboard/trends`
-- 🔌 **Plugins** — Dynamic form generation based on runtime schemas from `/api/plugins`
-- 🔧 **Payload Studio** — Interactive schema explorer for constructing valid payloads
-- 🔔 **Admin Alert Channels** — Live test and configure Discord/Telegram alerts via `/api/admin-channels`
-- 📝 **Notification Templates** — Full lifecycle management and live preview via `/api/templates`
-
+- **Dashboard Home** — Status overview powered by `/api/dashboard/stats`
+- **Channel Cards** — Visual status for each configured delivery channel
+- **Events Explorer** — Paginated event table with live filtering via `/api/notifications`
+- **Failed Events** — Dedicated view with one-click retries via `/api/notifications/:id/retry`
+- **Alerts** — System health and orphaned recovery alerts via `/api/alerts`
+- **Analytics** — 24h, 7d, and 30d time-series trends via `/api/dashboard/trends`
+- **Plugins** — Manage official, community and custom plugins, setup providers with credentials and setup channel routing with an array of fallback providers
+- **Payload Studio** — Interactive schema explorer for constructing valid payloads
+- **Admin Alert Channels** — Live test and configure Discord/Telegram alerts via `/api/admin-channels`
+- **Notification Templates** — Full lifecycle management and live preview via `/api/templates`
+- **API Key** - Create and manage multiple API keys, track their usage and so on
 ---
 
 ## License
