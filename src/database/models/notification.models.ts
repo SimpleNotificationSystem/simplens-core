@@ -40,6 +40,18 @@ const notification_schema = new mongoose.Schema<notification>(
       type: String,
       index: true,
     },
+    provider_history: [
+      {
+        provider: { type: String, required: true },
+        status: { type: String, enum: ['delivered', 'failed', 'rate_limited'], required: true },
+        error_code: { type: String },
+        error_message: { type: String },
+        retryable: { type: Boolean },
+        attempted_at: { type: Date, default: Date.now },
+        duration_ms: { type: Number },
+        response: { type: mongoose.Schema.Types.Mixed },
+      }
+    ],
     // Dynamic recipient schema - structure depends on channel
     recipient: {
       type: mongoose.Schema.Types.Mixed,
@@ -73,6 +85,11 @@ const notification_schema = new mongoose.Schema<notification>(
     retry_count: {
       type: Number,
       default: 0,
+    },
+    api_key_id: {
+      type: String,
+      default: null,
+      index: true,
     },
     // Recovery claiming fields for horizontal scalability
     recovery_claimed_by: {
@@ -109,6 +126,9 @@ notification_schema.index(
     }
   }
 );
+
+// Compound index for fast duplicate checking and status queries
+notification_schema.index({ request_id: 1, channel: 1, status: 1 });
 
 const notification_model = mongoose.model<notification>('Notification', notification_schema);
 

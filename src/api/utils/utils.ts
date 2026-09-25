@@ -13,15 +13,17 @@ import {
   getTopicForChannel,
   CORE_TOPICS,
   delayed_notification_topic,
+  SimpleNSProvider,
+  ApiKeyDoc,
 } from "@src/types/types.js";
 import { NOTIFICATION_STATUS, OUTBOX_STATUS } from "@src/types/types.js";
 import mongoose from "mongoose";
 import notification_model from "@src/database/models/notification.models.js";
 import outbox_model from "@src/database/models/outbox.models.js";
+import api_key_model from "@src/database/models/api-key.models.js";
 import { apiLogger as logger } from "@src/workers/utils/logger.js";
 import { PluginRegistry } from "@src/plugins/index.js";
 import notification_template_model from "@src/database/models/notification-template.models.js";
-import { SimpleNSProvider } from "@src/plugins/interfaces/provider.types.js";
 import { ZodError } from "zod";
 
 const preloadTemplatesByIds = async (
@@ -60,6 +62,7 @@ const preloadTemplatesByIds = async (
  */
 export const convert_notification_request_to_notification_schema = async (
   data: notification_request,
+  apiKeyId?: string,
 ): Promise<notification[]> => {
   const notifications: notification[] = [];
 
@@ -128,6 +131,7 @@ export const convert_notification_request_to_notification_schema = async (
       status: NOTIFICATION_STATUS.pending,
       scheduled_at: data.scheduled_at,
       retry_count: 0,
+      api_key_id: apiKeyId,
       created_at: new Date(),
     };
 
@@ -142,6 +146,7 @@ export const convert_notification_request_to_notification_schema = async (
  */
 export const convert_batch_notification_schema_to_notification_schema = async (
   data: batch_notification_request,
+  apiKeyId?: string,
 ): Promise<notification[]> => {
   const notifications: notification[] = [];
 
@@ -213,6 +218,7 @@ export const convert_batch_notification_schema_to_notification_schema = async (
         status: NOTIFICATION_STATUS.pending,
         scheduled_at: data.scheduled_at,
         retry_count: 0,
+        api_key_id: apiKeyId,
         created_at: new Date(),
       };
       notifications.push(notification_obj);
@@ -406,6 +412,7 @@ export const process_notifications = async (
     session.startTransaction();
 
     const notification_ids: mongoose.Types.ObjectId[] = [];
+    const notifications_to_insert: InstanceType<typeof notification_model>[] = [];
     const outbox_entries: outbox[] = [];
     const duplicate_keys: { request_id: string; channel: string }[] = [];
 
@@ -415,7 +422,13 @@ export const process_notifications = async (
         .findOne({
           request_id: notification.request_id,
           channel: notification.channel,
-          status: { $ne: NOTIFICATION_STATUS.failed }, // Allow retrying failed notifications
+          status: {
+            $in: [
+              NOTIFICATION_STATUS.pending,
+              NOTIFICATION_STATUS.processing,
+              NOTIFICATION_STATUS.delivered,
+            ],
+          },
         })
         .session(session);
 
@@ -427,12 +440,11 @@ export const process_notifications = async (
         continue;
       }
 
-      // Create notification document within transaction
+      // Create notification document within transaction (generates _id)
       const notification_doc = new notification_model(notification);
-      await notification_doc.save({ session });
-
       const notification_id = notification_doc._id as mongoose.Types.ObjectId;
       notification_ids.push(notification_id);
+      notifications_to_insert.push(notification_doc);
 
       // Create outbox entry
       const outbox_entry = convert_notification_schema_to_outbox_schema(
@@ -454,6 +466,11 @@ export const process_notifications = async (
         "All notifications are duplicates",
         duplicate_keys,
       );
+    }
+
+    // Insert notifications in bulk within transaction
+    if (notifications_to_insert.length > 0) {
+      await notification_model.insertMany(notifications_to_insert, { session });
     }
 
     // Insert outbox entries in bulk within transaction
@@ -536,4 +553,41 @@ export const validateContentSchema = (
       validationResult.error,
     );
   }
+};
+
+/**
+ * Update notification usage counters for an API key asynchronously.
+ */
+export const updateApiKeyNotificationUsage = (
+  apiKey: ApiKeyDoc | undefined,
+  notifications: notification[],
+  createdCount: number,
+): void => {
+  if (!apiKey || createdCount <= 0) {
+    return;
+  }
+
+  const channelCounts: Record<string, number> = {};
+  for (const n of notifications) {
+    channelCounts[n.channel] = (channelCounts[n.channel] || 0) + 1;
+  }
+
+  const incObj: Record<string, number> = {
+    'usage.total_notifications': createdCount,
+  };
+  for (const [ch, count] of Object.entries(channelCounts)) {
+    incObj[`usage.by_channel.${ch}`] = count;
+  }
+
+  void api_key_model.updateOne(
+    { key_id: apiKey.key_id },
+    {
+      $set: { 'usage.last_used_at': new Date() },
+      $inc: incObj,
+    },
+  ).catch((err: unknown) =>
+    logger.warn('Failed to update API key notification usage', {
+      error: String(err),
+    }),
+  );
 };

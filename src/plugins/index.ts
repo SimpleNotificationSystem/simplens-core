@@ -16,7 +16,13 @@ export {
 } from './loader/registry.js';
 
 // Loader
-export { loadProviders, loadProvidersFromEnv, registerProvider, getConfiguredChannels } from './loader/loader.js';
+export {
+    loadProviders,
+    loadProvidersFromEnv,
+    loadProvidersFromDatabase,
+    getConfiguredChannels,
+    registerProvider,
+} from './loader/loader.js';
 
 // Router
 export {
@@ -24,6 +30,23 @@ export {
     sendToProvider,
     validateNotification,
     validateNotificationForProvider,
+    getProviderCascade,
     resolveFallbackProviderId,
     getRateLimitConfig
 } from './loader/router.js';
+
+// Dynamic Management Services
+export { PluginManagerService } from './services/plugin-manager.service.js';
+export { NpmAuthService } from './services/npm-auth.service.js';
+export { ProviderManagerService, type ProviderResponseDto } from './services/provider-manager.service.js';
+export { ChannelRoutingService } from './services/channel-routing.service.js';
+export { YamlMigrator } from './bootstrap/yaml-migrator.js';
+export { PluginSyncService } from './sync/plugin-sync.service.js';
+export { encryptCredentials, decryptCredentials } from './crypto/keypair-manager.js';
+export {
+    installNpmPackage,
+    uninstallNpmPackage,
+    extractPackageManifest,
+    importAndInstantiateProvider,
+    validateSimpleNSProvider,
+} from './loader/plugin-fs.js';

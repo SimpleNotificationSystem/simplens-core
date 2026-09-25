@@ -63,6 +63,41 @@ export enum ALERT_TYPE {
     orphaned_pending = "orphaned_pending"
 }
 
+export type RefillInterval = 'second' | 'minute' | 'hour' | 'day';
+
+export interface DeliveryResult {
+    success: boolean;
+    messageId?: string;
+    provider?: string;
+    providerResponse?: unknown;
+    error?: {
+        code: string;
+        message: string;
+        retryable: boolean;
+    };
+    attempts?: ProviderAttempt[];
+}
+
+export interface ProviderConfig {
+    id: string;
+    credentials: Record<string, string>;
+    options?: ProviderOptions;
+}
+
+export interface SimpleNSProvider<TNotification extends BaseNotification = BaseNotification> {
+    readonly manifest: ProviderManifest;
+
+    getNotificationSchema(): z.ZodSchema<TNotification>;
+    getRecipientSchema(): z.ZodObject<Record<string, z.ZodTypeAny>>;
+    getContentSchema(): z.ZodObject<Record<string, z.ZodTypeAny>>;
+    getRateLimitConfig(): RateLimitConfig;
+
+    initialize(config: ProviderConfig): Promise<void>;
+    healthCheck(): Promise<boolean>;
+    send(notification: TNotification): Promise<DeliveryResult>;
+    shutdown(): Promise<void>;
+}
+
 // ============================================================================
 // SCHEMA IMPORTS
 // ============================================================================
@@ -77,6 +112,7 @@ import {
     baseNotificationRequestSchema,
     baseBatchNotificationRequestSchema,
     baseNotificationSchema,
+    providerAttemptSchema,
     // Admin channel schemas
     adminChannelSchema,
     systemConfigSchema,
@@ -87,6 +123,34 @@ import {
     ADMIN_CHANNEL_TYPE,
     ADMIN_ALERT_TYPE,
     notificationTemplateSchema,
+    // Plugin & Provider schemas
+    encryptedCredentialsSchema,
+    providerManifestSchema,
+    providerConfigOptionsSchema,
+    providerConfigEntrySchema,
+    pluginSchema,
+    providerSchema,
+    channelRoutingSchema,
+    operationalSettingsSchema,
+    partialOperationalSettingsSchema,
+    adminSetupSchema,
+    adminLoginSchema,
+    npmRegistryConfigSchema,
+    npmRegistryStatusSchema,
+    npmAuthConfigSchema,
+    npmAuthStatusSchema,
+    installPluginPayloadSchema,
+    providerRateLimitConfigDetailsSchema,
+    providerRateLimitRealtimeStatusSchema,
+    providerRateLimitStatusSchema,
+    providerRateLimitSummarySchema,
+    providerRateLimitListResponseSchema,
+    apiKeyUsageSchema,
+    apiKeyStatusSchema,
+    apiKeyDocSchema,
+    createApiKeySchema,
+    apiKeyResponseSchema,
+    createApiKeyResponseSchema,
 } from "./schemas.js";
 
 // ============================================================================
@@ -111,6 +175,27 @@ export type status_outbox = z.infer<typeof statusOutboxSchema>;
 
 export type base_notification = z.infer<typeof baseNotificationSchema>;
 
+export type ProviderAttempt = z.infer<typeof providerAttemptSchema>;
+
+export type BaseNotification = Omit<base_notification, 'notification_id'> & {
+    notification_id: string;
+};
+export type ProviderManifest = provider_manifest;
+export type RateLimitConfig = {
+    maxTokens: number;
+    refillRate: number;
+    refillInterval?: RefillInterval;
+};
+
+export interface RateLimitResult {
+    allowed: boolean;
+    remainingTokens: number;
+    retryAfterMs?: number;
+    queuePosition?: number;
+}
+
+export type HealthChecker = () => Promise<boolean>;
+
 // ============================================================================
 // ADMIN NOTIFICATION CHANNEL TYPES
 // ============================================================================
@@ -124,3 +209,391 @@ export type telegram_config = z.infer<typeof telegramConfigSchema>;
 export type AdminChannelType = (typeof ADMIN_CHANNEL_TYPE)[number];
 export type AdminAlertType = (typeof ADMIN_ALERT_TYPE)[number];
 export type notification_template = z.infer<typeof notificationTemplateSchema>;
+
+// ============================================================================
+// PLUGIN & PROVIDER MANAGEMENT TYPES
+// ============================================================================
+
+export type encrypted_credentials = z.infer<typeof encryptedCredentialsSchema>;
+export type provider_manifest = z.infer<typeof providerManifestSchema>;
+export type plugin_document = z.infer<typeof pluginSchema>;
+export type provider_document = z.infer<typeof providerSchema>;
+export type channel_routing_document = z.infer<typeof channelRoutingSchema>;
+export type npm_registry_config = z.infer<typeof npmRegistryConfigSchema>;
+export type npm_registry_status = z.infer<typeof npmRegistryStatusSchema>;
+export type npm_auth_config = z.infer<typeof npmAuthConfigSchema>;
+export type npm_auth_status = z.infer<typeof npmAuthStatusSchema>;
+export type install_plugin_payload = z.infer<typeof installPluginPayloadSchema>;
+
+export interface KafkaConsumerState {
+    consumer: import('kafkajs').Consumer | null;
+    isConsuming: boolean;
+}
+
+export interface OutboxCronState {
+    pollIntervalId: NodeJS.Timeout | null;
+    cleanupIntervalId: NodeJS.Timeout | null;
+    statusPollIntervalId: NodeJS.Timeout | null;
+    isPolling: boolean;
+    isCleaningUp: boolean;
+    isPollingStatus: boolean;
+    shouldStop: boolean;
+}
+
+export interface RecoveryCronState {
+    intervalId: NodeJS.Timeout | null;
+    isRunning: boolean;
+    shouldStop: boolean;
+    healthChecker: HealthChecker | null;
+    consecutiveFailures: number;
+}
+
+export interface ChannelResult {
+    success: boolean;
+    error?: string;
+}
+
+export interface AlertMetadata {
+    alertType?: AdminAlertType;
+    severity?: 'info' | 'warning' | 'critical';
+    timestamp?: Date;
+    notificationId?: string;
+    channel?: string;
+    errorMessage?: string;
+}
+
+export interface CredentialField {
+    name: string;
+    type: 'string' | 'url' | 'secret';
+    label: string;
+    placeholder?: string;
+    description?: string;
+    required: boolean;
+    pattern?: string;
+}
+
+export interface AdminChannelProvider {
+    readonly channelType: AdminChannelType;
+    readonly displayName: string;
+    send(message: string, metadata?: AlertMetadata): Promise<ChannelResult>;
+    testConnection(): Promise<ChannelResult>;
+    getCredentialSchema(): CredentialField[];
+}
+
+export interface AdminChannelMeta {
+    channelType: AdminChannelType;
+    displayName: string;
+    credentialFields: CredentialField[];
+}
+
+export interface RegisteredProvider {
+    provider: SimpleNSProvider;
+    id: string;
+    priority: number;
+}
+
+export interface ChannelConfig {
+    default: string;
+    fallback?: string | string[];
+}
+
+export interface FieldDefinition {
+    name: string;
+    type: 'string' | 'email' | 'phone' | 'text' | 'number' | 'boolean';
+    required: boolean;
+    description?: string;
+}
+
+export interface ProviderMetadata {
+    id: string;
+    name: string;
+    displayName: string;
+    description?: string;
+    priority: number;
+    recipientFields: FieldDefinition[];
+    contentFields: FieldDefinition[];
+}
+
+export interface ChannelMetadata {
+    providers: ProviderMetadata[];
+    default?: string;
+    fallback?: string | string[];
+}
+
+export interface PluginMetadata {
+    channels: Record<string, ChannelMetadata>;
+}
+
+export type ProviderRateLimitOptions = z.infer<typeof providerConfigOptionsSchema>['rateLimit'];
+export type ProviderOptions = z.infer<typeof providerConfigOptionsSchema>;
+
+export type ProviderConfigEntry = z.infer<typeof providerConfigEntrySchema>;
+
+export type plugin_catalog_entry = {
+    name: string;
+    package: string;
+    description: string;
+    versions?: string[];
+};
+export type YamlProviderEntry = ProviderConfigEntry;
+
+export interface YamlConfig {
+    providers?: YamlProviderEntry[];
+    channels?: Record<string, {
+        default: string;
+        fallback?: string | string[];
+        partitions?: number;
+    }>;
+}
+
+export type ProviderEntry = ProviderConfigEntry & {
+    credentials: Record<string, string>;
+};
+
+export interface SimpleNSConfig {
+    providers: ProviderEntry[];
+    channels?: Record<string, {
+        default: string;
+        fallback?: string;
+    }>;
+}
+
+export interface ProviderResponseDto {
+    _id?: string;
+    id: string;
+    plugin_name: string;
+    channel: string;
+    enabled: boolean;
+    options?: ProviderOptions;
+    credentials_configured: boolean;
+    created_at?: Date;
+    updated_at?: Date;
+}
+
+export type PluginSyncAction =
+    | 'PLUGIN_INSTALLED'
+    | 'PLUGIN_UNINSTALLED'
+    | 'PLUGIN_VERSION_CHANGED'
+    | 'PROVIDER_UPSERTED'
+    | 'PROVIDER_DELETED'
+    | 'CHANNEL_ROUTING_UPDATED'
+    | 'SYSTEM_RELOAD'
+    | 'NPM_AUTH_UPDATED';
+
+export interface PluginSyncPayload {
+    plugin_name?: string;
+    version?: string;
+    provider_id?: string;
+    channel?: string;
+    [key: string]: unknown;
+}
+
+export interface PluginSyncMessage {
+    event_id: string;
+    source_instance_id: string;
+    timestamp: string;
+    action: PluginSyncAction;
+    payload: PluginSyncPayload;
+}
+
+export type PluginSyncHandler = (message: PluginSyncMessage) => Promise<void>;
+
+export interface DelayedEventWithRetries extends delayed_notification_topic {
+    _pollerRetries?: number;
+}
+
+export interface IdempotencyRecord {
+    status: 'processing' | 'delivered' | 'failed' | 'rate_limited';
+    retry_count: number;
+    updated_at: string;
+}
+
+export interface StatusProcessResult {
+    dbUpdated: boolean;
+    webhookUrl?: string;
+    webhookPayload?: WebhookPayload;
+    notificationId?: string;
+}
+
+export interface WebhookPayload {
+    request_id: string;
+    client_id: string;
+    notification_id: string;
+    status: string;
+    channel: string;
+    message: string;
+    occurred_at: string;
+}
+
+export type ServiceContext =
+    | 'api'
+    | 'producer'
+    | 'consumer'
+    | 'cron'
+    | 'worker'
+    | 'delayedWorker'
+    | 'unifiedProcessor'
+    | 'redis'
+    | 'recoveryService'
+    | 'adminAlert'
+    | 'pluginLoader'
+    | 'pluginRegistry'
+    | 'rateLimiter'
+    | 'configSync';
+
+export interface LogMeta {
+    notificationId?: string;
+    requestId?: string;
+    clientId?: string;
+    channel?: string;
+    workerId?: string;
+    topic?: string;
+    partition?: number;
+    [key: string]: unknown;
+}
+
+export interface Logger {
+    info: (message: string, meta?: LogMeta) => void;
+    warn: (message: string, meta?: LogMeta) => void;
+    error: (message: string, meta?: LogMeta | unknown) => void;
+    debug: (message: string, meta?: LogMeta) => void;
+    success: (message: string, meta?: LogMeta) => void;
+}
+
+export interface SendResult {
+    successCount: number;
+    failedCount: number;
+}
+
+export interface ProcessingStats {
+    processed: number;
+    success: number;
+    failed: number;
+}
+
+export interface ValidatedOutboxEntry {
+    _id: import('mongoose').Types.ObjectId;
+    notification_id: import('mongoose').Types.ObjectId | string;
+    topic: string;
+    payload: Record<string, unknown>;
+    status: string;
+}
+
+// ============================================================================
+// DYNAMIC OPERATIONAL SETTINGS & ADMIN AUTH TYPES
+// ============================================================================
+
+export type OperationalSettings = z.infer<typeof operationalSettingsSchema>;
+export type PartialOperationalSettings = z.infer<typeof partialOperationalSettingsSchema>;
+export type OperationalSettingsGroup = keyof OperationalSettings;
+
+export type SystemConfigSyncAction = 'SETTINGS_SEEDED' | 'SETTINGS_UPDATED' | 'SETTINGS_RESET';
+
+export interface SystemConfigSyncMessage {
+    action: SystemConfigSyncAction;
+    source_instance_id: string;
+    timestamp: string;
+    payload?: PartialOperationalSettings;
+}
+
+export interface AdminCredentialsDoc {
+    username: string;
+    password_hash: string;
+    salt: string;
+    created_at: string;
+    updated_at?: string;
+}
+
+export type AdminSetupPayload = z.infer<typeof adminSetupSchema>;
+export type AdminLoginPayload = z.infer<typeof adminLoginSchema>;
+
+export interface AdminAuthStatus {
+    isConfigured: boolean;
+}
+
+// ============================================================================
+// KUBERNETES HEALTH PROBE TYPES
+// ============================================================================
+
+export interface HealthProbeCheck {
+    name: string;
+    check: () => Promise<boolean> | boolean;
+}
+
+export interface HealthProbeOptions {
+    port?: number;
+    serviceName: string;
+    readinessChecks?: HealthProbeCheck[];
+    livenessChecks?: HealthProbeCheck[];
+}
+
+export interface HealthProbeServer {
+    start: () => Promise<void>;
+    stop: () => Promise<void>;
+}
+
+export interface HealthCheckResultDetails {
+    ok: boolean;
+    results: Record<string, boolean>;
+}
+
+export interface ApiHealthResponse {
+    service?: string;
+    status: 'healthy' | 'unhealthy' | 'ready' | 'not_ready';
+    timestamp: string;
+    checks: Record<string, boolean>;
+}
+
+// ============================================================================
+// PROCESSOR CONSUMER HEALTH TYPES
+// ============================================================================
+
+export interface ConsumerHealthState {
+    channel: string;
+    isRunning: boolean;
+    hasCrashed: boolean;
+    crashReason?: string;
+    lastHeartbeat: number;
+}
+
+export interface ConsumerHealthDetails {
+    running: boolean;
+    crashed: boolean;
+    error?: string;
+    secondsSinceHeartbeat: number;
+}
+
+export interface ConsumerHealthCheckResult {
+    healthy: boolean;
+    details: Record<string, ConsumerHealthDetails>;
+}
+
+// ============================================================================
+// PROVIDER RATE LIMIT STATUS TYPES
+// ============================================================================
+
+export type ProviderRateLimitConfigDetails = z.infer<typeof providerRateLimitConfigDetailsSchema>;
+export type ProviderRateLimitRealtimeStatus = z.infer<typeof providerRateLimitRealtimeStatusSchema>;
+export type ProviderRateLimitStatus = z.infer<typeof providerRateLimitStatusSchema>;
+export type ProviderRateLimitSummary = z.infer<typeof providerRateLimitSummarySchema>;
+export type ProviderRateLimitListResponse = z.infer<typeof providerRateLimitListResponseSchema>;
+
+// ============================================================================
+// API KEY & ADMIN AUTH TYPES
+// ============================================================================
+
+export interface AdminJwtPayload {
+    sub: string;
+    username: string;
+    role: 'admin';
+    iat?: number;
+    exp?: number;
+}
+
+export type ApiKeyStatus = z.infer<typeof apiKeyStatusSchema>;
+export type ApiKeyUsage = z.infer<typeof apiKeyUsageSchema>;
+export type ApiKeyDoc = z.infer<typeof apiKeyDocSchema>;
+export type CreateApiKeyInput = z.infer<typeof createApiKeySchema>;
+export type ApiKeyResponse = z.infer<typeof apiKeyResponseSchema>;
+export type CreateApiKeyResponse = z.infer<typeof createApiKeyResponseSchema>;
+

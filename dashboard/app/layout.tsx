@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
-import { AuthProvider } from "@/components/auth-provider";
 import { GlassmorphismProvider } from "@/components/glassmorphism-provider";
 import { SidebarPinProvider } from "@/components/sidebar-pin-provider";
 import { TourProvider } from "@/components/tour/tour-provider";
@@ -38,23 +37,21 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <SidebarPinProvider>
-              <GlassmorphismProvider>
-                <TourProvider>
-                  {children}
-                </TourProvider>
-                <Toaster richColors position="top-right" />
-              </GlassmorphismProvider>
-            </SidebarPinProvider>
-          </ThemeProvider>
-        </AuthProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <SidebarPinProvider>
+            <GlassmorphismProvider>
+              <TourProvider>
+                {children}
+              </TourProvider>
+              <Toaster richColors position="top-right" />
+            </GlassmorphismProvider>
+          </SidebarPinProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -10,19 +10,27 @@
  * - Atomic Lua script prevents duplicate processing across multiple workers
  */
 
+import mongoose from 'mongoose';
+import { connectMongoDB } from '@src/config/db.config.js';
+import { dynamicConfig } from '@src/config/dynamic-config.service.js';
 import { connectRedis, disconnectRedis } from '@src/config/redis.config.js';
-import { initTargetProducer, disconnectTargetProducer } from './target.producer.js';
-import { initDLQStatusProducer, disconnectDLQStatusProducer } from './dlq.status.js';
-import { startDelayedConsumer, stopDelayedConsumer } from './delayed.consumer.js';
-import { startDelayedPoller, stopDelayedPoller } from './delayed.poller.js';
+import { initTargetProducer, disconnectTargetProducer, isTargetProducerActive } from './target.producer.js';
+import { initDLQStatusProducer, disconnectDLQStatusProducer, isDLQProducerActive } from './dlq.status.js';
+import { startDelayedConsumer, stopDelayedConsumer, isDelayedConsumerHealthy } from './delayed.consumer.js';
+import { startDelayedPoller, stopDelayedPoller, isPollerActive } from './delayed.poller.js';
 import { delayedWorkerLogger as logger } from '@src/workers/utils/logger.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
+import { getRedisClient } from '@src/config/redis.config.js';
+import { createHealthProbeServer } from '@src/utils/k8s-health-probe.js';
+import type { HealthProbeServer } from '@src/types/types.js';
 
 //Import the admin channel provider files here for them to self-register
 import "@src/admin-alerts/channels/discord.channel.js";
 import "@src/admin-alerts/channels/telegram.channel.js";
 
 let isShuttingDown = false;
+let dbConnection: Awaited<ReturnType<typeof connectMongoDB>> | null = null;
+let probeServer: HealthProbeServer | null = null;
 
 /**
  * Graceful shutdown handler
@@ -55,6 +63,17 @@ const gracefulShutdown = async (signal: string): Promise<void> => {
         // 4. Disconnect Redis
         logger.info('Disconnecting Redis...');
         await disconnectRedis();
+
+        // 5. Disconnect MongoDB
+        if (dbConnection) {
+            logger.info('Disconnecting MongoDB...');
+            await dbConnection.disconnect();
+        }
+
+        // 6. Stop health probe server
+        if (probeServer) {
+            await probeServer.stop();
+        }
 
         logger.success('Graceful shutdown complete');
         process.exit(0);
@@ -105,7 +124,13 @@ const main = async (): Promise<void> => {
     logger.info('Starting Delayed Processor...');
 
     try {
-        // 1. Connect to Redis (for delayed queue)
+        // 1. Connect to MongoDB & Initialize Dynamic Configuration
+        logger.info('Connecting to MongoDB...');
+        dbConnection = await connectMongoDB();
+        logger.success('Connected to MongoDB');
+        await dynamicConfig.initialize(false);
+
+        // 2. Connect to Redis (for delayed queue)
         logger.info('Connecting to Redis...');
         await connectRedis();
 
@@ -127,6 +152,55 @@ const main = async (): Promise<void> => {
         logger.info('================================');
         logger.success('Delayed Processor is running!');
         logger.info('================================');
+
+        // 5. Start health probe server for Kubernetes
+        probeServer = createHealthProbeServer({
+            serviceName: 'delayed-processor',
+            readinessChecks: [
+                {
+                    name: 'mongodb',
+                    check: () => !isShuttingDown && mongoose.connection.readyState === 1
+                },
+                {
+                    name: 'redis',
+                    check: () => {
+                        if (isShuttingDown) return false;
+                        try {
+                            return getRedisClient().status === 'ready';
+                        } catch {
+                            return false;
+                        }
+                    }
+                },
+                {
+                    name: 'delayed_consumer',
+                    check: () => !isShuttingDown && isDelayedConsumerHealthy()
+                },
+                {
+                    name: 'delayed_poller',
+                    check: () => !isShuttingDown && isPollerActive()
+                },
+                {
+                    name: 'kafka_producers',
+                    check: () => !isShuttingDown && isTargetProducerActive() && isDLQProducerActive()
+                }
+            ],
+            livenessChecks: [
+                {
+                    name: 'process',
+                    check: () => !isShuttingDown
+                },
+                {
+                    name: 'delayed_consumer',
+                    check: () => !isShuttingDown && isDelayedConsumerHealthy()
+                },
+                {
+                    name: 'delayed_poller',
+                    check: () => !isShuttingDown && isPollerActive()
+                }
+            ]
+        });
+        await probeServer.start();
 
         // Register shutdown handlers
         registerShutdownHandlers();

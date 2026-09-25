@@ -6,17 +6,12 @@
 
 import { getRedisClient } from '@src/config/redis.config.js';
 import { env } from '@src/config/env.config.js';
+import type { IdempotencyRecord } from '@src/types/types.js';
 
 // Redis key prefix for idempotency
 const IDEMPOTENCY_PREFIX = 'idempotency';
 
 // Idempotency record stored in Redis
-interface IdempotencyRecord {
-    status: 'processing' | 'delivered' | 'failed' | 'rate_limited';
-    retry_count: number;
-    updated_at: string;
-}
-
 /**
  * Build Redis key for idempotency check
  */

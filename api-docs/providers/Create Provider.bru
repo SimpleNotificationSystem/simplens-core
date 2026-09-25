@@ -1,0 +1,35 @@
+meta {
+  name: Create Provider
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{process.env.BASE_URL}}/api/providers
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "id": "{{process.env.PROVIDER_ID}}",
+    "plugin_name": "{{process.env.PACKAGE_NAME}}",
+    "credentials": {
+      "apiKey": "sample-provider-api-key"
+    },
+    "options": {
+      "priority": 1,
+      "rateLimit": {
+        "maxTokens": 100,
+        "refillRate": 10,
+        "refillInterval": "second"
+      }
+    },
+    "enabled": true
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

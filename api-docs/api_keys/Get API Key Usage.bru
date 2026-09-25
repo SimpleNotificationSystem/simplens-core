@@ -1,0 +1,16 @@
+meta {
+  name: Get API Key Usage
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{process.env.BASE_URL}}/api/keys/{{process.env.API_KEY_ID}}
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

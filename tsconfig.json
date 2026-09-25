@@ -1,11 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2020",
+    "lib": ["ES2022"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "baseUrl": ".",
     "paths": {
-      "@src/*": ["src/*"]
+      "@src/*": ["./src/*"]
     },
     "outDir": "./dist",
     "rootDir": "./src",

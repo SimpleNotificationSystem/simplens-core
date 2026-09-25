@@ -1,0 +1,186 @@
+# ==============================================================================
+# SimpleNS Development Environment (GHCR 'development' branch images)
+# Connects to shared 'simplens-infra' network and 'simplens_dev' database.
+# ==============================================================================
+
+name: simplens-dev
+
+services:
+  # ============================================
+  # 1. API Server
+  # ============================================
+  api:
+    image: ghcr.io/simplenotificationsystem/simplens-core:development
+    container_name: simplens-api-dev
+    ports:
+      - "3000:3000"
+    env_file:
+      - ../.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${PORT:-3000}
+      MONGO_URI: mongodb://mongo:27017/simplens_dev?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      BROKERS: kafka:9093
+      LOKI_URL: http://loki:3100
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      JWT_SECRET: ${JWT_SECRET:-simplens-default-jwt-secret-key-change-in-production}
+      SIMPLENS_CONFIG_PATH: ${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}
+    volumes:
+      - logs-data-dev:/app/logs
+    command: [ "node", "dist/api/server.js" ]
+    networks:
+      - simplens-infra
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    labels:
+      simplens.environment: "dev"
+
+  # ============================================
+  # 2. Outbox Worker
+  # ============================================
+  worker:
+    image: ghcr.io/simplenotificationsystem/simplens-core:development
+    container_name: simplens-worker-dev
+    env_file:
+      - ../.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      MONGO_URI: mongodb://mongo:27017/simplens_dev?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      BROKERS: kafka:9093
+      LOKI_URL: http://loki:3100
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - logs-data-dev:/app/logs
+    command: [ "node", "dist/workers/worker.js" ]
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - simplens-infra
+    restart: unless-stopped
+    labels:
+      simplens.environment: "dev"
+
+  # ============================================
+  # 3. Unified Notification Processor
+  # ============================================
+  notification_processor:
+    image: ghcr.io/simplenotificationsystem/simplens-core:development
+    container_name: simplens-notification-processor-dev
+    env_file:
+      - ../.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      MONGO_URI: mongodb://mongo:27017/simplens_dev?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      BROKERS: kafka:9093
+      PROCESSOR_CHANNEL: ${PROCESSOR_CHANNEL:-all}
+      SIMPLENS_CONFIG_PATH: ${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}
+      LOKI_URL: http://loki:3100
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - logs-data-dev:/app/logs
+    command: [ "node", "dist/processors/unified/unified.processor.js" ]
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - simplens-infra
+    restart: unless-stopped
+    labels:
+      simplens.environment: "dev"
+
+  # ============================================
+  # 4. Delayed Processor (Scheduled Notifications)
+  # ============================================
+  delayed_processor:
+    image: ghcr.io/simplenotificationsystem/simplens-core:development
+    container_name: simplens-delayed-processor-dev
+    env_file:
+      - ../.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      MONGO_URI: mongodb://mongo:27017/simplens_dev?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      BROKERS: kafka:9093
+      LOKI_URL: http://loki:3100
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - logs-data-dev:/app/logs
+    command: [ "node", "dist/processors/delayed/delayed.processor.js" ]
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - simplens-infra
+    restart: unless-stopped
+    labels:
+      simplens.environment: "dev"
+
+  # ============================================
+  # 5. Recovery Service (Stuck Notifications & Audits)
+  # ============================================
+  recovery:
+    image: ghcr.io/simplenotificationsystem/simplens-core:development
+    container_name: simplens-recovery-dev
+    env_file:
+      - ../.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      MONGO_URI: mongodb://mongo:27017/simplens_dev?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      LOKI_URL: http://loki:3100
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - logs-data-dev:/app/logs
+    command: [ "node", "dist/workers/recovery/recovery.service.js" ]
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - simplens-infra
+    restart: unless-stopped
+    labels:
+      simplens.environment: "dev"
+
+  # ============================================
+  # 6. Admin Dashboard (Next.js)
+  # ============================================
+  dashboard:
+    image: ghcr.io/simplenotificationsystem/simplens-dashboard:development
+    container_name: simplens-dashboard-dev
+    ports:
+      - "3002:3002"
+    env_file:
+      - ../.env
+    environment:
+      NODE_ENV: production
+      PORT: ${DASHBOARD_PORT:-3002}
+      API_BASE_URL: http://api:${PORT:-3000}
+      MONGO_URI: mongodb://mongo:27017/simplens_dev?replicaSet=rs0
+      AUTH_TRUST_HOST: "true"
+      WEBHOOK_HOST: dashboard
+      WEBHOOK_PORT: "3002"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - simplens-infra
+    restart: unless-stopped
+    labels:
+      simplens.environment: "dev"
+
+volumes:
+  logs-data-dev:
+
+networks:
+  simplens-infra:
+    external: true
+    name: simplens-infra

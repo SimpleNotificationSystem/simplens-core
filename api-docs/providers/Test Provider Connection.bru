@@ -1,0 +1,26 @@
+meta {
+  name: Test Provider Connection
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{process.env.BASE_URL}}/api/providers/test
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "plugin_name": "{{process.env.PACKAGE_NAME}}",
+    "credentials": {
+      "apiKey": "sample-provider-api-key"
+    },
+    "options": {}
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -21,6 +21,9 @@ Use TypeScript with strict typing and existing `@src/*` path aliases. Match curr
 
 Plan changes before writing code. Follow low-level design principles: single responsibility, clear interfaces, useful dependency inversion, and explicit error handling. Do not duplicate logic; extract shared behavior into focused utilities, services, or test helpers. Always use `axios` instead of the plain `fetch` API in this project.
 
+## Type & Schema Centralisation
+All TypeScript interfaces and types that live inside `src/` **must** be declared in `src/types/types.ts`. All Zod (or other validation library) schemas must be declared in `src/types/schemas.ts`. Individual source files must **not** define their own local interfaces, types, or schemas — import everything from `@src/types/types` or `@src/types/schemas` instead. This rule applies to every layer: API controllers, services, plugins, workers, processors, utilities, and database modules.
+
 ## Testing Guidelines
 Vitest is the test runner. Integration tests also use `supertest`, `mongodb-memory-server`, and Redis mocks. Name test files with `.test.ts`, for example `tests/unit/plugins/loader.test.ts`.
 
@@ -31,5 +34,11 @@ Use short Conventional Commit style messages such as `feat: add email retry poli
 
 PRs should include a summary, linked issue when applicable, test evidence, and screenshots or GIFs for `dashboard/` UI changes. Husky `pre-push` runs both lint commands.
 
+## Dynamic Configuration & Dashboard Settings
+Whenever any configuration field is added, modified, or removed in the dynamic operational configuration (`src/types/schemas.ts` in `operationalSettingsSchema`, `src/config/env.config.ts`, or `src/config/dynamic-config.service.ts`), you **must** also update the dashboard:
+1. Update the `OperationalSettings` interface in `dashboard/lib/types.ts`.
+2. Update the corresponding card and input fields in `dashboard/app/settings/page.tsx` so administrators can view and tune the parameter live with appropriate labels, inputs, and validation hints.
+
 ## Security & Configuration Tips
-Do not commit secrets. Use `.env.example` as the template for `.env`, and update it when adding configuration. For local full-stack work, prefer `docker-compose.dev.yaml`; for core-only work, start infrastructure with `docker compose -f docker-compose.infra.yaml up -d`.
+Do not commit secrets. Use `.env.example` as the template for `.env`, and update it when adding configuration. For local full-stack work, use `./docker-compose/scripts/switch-env.ps1 -Env local -Rebuild` (or `docker compose -f docker-compose/docker-compose.local.yaml up -d`); for shared infrastructure, use `docker compose -f docker-compose/docker-compose.infra.yaml up -d` (or `./docker-compose/scripts/switch-env.ps1 -Env infra-only`).
+

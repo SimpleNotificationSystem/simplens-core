@@ -10,8 +10,8 @@
  * - Retry queue management
  */
 
-import { Consumer, EachMessagePayload } from 'kafkajs';
-import { kafka } from '@src/config/kafka.config.js';
+import { Consumer, EachMessagePayload, ConsumerCrashEvent } from 'kafkajs';
+import { kafka, ensureChannelTopic } from '@src/config/kafka.config.js';
 import { NOTIFICATION_STATUS_SF } from '@src/types/types.js';
 import { env } from '@src/config/env.config.js';
 import { unifiedProcessorLogger as logger } from './unified.logger.js';
@@ -20,10 +20,18 @@ import { unifiedProcessorLogger as logger } from './unified.logger.js';
 import {
     sendWithFallback,
     PluginRegistry,
+    getProviderCascade,
     resolveFallbackProviderId,
     validateNotificationForProvider
 } from '@src/plugins/index.js';
-import type { BaseNotification, DeliveryResult } from '@src/plugins/interfaces/provider.types.js';
+import type {
+    BaseNotification,
+    DeliveryResult,
+    RateLimitResult,
+    ConsumerHealthState,
+    ConsumerHealthCheckResult,
+    ConsumerHealthDetails
+} from '@src/types/types.js';
 
 // Shared utilities
 import { tryAcquireProcessingLock, setDelivered, setFailed, setRateLimited } from '@src/processors/shared/idempotency.js';
@@ -33,9 +41,14 @@ import { publishDelayed, buildDelayedPayloadGeneric } from '@src/processors/shar
 import { handleSchemaValidationFailure } from '../shared/schema-failure-handler.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 import status_outbox_model from '@src/database/models/status-outbox.models.js';
-// Track active consumers by channel
+
+// Re-export consumer health types
+export type { ConsumerHealthState, ConsumerHealthCheckResult, ConsumerHealthDetails };
+
+// State tracking for graceful shutdown & health
 const consumers: Map<string, Consumer> = new Map();
 const consumingState: Map<string, boolean> = new Map();
+const consumerHealthState: Map<string, ConsumerHealthState> = new Map();
 
 /**
  * Get Kafka topic name for a channel
@@ -65,6 +78,8 @@ const publishSuccessStatus = async (
         request_id: notification.request_id,
         client_id: notification.client_id,
         channel: channel,
+        provider: notification.provider,
+        provider_history: notification.provider_history,
         status: NOTIFICATION_STATUS_SF.delivered,
         message: messageId ? `Delivered via ${messageId}` : 'Notification sent successfully',
         retry_count: notification.retry_count,
@@ -89,6 +104,8 @@ const publishFailureStatus = async (
         request_id: notification.request_id,
         client_id: notification.client_id,
         channel: channel,
+        provider: notification.provider,
+        provider_history: notification.provider_history,
         status: NOTIFICATION_STATUS_SF.failed,
         message: errorMessage,
         retry_count: notification.retry_count,
@@ -108,7 +125,8 @@ export const scheduleFallbackProviderHandoff = async (
     channel: string,
     notification: BaseNotification,
     currentProviderId: string | undefined,
-    errorMessage: string
+    errorMessage: string,
+    delayMs?: number
 ): Promise<boolean> => {
     const fallbackProviderId = resolveFallbackProviderId(channel, currentProviderId);
 
@@ -134,17 +152,29 @@ export const scheduleFallbackProviderHandoff = async (
     }
 
     await setFailed(notification.notification_id.toString(), notification.retry_count);
-    const delayedPayload = buildDelayedPayloadGeneric(
-        validationResult.data as unknown as Record<string, unknown>,
-        channel,
-        0
-    );
+    const delayedPayload = delayMs !== undefined
+        ? buildDelayedPayloadGeneric(
+            validationResult.data as unknown as Record<string, unknown>,
+            channel,
+            0,
+            delayMs
+        )
+        : buildDelayedPayloadGeneric(
+            validationResult.data as unknown as Record<string, unknown>,
+            channel,
+            0
+        );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await publishDelayed(delayedPayload as any);
 
+    const isRateLimit = errorMessage.toLowerCase().includes('rate limit');
+    const alertTitle = isRateLimit
+        ? `INFO: RATE LIMIT EXCEEDED, SWITCHING TO FALLBACK\n`
+        : `INFO: RETRY BUDGET EXHAUSTED, SWITCHING TO FALLBACK\n`;
+
     void AdminAlertService.sendAlert(
         'service_health',
-        `INFO: RETRY BUDGET EXHAUSTED, SWITCHING TO FALLBACK\n` +
+        alertTitle +
         `Notification ID: ${notification.notification_id}\n` +
         `Channel: ${channel}\n` +
         `Primary provider: ${currentProviderId || 'default'}\n` +
@@ -155,8 +185,7 @@ export const scheduleFallbackProviderHandoff = async (
     );
 
     logger.warn(
-        `[${channel}] Retry budget exhausted for provider ${currentProviderId || 'default'}, ` +
-        `scheduled fallback handoff to ${fallbackProviderId}: ${notification.notification_id}`
+        `[${channel}] Fallback handoff scheduled for provider ${currentProviderId || 'default'} to ${fallbackProviderId}: ${notification.notification_id}`
     );
     return true;
 };
@@ -247,6 +276,9 @@ const processMessage = async (
         }
 
         const notification = validationResult.data as BaseNotification;
+        if (!notification.provider_history) {
+            notification.provider_history = [];
+        }
         const notificationId = notification.notification_id.toString();
 
         logger.info(`[${channel}] Processing notification: ${notificationId} (retry: ${notification.retry_count})`);
@@ -262,34 +294,59 @@ const processMessage = async (
             logger.info(`[${channel}] Retrying previously failed: ${notificationId}`);
         }
 
-        // 4. Rate limit check - uses provider ID for per-provider rate limiting
-        const rateLimitResult = await consumeToken(providerId!);
+        // 4. Rate limit check across the provider cascade
+        const cascade = getProviderCascade(channel, rawData.provider);
+        let selectedProviderId: string | null = null;
+        let lastRateLimitResult: RateLimitResult | null = null;
 
-        if (!rateLimitResult.allowed) {
-            logger.warn(`[${channel}] Rate limited: ${notificationId}, retry after ${rateLimitResult.retryAfterMs}ms`);
+        for (let i = 0; i < cascade.length; i++) {
+            const candidateId = cascade[i];
+            const rateLimitResult = await consumeToken(candidateId);
+
+            if (rateLimitResult.allowed) {
+                selectedProviderId = candidateId;
+                if (i > 0) {
+                    logger.info(`[${channel}] Cascade failover: '${cascade[0]}' rate-limited, using fallback '${candidateId}': ${notificationId}`);
+                    void AdminAlertService.sendAlert('service_health',
+                        `ℹ️ RATE LIMIT CASCADE: USING FALLBACK (${i + 1}/${cascade.length})\n` +
+                        `Channel: ${channel}\n` +
+                        `Notification ID: ${notificationId}\n` +
+                        `Rate-limited providers: ${cascade.slice(0, i).join(', ')}\n` +
+                        `Active fallback: ${candidateId}\n` +
+                        `Action: Check primary provider rate limits if this persists.`,
+                        { severity: 'info', notificationId, channel });
+                }
+                break;
+            } else {
+                lastRateLimitResult = rateLimitResult;
+                const retryDelay = rateLimitResult.retryAfterMs ?? env.RATE_LIMIT_RETRY_DELAY_MS;
+                notification.provider_history.push({
+                    provider: candidateId,
+                    status: 'rate_limited',
+                    error_code: 'RATE_LIMITED',
+                    error_message: `Provider '${candidateId}' rate limit exceeded (retry after ${retryDelay}ms)`,
+                    retryable: true,
+                    attempted_at: new Date()
+                });
+                logger.warn(`[${channel}] Provider '${candidateId}' rate limited (${i + 1}/${cascade.length}): ${notificationId}`);
+            }
+        }
+
+        if (!selectedProviderId) {
+            // All providers in cascade are rate-limited
+            logger.warn(`[${channel}] All providers in cascade rate-limited: ${notificationId}`);
 
             const newRetryCount = notification.retry_count + 1;
             if (newRetryCount > env.MAX_RETRY_COUNT) {
                 const currentProviderId = notification.provider || PluginRegistry.getDefaultProviderId(channel);
-                const handoffScheduled = await scheduleFallbackProviderHandoff(
-                    channel,
-                    notification,
-                    currentProviderId,
-                    `Rate limited after ${env.MAX_RETRY_COUNT} retries`
-                );
-
-                if (handoffScheduled) {
-                    return true;
-                }
-
-                logger.error(`[${channel}] Max retries exceeded (rate limited): ${notificationId}`);
+                logger.error(`[${channel}] Max retries exceeded (all cascade providers rate limited): ${notificationId}`);
 
                 void AdminAlertService.sendAlert('failed_notification',
                     `❌ MAX RETRIES EXCEEDED (RATE LIMITED)\n` +
                     `Notification ID: ${notificationId}\n` +
                     `Channel: ${channel}\n` +
                     `Provider: ${currentProviderId || providerId || 'default'}\n` +
-                    `Root cause: Provider rate limit exhausted after ${env.MAX_RETRY_COUNT} retries\n` +
+                    `Root cause: All cascade providers rate limit exhausted after ${env.MAX_RETRY_COUNT} retries\n` +
                     `Action: Check provider rate limits in simplens.config.yaml. Consider increasing limits or adding fallback provider.`,
                     { severity: 'critical', notificationId, channel });
 
@@ -298,22 +355,38 @@ const processMessage = async (
                 return true;
             }
 
-            // Push to delayed queue using rate limiter's retryAfterMs
+            // Push to delayed queue using fixed retry delay from rate limiter
             await setRateLimited(notificationId, validationResult.data.retry_count);
+            const retryDelay = lastRateLimitResult?.retryAfterMs ?? env.RATE_LIMIT_RETRY_DELAY_MS;
             const delayedPayload = buildDelayedPayloadGeneric(
                 notification as unknown as Record<string, unknown>,
                 channel,
                 newRetryCount,
-                rateLimitResult.retryAfterMs // Use exact delay from rate limiter
+                retryDelay
             );
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             await publishDelayed(delayedPayload as any);
-            logger.info(`[${channel}] Rate limited, scheduled retry in ${rateLimitResult.retryAfterMs}ms: ${notificationId} (retry ${newRetryCount})`);
+            logger.info(`[${channel}] Rate limited, scheduled retry in ${retryDelay}ms: ${notificationId} (retry ${newRetryCount})`);
             return true;
+        }
+
+        // If selected fallback provider differs from original provider, update notification provider
+        if (selectedProviderId !== notification.provider) {
+            notification.provider = selectedProviderId;
         }
 
         // 5. Send via plugin router (with auto-fallback)
         const result: DeliveryResult = await sendWithFallback(channel, notification);
+
+        // Merge router dispatch attempts into provider_history
+        if (result.attempts && result.attempts.length > 0) {
+            notification.provider_history.push(...result.attempts);
+        }
+
+        // Update notification provider if result specifies the delivering/failing provider
+        if (result.provider && result.provider !== notification.provider) {
+            notification.provider = result.provider;
+        }
 
         if (result.success) {
             // 6a. Success
@@ -343,6 +416,8 @@ const processMessage = async (
                     await status_outbox_model.create({
                         notification_id: notificationId,
                         status: NOTIFICATION_STATUS_SF.delivered,
+                        provider: notification.provider,
+                        provider_history: notification.provider_history,
                         processed: false
                     });
                     logger.info(`[${channel}] Created status_outbox fallback for: ${notificationId}`);
@@ -448,6 +523,9 @@ export const startUnifiedConsumer = async (channel: string): Promise<void> => {
         return;
     }
 
+    // Ensure the Kafka topic exists before attempting to subscribe
+    await ensureChannelTopic(channel);
+
     const topic = getTopicForChannel(channel);
     const groupId = getConsumerGroupId(channel);
 
@@ -459,6 +537,71 @@ export const startUnifiedConsumer = async (channel: string): Promise<void> => {
         rebalanceTimeout: 60000,
         heartbeatInterval: 3000,
     });
+
+    const health: ConsumerHealthState = {
+        channel,
+        isRunning: false,
+        hasCrashed: false,
+        lastHeartbeat: Date.now(),
+    };
+    consumerHealthState.set(channel, health);
+
+    // Register Kafka lifecycle and crash event listeners
+    if (typeof consumer.on === 'function' && consumer.events) {
+        consumer.on(consumer.events.HEARTBEAT, () => {
+            const h = consumerHealthState.get(channel);
+            if (h) {
+                h.lastHeartbeat = Date.now();
+            }
+        });
+
+        consumer.on(consumer.events.CRASH, async (event: ConsumerCrashEvent) => {
+            const h = consumerHealthState.get(channel);
+            const crashError = event?.payload?.error;
+            const errorMsg = crashError ? String(crashError.message || crashError) : 'Unknown crash';
+            if (h) {
+                h.hasCrashed = true;
+                h.isRunning = false;
+                h.crashReason = errorMsg;
+            }
+            logger.error(`[${channel}] Consumer CRASHED: ${errorMsg}`, crashError);
+
+            void AdminAlertService.sendAlert(
+                'service_health',
+                `🔴 KAFKA CONSUMER CRASHED - Unified Processor\n` +
+                `Channel: ${channel}\n` +
+                `Group: ${groupId}\n` +
+                `Restartable: ${Boolean(event?.payload?.restart)}\n` +
+                `Error: ${errorMsg}\n` +
+                `Action: Kubernetes liveness probe will detect failure and restart container.`,
+                { severity: 'critical' }
+            );
+        });
+
+        consumer.on(consumer.events.STOP, () => {
+            const h = consumerHealthState.get(channel);
+            if (h) {
+                h.isRunning = false;
+            }
+            logger.warn(`[${channel}] Consumer stopped event received`);
+        });
+
+        consumer.on(consumer.events.DISCONNECT, () => {
+            const h = consumerHealthState.get(channel);
+            if (h) {
+                h.isRunning = false;
+            }
+            logger.warn(`[${channel}] Consumer disconnected`);
+        });
+
+        consumer.on(consumer.events.CONNECT, () => {
+            const h = consumerHealthState.get(channel);
+            if (h) {
+                h.isRunning = true;
+                h.lastHeartbeat = Date.now();
+            }
+        });
+    }
     
     await consumer.connect();
     await consumer.subscribe({ topic, fromBeginning: false });
@@ -472,6 +615,11 @@ export const startUnifiedConsumer = async (channel: string): Promise<void> => {
             try{
                 if (!consumingState.get(channel)) {
                     return; // Consumer is stopping
+                }
+
+                const h = consumerHealthState.get(channel);
+                if (h) {
+                    h.lastHeartbeat = Date.now();
                 }
     
                 const shouldCommit = await processMessage(channel, payload);
@@ -491,6 +639,9 @@ export const startUnifiedConsumer = async (channel: string): Promise<void> => {
         }
     });
 
+    health.isRunning = true;
+    health.lastHeartbeat = Date.now();
+
     logger.success(`[${channel}] Consumer started`);
 };
 
@@ -505,12 +656,17 @@ export const stopUnifiedConsumer = async (channel: string): Promise<void> => {
 
     logger.info(`[${channel}] Stopping consumer...`);
     consumingState.set(channel, false);
+    const health = consumerHealthState.get(channel);
+    if (health) {
+        health.isRunning = false;
+    }
 
     try {
         await consumer.stop();
         await consumer.disconnect();
         consumers.delete(channel);
         consumingState.delete(channel);
+        consumerHealthState.delete(channel);
         logger.info(`[${channel}] Consumer stopped`);
     } catch (err) {
         logger.error(`[${channel}] Error stopping consumer:`, err);
@@ -525,4 +681,94 @@ export const stopAllConsumers = async (): Promise<void> => {
     for (const channel of channels) {
         await stopUnifiedConsumer(channel);
     }
+};
+
+/**
+ * Get list of currently running consumer channels
+ */
+export const getActiveConsumerChannels = (): string[] => {
+    return Array.from(consumers.keys());
+};
+
+/**
+ * Check whether consumers for specified channels (or all active consumers) are healthy.
+ * 
+ * @param expectedChannels Optional list of channels expected to be running.
+ * @param maxHeartbeatStalenessMs Max ms since last heartbeat before marking stalled (default 90s).
+ */
+export const areUnifiedConsumersHealthy = (
+    expectedChannels?: string[],
+    maxHeartbeatStalenessMs = 90000
+): ConsumerHealthCheckResult => {
+    const details: Record<string, ConsumerHealthDetails> = {};
+    const now = Date.now();
+    let allHealthy = true;
+
+    const channelsToCheck = expectedChannels && expectedChannels.length > 0
+        ? expectedChannels
+        : Array.from(consumers.keys());
+
+    // In standby mode (no channels expected/running), considered healthy
+    if (channelsToCheck.length === 0) {
+        return { healthy: true, details: {} };
+    }
+
+    for (const channel of channelsToCheck) {
+        const health = consumerHealthState.get(channel);
+        const consumer = consumers.get(channel);
+
+        if (!health || !consumer) {
+            details[channel] = {
+                running: false,
+                crashed: false,
+                error: 'Consumer not initialized or missing',
+                secondsSinceHeartbeat: -1
+            };
+            allHealthy = false;
+            continue;
+        }
+
+        const secondsSinceHeartbeat = Math.round((now - health.lastHeartbeat) / 1000);
+
+        if (health.hasCrashed) {
+            details[channel] = {
+                running: false,
+                crashed: true,
+                error: health.crashReason || 'Consumer crashed',
+                secondsSinceHeartbeat
+            };
+            allHealthy = false;
+            continue;
+        }
+
+        if (!health.isRunning) {
+            details[channel] = {
+                running: false,
+                crashed: false,
+                error: 'Consumer is stopped or disconnected',
+                secondsSinceHeartbeat
+            };
+            allHealthy = false;
+            continue;
+        }
+
+        if (now - health.lastHeartbeat > maxHeartbeatStalenessMs) {
+            details[channel] = {
+                running: true,
+                crashed: false,
+                error: `Heartbeat stalled (${secondsSinceHeartbeat}s ago)`,
+                secondsSinceHeartbeat
+            };
+            allHealthy = false;
+            continue;
+        }
+
+        details[channel] = {
+            running: true,
+            crashed: false,
+            secondsSinceHeartbeat
+        };
+    }
+
+    return { healthy: allHealthy, details };
 };
