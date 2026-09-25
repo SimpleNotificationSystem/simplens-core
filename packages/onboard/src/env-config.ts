@@ -32,7 +32,7 @@ export function isVersionGreaterThan130(version: string | undefined): boolean {
     if (minor < 3) return false;
     return patch > 0;
 }
-const AUTO_GENERATE_ON_EMPTY_KEYS = ['NS_API_KEY', 'AUTH_SECRET', 'VERSION'] as const;
+const AUTO_GENERATE_ON_EMPTY_KEYS = ['NS_API_KEY', 'AUTH_SECRET', 'JWT_SECRET', 'VERSION'] as const;
 
 function shouldAutoGenerateOnEmpty(key: string, fullMode: boolean): boolean {
     return !fullMode && AUTO_GENERATE_ON_EMPTY_KEYS.includes(key as (typeof AUTO_GENERATE_ON_EMPTY_KEYS)[number]);
@@ -60,7 +60,7 @@ export function generateDefaultValue(key: string): string {
     if (key === 'NS_API_KEY') {
         return `ns_${generateSecureRandom(48)}`;
     }
-    if (key === 'AUTH_SECRET') {
+    if (key === 'AUTH_SECRET' || key === 'JWT_SECRET') {
         return generateSecureRandom(64);
     }
     if (key === 'ADMIN_PASSWORD') {
@@ -131,8 +131,8 @@ NODE_ENV=production
 # ============================================
 # API SERVER
 # ============================================
-NS_API_KEY=
 PORT=3000
+JWT_SECRET=
 
 # ============================================
 # DATABASE
@@ -165,13 +165,11 @@ VERSION=latest
 # ADMIN DASHBOARD
 # ============================================
 AUTH_TRUST_HOST=true
-AUTH_SECRET=
 API_BASE_URL=http://api:3000
 WEBHOOK_HOST=dashboard
 WEBHOOK_PORT=3002
 DASHBOARD_PORT=3002
 BASE_PATH=
-HTTPS_COOKIE=false
 `;
 
 export const LEGACY_ENV_TEMPLATE = `
@@ -532,7 +530,7 @@ export async function promptEnvVariables(
  * Get suggested value for specific keys
  */
 function getSuggestedValue(key: string): string {
-    if (key === 'NS_API_KEY' || key === 'AUTH_SECRET') {
+    if (key === 'NS_API_KEY' || key === 'AUTH_SECRET' || key === 'JWT_SECRET') {
         return `Replace with: openssl rand -base64 32 (or) Press <Enter> to auto-generate value`;
     }
     if (key === 'NODE_ENV') {

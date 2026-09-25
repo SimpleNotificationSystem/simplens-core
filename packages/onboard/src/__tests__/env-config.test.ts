@@ -56,11 +56,12 @@ describe('loadEnvExample templates', () => {
         const envVars = await loadEnvExample(false);
         const keys = envVars.map(v => v.key);
 
-        expect(keys).toContain('NS_API_KEY');
+        expect(keys).not.toContain('NS_API_KEY');
         expect(keys).toContain('MONGO_URI');
         expect(keys).toContain('BROKERS');
         expect(keys).toContain('REDIS_URL');
-        expect(keys).toContain('AUTH_SECRET');
+        expect(keys).not.toContain('AUTH_SECRET');
+        expect(keys).toContain('JWT_SECRET');
         expect(keys).toContain('VERSION');
         expect(keys).not.toContain('CORE_VERSION');
         expect(keys).not.toContain('DASHBOARD_VERSION');
@@ -72,12 +73,14 @@ describe('loadEnvExample templates', () => {
         expect(keys).not.toContain('OUTBOX_BATCH_SIZE');
         expect(keys).not.toContain('RECOVERY_BATCH_SIZE');
         expect(keys).not.toContain('IDEMPOTENCY_TTL_SECONDS');
+        expect(keys).not.toContain('HTTPS_COOKIE');
     });
 
     it('returns legacy variables including admin credentials and outbox settings for legacy (<= 1.3.0)', async () => {
         const envVars = await loadEnvExample(true);
         const keys = envVars.map(v => v.key);
 
+        expect(keys).toContain('NS_API_KEY');
         expect(keys).toContain('VERSION');
         expect(keys).not.toContain('CORE_VERSION');
         expect(keys).not.toContain('DASHBOARD_VERSION');

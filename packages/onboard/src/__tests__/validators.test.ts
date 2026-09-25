@@ -177,6 +177,7 @@ describe('validators', () => {
 
             it('should reject short secrets', () => {
                 expect(validateEnvValue('AUTH_SECRET', 'abc')).toBe(false);
+                expect(validateEnvValue('JWT_SECRET', 'abc')).toBe(false);
             });
 
             it('should accept API keys with 8+ characters', () => {

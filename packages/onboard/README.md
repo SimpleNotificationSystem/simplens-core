@@ -85,15 +85,15 @@ npx @simplens/onboard --full --infra mongo kafka redis nginx --env default --bas
 This mode:
 - Requires `--full` flag to enable non-interactive mode
 - Requires `--env <mode>` to specify environment mode
-- **Auto-generates secure credentials** for `NS_API_KEY` and `AUTH_SECRET` (and `ADMIN_PASSWORD` for legacy SimpleNS <= 1.3.0)
+- **Auto-generates secure credentials** for `JWT_SECRET` (and `AUTH_SECRET`/`NS_API_KEY`/`ADMIN_PASSWORD` for legacy SimpleNS <= 1.3.0)
 - **Auto-generates placeholder credentials** for plugins if `--plugin` is provided
 - **Auto-generates version value** for `VERSION` (default: `latest`)
 - All other options are optional with sensible defaults
 - Services are not auto-started (use `docker compose up -d` manually; fallback: `docker-compose up -d`)
 
 **⚠️ IMPORTANT**: Auto-generated credentials are **NOT secure for production**. After setup completes, you **must** update the following in your `.env` file:
-- `NS_API_KEY` - API authentication key
-- `AUTH_SECRET` - Session secret for dashboard
+- `JWT_SECRET` - Secret key for API authentication tokens (for legacy <= 1.3.0, `AUTH_SECRET` was used for dashboard session)
+- `NS_API_KEY` - API authentication key (legacy SimpleNS <= 1.3.0 only; for > 1.3.0, external API keys are created and managed dynamically in the Dashboard at `/keys`)
 - `ADMIN_PASSWORD` - Dashboard admin password (legacy SimpleNS <= 1.3.0 only; for > 1.3.0, the admin account is set up interactively via the Dashboard at `/setup` upon first boot)
 - Plugin credentials (if any plugins were installed)
 

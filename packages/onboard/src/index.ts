@@ -543,7 +543,7 @@ async function main() {
             } else {
                 logWarning(
                     '⚠️  Auto-generated credentials in .env file. ' +
-                    'Please update NS_API_KEY and AUTH_SECRET before deploying to production!'
+                    'Please update JWT_SECRET before deploying to production!'
                 );
             }
         }
@@ -736,12 +736,13 @@ async function main() {
 
         // In full mode, show a comprehensive security warning
         if (options.full) {
-            const credentialWarnings = [
-                '  • NS_API_KEY - API authentication key',
-                '  • AUTH_SECRET - Session secret for dashboard',
-            ];
+            const credentialWarnings: string[] = [];
             if (isLegacy) {
+                credentialWarnings.push('  • NS_API_KEY - API authentication key');
+                credentialWarnings.push('  • AUTH_SECRET - Session secret for dashboard');
                 credentialWarnings.push('  • ADMIN_PASSWORD - Dashboard admin password');
+            } else {
+                credentialWarnings.push('  • JWT_SECRET - Secret key for API authentication tokens');
             }
 
             if (pluginCredentialKeys.length > 0) {

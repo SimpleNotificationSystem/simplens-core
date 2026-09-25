@@ -51,11 +51,10 @@ export const LEGACY_CRITICAL_ENV_KEYS = [
  * Critical environment variables that always need user input (SimpleNS > 1.3.0)
  */
 export const CRITICAL_ENV_KEYS = [
-    'NS_API_KEY',
     'MONGO_URI',
     'BROKERS',
     'REDIS_URL',
-    'AUTH_SECRET',
+    'JWT_SECRET',
     'VERSION',
 ];
 
