@@ -7,6 +7,36 @@ dotenv.config();
 // Unique worker/processor ID for this instance (used for distributed locking)
 const WORKER_ID = process.env.WORKER_ID || `worker-${randomUUID().slice(0, 8)}`;
 
+export const INSECURE_JWT_SECRET_FALLBACK = "simplens-default-jwt-secret-key-change-in-production";
+
+/**
+ * Validates that JWT_SECRET is explicitly configured and cryptographically strong.
+ * Throws a fatal error if missing, set to insecure default, or too short.
+ */
+export function validateJwtSecret(customSecret?: string): string {
+    const secret = (customSecret !== undefined ? customSecret : process.env.JWT_SECRET)?.trim();
+
+    if (!secret) {
+        throw new Error(
+            "FATAL: JWT_SECRET environment variable is missing. SimpleNS requires an explicitly configured JWT secret to secure admin tokens."
+        );
+    }
+
+    if (secret === INSECURE_JWT_SECRET_FALLBACK) {
+        throw new Error(
+            "FATAL: JWT_SECRET is set to the default insecure placeholder. You must configure a unique, secure secret."
+        );
+    }
+
+    if (secret.length < 32) {
+        throw new Error(
+            `FATAL: JWT_SECRET is too short (${secret.length} characters). It must be at least 32 characters long for cryptographic security.`
+        );
+    }
+
+    return secret;
+}
+
 export const env = {
     // ========================================================================
     // 1. BOOTSTRAP ENVIRONMENT VARIABLES (from .env / process.env)
@@ -23,7 +53,9 @@ export const env = {
 
     // API Server
     PORT: <number>parseInt(process.env.PORT || "3000"),
-    JWT_SECRET: <string>(process.env.JWT_SECRET || "simplens-default-jwt-secret-key-change-in-production"),
+    get JWT_SECRET(): string {
+        return validateJwtSecret();
+    },
     DELAYED_PARTITION: <number>parseInt(process.env.DELAYED_PARTITION || "1"),
     NOTIFICATION_STATUS_PARTITION: <number>parseInt(process.env.NOTIFICATION_STATUS_PARTITION || "1"),
 

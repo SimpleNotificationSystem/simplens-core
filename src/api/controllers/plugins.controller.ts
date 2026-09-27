@@ -8,7 +8,12 @@ import type { Request, Response } from 'express';
 import { PluginRegistry, PluginManagerService, NpmAuthService } from '@src/plugins/index.js';
 import { apiLogger as logger } from '@src/workers/utils/logger.js';
 import axios from 'axios';
-import { installPluginPayloadSchema, npmAuthConfigSchema } from '@src/types/schemas.js';
+import {
+  installPluginPayloadSchema,
+  npmAuthConfigSchema,
+  changePluginVersionSchema,
+  uninstallPluginSchema,
+} from '@src/types/schemas.js';
 import type { plugin_catalog_entry } from '@src/types/types.js';
 
 const PLUGIN_CATALOG_BASE_URL = 'https://www.simplens.in/plugins';
@@ -132,14 +137,17 @@ export const installPlugin = async (req: Request, res: Response): Promise<void> 
  */
 export const changePluginVersion = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { package: packageName, version } = req.body;
-    if (!packageName || !version) {
+    const validation = changePluginVersionSchema.safeParse(req.body);
+    if (!validation.success) {
       res.status(400).json({
         error: 'Bad Request',
-        message: 'Both package name and target version are required'
+        message: 'Invalid plugin version change payload',
+        details: validation.error.flatten().fieldErrors,
       });
       return;
     }
+
+    const { package: packageName, version } = validation.data;
 
     const plugin = await PluginManagerService.changePluginVersion(packageName.trim(), version.trim());
     res.json({
@@ -162,23 +170,27 @@ export const changePluginVersion = async (req: Request, res: Response): Promise<
  */
 export const uninstallPlugin = async (req: Request, res: Response): Promise<void> => {
   try {
-    let packageName = (req.query.package as string) || (req.body?.package as string);
+    let rawPackageName = (req.query.package as string) || (req.body?.package as string);
 
-    if (!packageName) {
+    if (!rawPackageName) {
       if (req.params.scope && req.params.package) {
-        packageName = `${req.params.scope}/${req.params.package}`;
+        rawPackageName = `${req.params.scope}/${req.params.package}`;
       } else if (req.params.package) {
-        packageName = decodeURIComponent(req.params.package);
+        rawPackageName = decodeURIComponent(req.params.package);
       }
     }
 
-    if (!packageName || typeof packageName !== 'string') {
+    const validation = uninstallPluginSchema.safeParse({ package: rawPackageName });
+    if (!validation.success) {
       res.status(400).json({
         error: 'Bad Request',
-        message: 'A valid npm package name is required'
+        message: 'Invalid npm package name format',
+        details: validation.error.flatten().fieldErrors,
       });
       return;
     }
+
+    const { package: packageName } = validation.data;
 
     await PluginManagerService.uninstallPlugin(packageName.trim());
     res.json({

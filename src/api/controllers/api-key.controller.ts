@@ -20,6 +20,7 @@ function toApiKeyResponse(doc: ApiKeyDoc): ApiKeyResponse {
     return {
         key_id: doc.key_id,
         name: doc.name,
+        type: doc.type || 'notification',
         key_prefix: doc.key_prefix,
         status: doc.status,
         expires_at: doc.expires_at || null,
@@ -63,7 +64,7 @@ export const createApiKey = async (req: Request, res: Response): Promise<void> =
             return;
         }
 
-        const { name, expires_at } = validation.data;
+        const { name, type, expires_at } = validation.data;
 
         // Generate cryptographically random API key
         const rawKey = `sns_live_${crypto.randomBytes(24).toString('base64url')}`;
@@ -74,6 +75,7 @@ export const createApiKey = async (req: Request, res: Response): Promise<void> =
         const newDoc = await api_key_model.create({
             key_id,
             name,
+            type: type || 'notification',
             key_prefix,
             key_hash,
             status: 'active',

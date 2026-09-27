@@ -145,6 +145,64 @@ describe('ProviderManagerService', () => {
     });
   });
 
+  describe('updateProvider', () => {
+    it('should promote an active fallback provider to default in routing when default provider is disabled', async () => {
+      const mockDoc = {
+        _id: '507f1f77bcf86cd799439011',
+        id: 'gmail-prod',
+        plugin_name: '@simplens/mock',
+        channel: 'email',
+        enabled: true,
+        save: vi.fn().mockResolvedValue(undefined),
+        toObject: () => mockDoc,
+      };
+
+      vi.spyOn(Provider, 'findOne').mockResolvedValue(mockDoc as any);
+      vi.spyOn(ChannelRouting, 'find').mockReturnValue({
+        lean: vi.fn().mockResolvedValue([
+          {
+            _id: 'routing-1',
+            channel: 'email',
+            default_provider_id: 'gmail-prod',
+            fallback_provider_ids: ['smtp-backup', 'secondary-backup'],
+          },
+        ]),
+      } as any);
+
+      vi.spyOn(Provider, 'find').mockReturnValue({
+        lean: vi.fn().mockResolvedValue([
+          { id: 'smtp-backup', channel: 'email', enabled: true },
+        ]),
+      } as any);
+
+      const updateRoutingSpy = vi.spyOn(ChannelRouting, 'updateOne').mockResolvedValue({ acknowledged: true } as any);
+      const setChannelConfigSpy = vi.spyOn(PluginRegistry, 'setChannelConfig');
+      vi.spyOn(PluginRegistry, 'unregister').mockReturnValue(true);
+
+      await ProviderManagerService.updateProvider('gmail-prod', { enabled: false });
+
+      expect(mockDoc.enabled).toBe(false);
+      expect(mockDoc.save).toHaveBeenCalled();
+      expect(PluginRegistry.unregister).toHaveBeenCalledWith('gmail-prod');
+      expect(updateRoutingSpy).toHaveBeenCalledWith(
+        { _id: 'routing-1' },
+        {
+          $set: {
+            default_provider_id: 'smtp-backup',
+            fallback_provider_ids: ['secondary-backup'],
+          },
+        }
+      );
+      expect(setChannelConfigSpy).toHaveBeenCalledWith('email', {
+        default: 'smtp-backup',
+        fallback: ['secondary-backup'],
+      });
+      expect(PluginSyncService.publish).toHaveBeenCalledWith('CHANNEL_ROUTING_UPDATED', {
+        channel: 'email',
+      });
+    });
+  });
+
   describe('deleteProvider', () => {
     it('should remove the provider from routing and promote the first fallback', async () => {
       vi.spyOn(Provider, 'findOne').mockResolvedValue({ id: 'gmail-prod' } as any);

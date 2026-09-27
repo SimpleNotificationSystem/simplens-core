@@ -19,6 +19,12 @@ const api_key_schema = new mongoose.Schema<ApiKeyDoc>(
             type: String,
             required: true,
         },
+        type: {
+            type: String,
+            enum: ['notification', 'admin'],
+            default: 'notification',
+            index: true,
+        },
         key_prefix: {
             type: String,
             required: true,

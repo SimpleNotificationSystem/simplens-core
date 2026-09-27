@@ -54,7 +54,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient, apiKeyService } from "@/lib/api-client";
-import type { ApiKey, ApiKeyUsageDetailResponse } from "@/lib/types";
+import type { ApiKey, ApiKeyUsageDetailResponse, ApiKeyType } from "@/lib/types";
 
 const fetcher = <T,>(url: string): Promise<T> => apiClient.get(url) as unknown as Promise<T>;
 
@@ -65,6 +65,7 @@ export default function ApiKeysPage() {
     // Create Modal state
     const [createOpen, setCreateOpen] = useState(false);
     const [newKeyName, setNewKeyName] = useState("");
+    const [newKeyType, setNewKeyType] = useState<ApiKeyType>("notification");
     const [isCreating, setIsCreating] = useState(false);
 
     // Reveal Key Modal state
@@ -87,10 +88,11 @@ export default function ApiKeysPage() {
 
         setIsCreating(true);
         try {
-            const res = await apiKeyService.create({ name: newKeyName.trim() });
+            const res = await apiKeyService.create({ name: newKeyName.trim(), type: newKeyType });
             toast.success("API key created successfully");
             setCreateOpen(false);
             setNewKeyName("");
+            setNewKeyType("notification");
             setRevealedKey({ name: res.key.name, raw_key: res.raw_key });
             mutate();
         } catch (err: unknown) {
@@ -226,6 +228,7 @@ export default function ApiKeysPage() {
                                         <TableRow>
                                             <TableHead>Name</TableHead>
                                             <TableHead>Key Prefix</TableHead>
+                                            <TableHead>Type</TableHead>
                                             <TableHead>Status</TableHead>
                                             <TableHead>Usage (Notifications)</TableHead>
                                             <TableHead>Channel Breakdown</TableHead>
@@ -247,6 +250,17 @@ export default function ApiKeysPage() {
                                                         <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
                                                             {key.key_prefix}
                                                         </code>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {key.type === "admin" ? (
+                                                            <Badge variant="outline" className="text-indigo-600 dark:text-indigo-400 border-indigo-500/30 bg-indigo-500/10 font-normal">
+                                                                Admin (Full Access)
+                                                            </Badge>
+                                                        ) : (
+                                                            <Badge variant="outline" className="text-blue-600 dark:text-blue-400 border-blue-500/30 bg-blue-500/10 font-normal">
+                                                                Notification
+                                                            </Badge>
+                                                        )}
                                                     </TableCell>
                                                     <TableCell>
                                                         {key.status === "active" ? (
@@ -336,15 +350,55 @@ export default function ApiKeysPage() {
                                     Enter a descriptive name for this API key. The key secret will be displayed once after creation.
                                 </DialogDescription>
                             </DialogHeader>
-                            <div className="space-y-2 py-2">
-                                <label className="text-sm font-medium">Key Name</label>
-                                <Input
-                                    placeholder="e.g. Billing Service, Mobile App Backend"
-                                    value={newKeyName}
-                                    onChange={(e) => setNewKeyName(e.target.value)}
-                                    required
-                                    autoFocus
-                                />
+                            <div className="space-y-4 py-2">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">Key Name</label>
+                                    <Input
+                                        placeholder="e.g. Billing Service, Mobile App Backend"
+                                        value={newKeyName}
+                                        onChange={(e) => setNewKeyName(e.target.value)}
+                                        required
+                                        autoFocus
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">Key Type & Permissions</label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div
+                                            onClick={() => setNewKeyType("notification")}
+                                            className={`cursor-pointer rounded-lg border p-3 transition-colors ${
+                                                newKeyType === "notification"
+                                                    ? "border-primary bg-primary/5 text-primary"
+                                                    : "border-border hover:bg-muted/50"
+                                            }`}
+                                        >
+                                            <div className="font-semibold text-xs flex items-center justify-between">
+                                                <span>Notification</span>
+                                                {newKeyType === "notification" && <Check className="h-3.5 w-3.5" />}
+                                            </div>
+                                            <p className="text-[11px] text-muted-foreground mt-1">
+                                                Can send notifications and check delivery status.
+                                            </p>
+                                        </div>
+                                        <div
+                                            onClick={() => setNewKeyType("admin")}
+                                            className={`cursor-pointer rounded-lg border p-3 transition-colors ${
+                                                newKeyType === "admin"
+                                                    ? "border-primary bg-primary/5 text-primary"
+                                                    : "border-border hover:bg-muted/50"
+                                            }`}
+                                        >
+                                            <div className="font-semibold text-xs flex items-center justify-between">
+                                                <span>Admin (Full Access)</span>
+                                                {newKeyType === "admin" && <Check className="h-3.5 w-3.5" />}
+                                            </div>
+                                            <p className="text-[11px] text-muted-foreground mt-1">
+                                                Full access to management endpoints and notifications.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             <DialogFooter>
                                 <Button

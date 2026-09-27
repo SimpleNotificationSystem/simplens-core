@@ -87,6 +87,9 @@ app.use('/api/admin/auth', admin_auth_router);
 
 const start_server = async () => {
     try {
+        // Fail startup immediately if JWT_SECRET is missing or insecure
+        void env.JWT_SECRET;
+
         const db = await connectMongoDB();
         logger.success("Successfully connected to MongoDB");
 

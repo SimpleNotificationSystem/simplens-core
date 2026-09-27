@@ -7,10 +7,14 @@
 
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import { pathToFileURL } from 'url';
 import type { SimpleNSProvider, ProviderManifest } from '@src/types/types.js';
-import { providerManifestSchema } from '@src/types/schemas.js';
+import {
+  providerManifestSchema,
+  npmPackageNameSchema,
+  npmPackageVersionSchema,
+} from '@src/types/schemas.js';
 import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
 
 export const PLUGINS_DIR = join(process.cwd(), '.plugins');
@@ -279,20 +283,31 @@ export async function extractPackageManifest(
  * Install an npm package into .plugins
  */
 export function installNpmPackage(packageName: string, version?: string): void {
+  const pkgValidation = npmPackageNameSchema.safeParse(packageName);
+  if (!pkgValidation.success) {
+    throw new Error(`Invalid npm package name '${packageName}'`);
+  }
+  if (version && version !== 'latest') {
+    const verValidation = npmPackageVersionSchema.safeParse(version);
+    if (!verValidation.success) {
+      throw new Error(`Invalid npm package version '${version}'`);
+    }
+  }
+
   initPluginsDir();
   const specifier = version && version !== 'latest' ? `${packageName}@${version}` : `${packageName}@latest`;
   logger.info(`Running npm install ${specifier} in ${PLUGINS_DIR}...`);
 
-  try {
-    execSync(`npm install ${specifier}`, {
-      cwd: PLUGINS_DIR,
-      stdio: 'pipe',
-    });
-    logger.success(`Successfully installed ${specifier}`);
-  } catch (err: unknown) {
-    const execErr = err as { stderr?: Buffer; message?: string };
-    const stderrMsg = execErr.stderr ? execErr.stderr.toString('utf-8') : '';
-    logger.error(`Failed to install ${specifier}:`, stderrMsg || execErr.message || err);
+  const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const result = spawnSync(npmCmd, ['install', specifier], {
+    cwd: PLUGINS_DIR,
+    stdio: 'pipe',
+    shell: process.platform === 'win32',
+  });
+
+  if (result.status !== 0 || result.error) {
+    const stderrMsg = result.stderr ? result.stderr.toString('utf-8') : (result.error?.message || '');
+    logger.error(`Failed to install ${specifier}:`, stderrMsg || result.error);
 
     let friendlyMessage = `Failed to install package '${specifier}'`;
     if (stderrMsg.includes('E401') || stderrMsg.includes('401 Unauthorized')) {
@@ -305,25 +320,36 @@ export function installNpmPackage(packageName: string, version?: string): void {
       friendlyMessage += `: ${stderrMsg.trim().slice(0, 300)}`;
     }
 
-    throw new Error(friendlyMessage, { cause: err });
+    throw new Error(friendlyMessage, { cause: result.error });
   }
+
+  logger.success(`Successfully installed ${specifier}`);
 }
 
 /**
  * Uninstall an npm package from .plugins
  */
 export function uninstallNpmPackage(packageName: string): void {
+  const pkgValidation = npmPackageNameSchema.safeParse(packageName);
+  if (!pkgValidation.success) {
+    throw new Error(`Invalid npm package name '${packageName}'`);
+  }
+
   initPluginsDir();
   logger.info(`Running npm uninstall ${packageName} in ${PLUGINS_DIR}...`);
 
-  try {
-    execSync(`npm uninstall ${packageName}`, {
-      cwd: PLUGINS_DIR,
-      stdio: 'pipe',
-    });
-    logger.success(`Successfully uninstalled ${packageName}`);
-  } catch (err) {
-    logger.error(`Failed to uninstall ${packageName}:`, err);
-    throw new Error(`Failed to uninstall package: ${packageName}`, { cause: err });
+  const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const result = spawnSync(npmCmd, ['uninstall', packageName], {
+    cwd: PLUGINS_DIR,
+    stdio: 'pipe',
+    shell: process.platform === 'win32',
+  });
+
+  if (result.status !== 0 || result.error) {
+    const stderrMsg = result.stderr ? result.stderr.toString('utf-8') : (result.error?.message || '');
+    logger.error(`Failed to uninstall ${packageName}:`, stderrMsg || result.error);
+    throw new Error(`Failed to uninstall package: ${packageName}`, { cause: result.error });
   }
+
+  logger.success(`Successfully uninstalled ${packageName}`);
 }

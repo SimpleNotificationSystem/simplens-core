@@ -140,6 +140,10 @@ import {
     npmAuthConfigSchema,
     npmAuthStatusSchema,
     installPluginPayloadSchema,
+    changePluginVersionSchema,
+    uninstallPluginSchema,
+    npmPackageNameSchema,
+    npmPackageVersionSchema,
     providerRateLimitConfigDetailsSchema,
     providerRateLimitRealtimeStatusSchema,
     providerRateLimitStatusSchema,
@@ -147,6 +151,7 @@ import {
     providerRateLimitListResponseSchema,
     apiKeyUsageSchema,
     apiKeyStatusSchema,
+    apiKeyTypeSchema,
     apiKeyDocSchema,
     createApiKeySchema,
     apiKeyResponseSchema,
@@ -578,6 +583,19 @@ export type ProviderRateLimitStatus = z.infer<typeof providerRateLimitStatusSche
 export type ProviderRateLimitSummary = z.infer<typeof providerRateLimitSummarySchema>;
 export type ProviderRateLimitListResponse = z.infer<typeof providerRateLimitListResponseSchema>;
 
+export interface ProviderBasicMeta {
+    id: string;
+    channel: string;
+    plugin_name: string;
+    display_name?: string;
+    enabled: boolean;
+}
+
+export type npm_package_name = z.infer<typeof npmPackageNameSchema>;
+export type npm_package_version = z.infer<typeof npmPackageVersionSchema>;
+export type change_plugin_version_payload = z.infer<typeof changePluginVersionSchema>;
+export type uninstall_plugin_payload = z.infer<typeof uninstallPluginSchema>;
+
 // ============================================================================
 // API KEY & ADMIN AUTH TYPES
 // ============================================================================
@@ -590,6 +608,7 @@ export interface AdminJwtPayload {
     exp?: number;
 }
 
+export type ApiKeyType = z.infer<typeof apiKeyTypeSchema>;
 export type ApiKeyStatus = z.infer<typeof apiKeyStatusSchema>;
 export type ApiKeyUsage = z.infer<typeof apiKeyUsageSchema>;
 export type ApiKeyDoc = z.infer<typeof apiKeyDocSchema>;

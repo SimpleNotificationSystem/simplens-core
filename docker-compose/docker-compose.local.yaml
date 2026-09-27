@@ -27,7 +27,7 @@ services:
       BROKERS: kafka:9093
       LOKI_URL: http://loki:3100
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      JWT_SECRET: ${JWT_SECRET:-simplens-default-jwt-secret-key-change-in-production}
+      JWT_SECRET: ${JWT_SECRET}
     volumes:
       - logs-data-local:/app/logs
     command: [ "node", "dist/api/server.js" ]

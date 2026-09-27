@@ -17,6 +17,7 @@ import type {
     RateLimitResult,
     ProviderRateLimitStatus,
     ProviderRateLimitListResponse,
+    ProviderBasicMeta,
 } from '@src/types/types.js';
 
 // Conversion divisors to convert rate to per-second
@@ -186,14 +187,6 @@ export const getTokenCount = async (providerId: string): Promise<number> => {
 
     return Math.min(currentTokens + tokensToAdd, config.maxTokens);
 };
-
-interface ProviderBasicMeta {
-    id: string;
-    channel: string;
-    plugin_name: string;
-    display_name?: string;
-    enabled: boolean;
-}
 
 /**
  * Fetch all provider rate limit statuses at scale using batched Redis MGET

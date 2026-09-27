@@ -615,9 +615,41 @@ export const npmAuthStatusSchema = z.object({
 /**
  * Payload schema for installing a plugin package
  */
+/**
+ * Strict npm package name schema preventing shell injection and metacharacters
+ */
+export const npmPackageNameSchema = z.string()
+  .min(1, 'Package name is required')
+  .max(214, 'Package name cannot exceed 214 characters')
+  .regex(/^(?:@[a-z0-9_.-]+\/)?[a-z0-9_.-]+$/i, 'Invalid npm package name format');
+
+/**
+ * Strict npm package version / tag schema
+ */
+export const npmPackageVersionSchema = z.string()
+  .regex(
+    /^(latest|\^?[0-9]+(?:\.[0-9]+)?(?:\.[0-9]+)?(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?|~?[0-9]+(?:\.[0-9]+)?(?:\.[0-9]+)?(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?|[0-9]+(?:\.[0-9]+)?(?:\.[0-9]+)?(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)$/,
+    'Invalid npm version or tag format'
+  );
+
+/**
+ * Payload schema for changing plugin version
+ */
+export const changePluginVersionSchema = z.object({
+  package: npmPackageNameSchema,
+  version: npmPackageVersionSchema,
+});
+
+/**
+ * Schema for uninstalling a plugin
+ */
+export const uninstallPluginSchema = z.object({
+  package: npmPackageNameSchema,
+});
+
 export const installPluginPayloadSchema = z.object({
-  package: z.string().min(1, "Package name is required"),
-  version: z.string().optional(),
+  package: npmPackageNameSchema,
+  version: npmPackageVersionSchema.optional(),
   auth: z.object({
     token: z.string().optional(),
     registry_url: z.string().url("Invalid registry URL").optional(),
@@ -694,9 +726,12 @@ export const apiKeyUsageSchema = z.object({
 
 export const apiKeyStatusSchema = z.enum(['active', 'revoked']);
 
+export const apiKeyTypeSchema = z.enum(['notification', 'admin']);
+
 export const apiKeyDocSchema = z.object({
   key_id: z.string(),
   name: z.string(),
+  type: apiKeyTypeSchema.default('notification'),
   key_prefix: z.string(),
   key_hash: z.string(),
   status: apiKeyStatusSchema,
@@ -708,12 +743,14 @@ export const apiKeyDocSchema = z.object({
 
 export const createApiKeySchema = z.object({
   name: z.string().min(1, 'API key name is required').max(100),
+  type: apiKeyTypeSchema.default('notification'),
   expires_at: z.coerce.date().optional(),
 });
 
 export const apiKeyResponseSchema = z.object({
   key_id: z.string(),
   name: z.string(),
+  type: apiKeyTypeSchema,
   key_prefix: z.string(),
   status: apiKeyStatusSchema,
   expires_at: z.coerce.date().nullable().optional(),

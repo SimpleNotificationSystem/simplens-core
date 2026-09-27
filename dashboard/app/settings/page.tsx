@@ -688,6 +688,65 @@ export default function SettingsPage() {
                                         <span className="text-[10px] text-muted-foreground">Default: 300,000</span>
                                     </div>
                                 </div>
+
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs">Claim Timeout (ms)</Label>
+                                    <Input
+                                        type="number"
+                                        min={5000}
+                                        max={300000}
+                                        value={settings.recovery.recovery_claim_timeout_ms}
+                                        onChange={(e) =>
+                                            updateGroupField(
+                                                "recovery",
+                                                "recovery_claim_timeout_ms",
+                                                parseInt(e.target.value) || 0
+                                            )
+                                        }
+                                        className="h-9 font-mono text-xs"
+                                    />
+                                    <span className="text-[10px] text-muted-foreground">Default: 60,000 (instance claim lock)</span>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs">Resolved Alerts Retention (ms)</Label>
+                                        <Input
+                                            type="number"
+                                            min={60000}
+                                            max={2592000000}
+                                            value={settings.recovery.cleanup_resolved_alerts_retention_ms}
+                                            onChange={(e) =>
+                                                updateGroupField(
+                                                    "recovery",
+                                                    "cleanup_resolved_alerts_retention_ms",
+                                                    parseInt(e.target.value) || 0
+                                                )
+                                            }
+                                            className="h-9 font-mono text-xs"
+                                        />
+                                        <span className="text-[10px] text-muted-foreground">Default: 86,400,000 (24h)</span>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs">Processed Outbox Retention (ms)</Label>
+                                        <Input
+                                            type="number"
+                                            min={60000}
+                                            max={2592000000}
+                                            value={settings.recovery.cleanup_processed_status_outbox_retention_ms}
+                                            onChange={(e) =>
+                                                updateGroupField(
+                                                    "recovery",
+                                                    "cleanup_processed_status_outbox_retention_ms",
+                                                    parseInt(e.target.value) || 0
+                                                )
+                                            }
+                                            className="h-9 font-mono text-xs"
+                                        />
+                                        <span className="text-[10px] text-muted-foreground">Default: 86,400,000 (24h)</span>
+                                    </div>
+                                </div>
                             </CardContent>
                         </Card>
 

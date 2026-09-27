@@ -412,9 +412,12 @@ export interface ApiKeyUsage {
   last_used_at?: string | null;
 }
 
+export type ApiKeyType = 'notification' | 'admin';
+
 export interface ApiKey {
   key_id: string;
   name: string;
+  type: ApiKeyType;
   key_prefix: string;
   status: 'active' | 'revoked';
   expires_at?: string | null;
@@ -424,6 +427,7 @@ export interface ApiKey {
 
 export interface CreateApiKeyPayload {
   name: string;
+  type?: ApiKeyType;
   expires_at?: string;
 }
 

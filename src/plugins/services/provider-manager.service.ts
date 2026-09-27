@@ -183,6 +183,48 @@ export class ProviderManagerService {
       }
     } else {
       PluginRegistry.unregister(id);
+
+      // If disabling a provider that was currently default in ChannelRouting, promote an active fallback
+      try {
+        const routings = await ChannelRouting.find({ default_provider_id: id }).lean();
+        for (const routing of routings) {
+          const enabledProviders = await Provider.find({
+            channel: routing.channel,
+            enabled: true,
+            id: { $ne: id },
+          }).lean();
+          const enabledProviderIds = new Set(enabledProviders.map((p) => p.id));
+
+          const remainingFallbacks = (routing.fallback_provider_ids || []).filter(
+            (pid: string) => pid !== id
+          );
+          const nextDefault = remainingFallbacks.find((pid: string) => enabledProviderIds.has(pid))
+            || enabledProviders[0]?.id;
+
+          if (nextDefault) {
+            const newFallbacks = remainingFallbacks.filter((pid: string) => pid !== nextDefault);
+            await ChannelRouting.updateOne(
+              { _id: routing._id },
+              {
+                $set: {
+                  default_provider_id: nextDefault,
+                  fallback_provider_ids: newFallbacks,
+                },
+              }
+            );
+            PluginRegistry.setChannelConfig(routing.channel, {
+              default: nextDefault,
+              fallback: newFallbacks,
+            });
+            await PluginSyncService.publish('CHANNEL_ROUTING_UPDATED', { channel: routing.channel });
+            logger.info(`Promoted fallback provider '${nextDefault}' as default for channel '${routing.channel}' upon disabling '${id}'.`);
+          }
+        }
+      } catch (routingErr) {
+        logger.warn(`Failed to promote fallback routing when disabling provider '${id}':`, {
+          error: routingErr instanceof Error ? routingErr.message : String(routingErr),
+        });
+      }
     }
 
     await PluginSyncService.publish('PROVIDER_UPSERTED', {

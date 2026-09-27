@@ -43,10 +43,29 @@ async function handleDynamicApiKey(
             return;
         }
 
-        const path = req.originalUrl || req.path;
-        if (path.includes('/api/admin/auth/setup') || path.includes('/api/admin/auth/verify')) {
+        const fullPath = (req.originalUrl || `${req.baseUrl || ''}${req.path}`).split('?')[0];
+        if (fullPath.includes('/api/admin/auth/setup') || fullPath.includes('/api/admin/auth/verify')) {
             res.status(403).json({
                 error: 'Forbidden: API keys cannot access administrator credential setup or verification routes.',
+            });
+            return;
+        }
+
+        const keyType = keyDoc.type || 'notification';
+        const isManagementRoute =
+            fullPath.includes('/api/providers') ||
+            fullPath.includes('/api/plugins') ||
+            fullPath.includes('/api/channels/routing') ||
+            fullPath.includes('/api/admin-channels') ||
+            fullPath.includes('/api/settings') ||
+            fullPath.includes('/api/keys') ||
+            fullPath.includes('/api/dashboard') ||
+            fullPath.includes('/api/alerts') ||
+            (fullPath.includes('/api/templates') && req.method !== 'GET');
+
+        if (isManagementRoute && keyType !== 'admin') {
+            res.status(403).json({
+                error: 'Forbidden: API key does not have management permissions. Requires admin key.',
             });
             return;
         }

@@ -201,8 +201,23 @@ class PluginRegistryClass {
     getDefaultProvider(channel: string): SimpleNSProvider | undefined {
         const config = this.channelConfig.get(channel);
         if (config?.default) {
-            return this.get(config.default);
+            const defaultProvider = this.get(config.default);
+            if (defaultProvider) {
+                return defaultProvider;
+            }
         }
+
+        // If configured default is unregistered/disabled, check explicitly configured fallbacks in order
+        if (config?.fallback) {
+            const fallbackIds = Array.isArray(config.fallback) ? config.fallback : [config.fallback];
+            for (const fallbackId of fallbackIds) {
+                const fallbackProvider = this.get(fallbackId);
+                if (fallbackProvider) {
+                    return fallbackProvider;
+                }
+            }
+        }
+
         // Fall back to first registered provider for channel
         const providers = this.getProvidersForChannel(channel);
         return providers[0];
@@ -213,9 +228,20 @@ class PluginRegistryClass {
      */
     getDefaultProviderId(channel: string): string | undefined {
         const config = this.channelConfig.get(channel);
-        if (config?.default) {
+        if (config?.default && this.get(config.default)) {
             return config.default;
         }
+
+        // If configured default is unregistered/disabled, check explicitly configured fallbacks in order
+        if (config?.fallback) {
+            const fallbackIds = Array.isArray(config.fallback) ? config.fallback : [config.fallback];
+            for (const fallbackId of fallbackIds) {
+                if (this.get(fallbackId)) {
+                    return fallbackId;
+                }
+            }
+        }
+
         // Fall back to first registered provider ID for channel
         const ids = this.channelProviders.get(channel);
         return ids?.[0];

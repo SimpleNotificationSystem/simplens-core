@@ -354,5 +354,39 @@ describe('API Keys Integration & Usage Tracking', () => {
             expect(statusRes.status).toBe(200);
             expect(statusRes.body.isConfigured).toBe(true);
         });
+
+        it('should forbid notification API keys from accessing /api/keys management route', async () => {
+            const createRes = await request(app)
+                .post('/api/keys')
+                .set('Authorization', `Bearer ${adminToken}`)
+                .send({ name: 'Worker Key', type: 'notification' });
+
+            const rawKey = createRes.body.raw_key;
+            expect(createRes.body.key.type).toBe('notification');
+
+            const keysRes = await request(app)
+                .get('/api/keys')
+                .set('Authorization', `Bearer ${rawKey}`);
+
+            expect(keysRes.status).toBe(403);
+            expect(keysRes.body.error).toContain('management permissions');
+        });
+
+        it('should allow admin API keys to access /api/keys management route', async () => {
+            const createRes = await request(app)
+                .post('/api/keys')
+                .set('Authorization', `Bearer ${adminToken}`)
+                .send({ name: 'Super Admin Key', type: 'admin' });
+
+            const rawKey = createRes.body.raw_key;
+            expect(createRes.body.key.type).toBe('admin');
+
+            const keysRes = await request(app)
+                .get('/api/keys')
+                .set('Authorization', `Bearer ${rawKey}`);
+
+            expect(keysRes.status).toBe(200);
+            expect(keysRes.body.keys).toBeDefined();
+        });
     });
 });

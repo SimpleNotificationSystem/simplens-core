@@ -166,6 +166,55 @@ describe('Auth Middleware', () => {
             expect(res.status).toHaveBeenCalledWith(403);
             expect(next).not.toHaveBeenCalled();
         });
+
+        it('should return 403 when notification API key accesses management routes', async () => {
+            const rawKey = 'sns_live_notifkey';
+            const mockKeyDoc = {
+                key_id: 'key-123',
+                status: 'active',
+                type: 'notification',
+                expires_at: null,
+                toObject: () => ({ key_id: 'key-123', type: 'notification' }),
+            };
+
+            mockFindOne.mockResolvedValueOnce(mockKeyDoc);
+
+            const req = createMockRequest(`Bearer ${rawKey}`, '/api/providers') as Request;
+            const res = createMockResponse() as Response;
+            const next = vi.fn();
+
+            await authMiddleware.auth_middleware(req, res, next as NextFunction);
+
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(res.json).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    error: expect.stringContaining('Requires admin key'),
+                })
+            );
+            expect(next).not.toHaveBeenCalled();
+        });
+
+        it('should allow admin API key to access management routes', async () => {
+            const rawKey = 'sns_live_adminkey';
+            const mockKeyDoc = {
+                key_id: 'key-admin',
+                status: 'active',
+                type: 'admin',
+                expires_at: null,
+                toObject: () => ({ key_id: 'key-admin', type: 'admin' }),
+            };
+
+            mockFindOne.mockResolvedValueOnce(mockKeyDoc);
+
+            const req = createMockRequest(`Bearer ${rawKey}`, '/api/providers') as Request;
+            const res = createMockResponse() as Response;
+            const next = vi.fn();
+
+            await authMiddleware.auth_middleware(req, res, next as NextFunction);
+
+            expect(next).toHaveBeenCalled();
+            expect(res.status).not.toHaveBeenCalled();
+        });
     });
 
     describe('Missing or Invalid Authentication', () => {

@@ -40,4 +40,28 @@ describe('Admin JWT Utilities', () => {
         expect(verifyAdminJwt('')).toBeNull();
         expect(verifyAdminJwt('random-string')).toBeNull();
     });
+
+    describe('JWT Secret Validation', () => {
+        it('should fail if JWT_SECRET is empty or whitespace', async () => {
+            const { validateJwtSecret } = await import('@src/config/env.config.js');
+            expect(() => validateJwtSecret('')).toThrow(/missing/i);
+            expect(() => validateJwtSecret('   ')).toThrow(/missing/i);
+        });
+
+        it('should fail if JWT_SECRET is the default insecure placeholder', async () => {
+            const { validateJwtSecret, INSECURE_JWT_SECRET_FALLBACK } = await import('@src/config/env.config.js');
+            expect(() => validateJwtSecret(INSECURE_JWT_SECRET_FALLBACK)).toThrow(/insecure placeholder/i);
+        });
+
+        it('should fail if JWT_SECRET is shorter than 32 characters', async () => {
+            const { validateJwtSecret } = await import('@src/config/env.config.js');
+            expect(() => validateJwtSecret('short-secret-key-123')).toThrow(/too short/i);
+        });
+
+        it('should succeed when JWT_SECRET is at least 32 characters', async () => {
+            const { validateJwtSecret } = await import('@src/config/env.config.js');
+            const valid = 'a-very-strong-and-secure-random-jwt-secret-key-32-chars';
+            expect(validateJwtSecret(valid)).toBe(valid);
+        });
+    });
 });
