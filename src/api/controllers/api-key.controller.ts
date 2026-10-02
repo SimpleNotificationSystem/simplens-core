@@ -11,6 +11,7 @@ import api_key_model from '@src/database/models/api-key.models.js';
 import notification_model from '@src/database/models/notification.models.js';
 import { createApiKeySchema } from '@src/types/schemas.js';
 import type { ApiKeyDoc, ApiKeyResponse } from '@src/types/types.js';
+import { ApiKeyCache } from '../utils/api-key-cache.js';
 import { apiLogger as logger } from '@src/workers/utils/logger.js';
 
 /**
@@ -160,6 +161,7 @@ export const revokeApiKey = async (req: Request, res: Response): Promise<void> =
         }
 
         logger.info(`Revoked API key: ${key.name} (${id})`);
+        ApiKeyCache.invalidate(id);
         res.status(200).json({
             success: true,
             message: 'API key has been revoked successfully',
@@ -185,6 +187,7 @@ export const deleteApiKey = async (req: Request, res: Response): Promise<void> =
         }
 
         logger.info(`Deleted API key (${id})`);
+        ApiKeyCache.invalidate(id);
         res.status(200).json({
             success: true,
             message: 'API key deleted successfully',

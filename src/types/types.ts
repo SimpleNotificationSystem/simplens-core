@@ -616,3 +616,15 @@ export type CreateApiKeyInput = z.infer<typeof createApiKeySchema>;
 export type ApiKeyResponse = z.infer<typeof apiKeyResponseSchema>;
 export type CreateApiKeyResponse = z.infer<typeof createApiKeyResponseSchema>;
 
+export interface ApiKeyCacheEntry {
+    keyDoc: ApiKeyDoc;
+    cachedAt: number;
+}
+
+export interface PendingApiKeyUsage {
+    total_requests: number;
+    total_notifications: number;
+    by_channel: Record<string, number>;
+    last_used_at: Date;
+}
+

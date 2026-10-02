@@ -49,10 +49,6 @@ const projectRootDir = join(__dirname, '..');
 dotenv.config({ path: join(projectRootDir, '.env') });
 dotenv.config();
 
-// HTTP Connection Pooling for high concurrency load testing
-const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 200 });
-const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 200 });
-
 // --- Argument Parsing ---
 const args = process.argv.slice(2);
 const config = {
@@ -177,6 +173,10 @@ if (!webhookUrl) {
   const host = config.hostType === 'docker' ? 'host.docker.internal' : (config.hostType === 'local' ? 'localhost' : config.hostType);
   webhookUrl = `http://${host}:4000/webhook`;
 }
+
+// HTTP Connection Pooling for high concurrency load testing
+const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 200 });
+const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 200 });
 
 // Axios Client instance with connection pooling
 const apiClient = axios.create({
@@ -387,4 +387,3 @@ main().catch(err => {
   console.error('Fatal execution error:', err);
   process.exit(1);
 });
-

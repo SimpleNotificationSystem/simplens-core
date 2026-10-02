@@ -6,10 +6,10 @@ import { AdminAlertService } from "@src/admin-alerts/admin-alert.service.js";
 export const connectMongoDB = async ()=>{
     try{
         const db = await mongoose.connect(env.MONGO_URI, {
-            maxPoolSize: 200,
+            maxPoolSize: 300,
             minPoolSize: 20,
-            maxConnecting: 10,
-            serverSelectionTimeoutMS: 5000,
+            maxConnecting: 20,
+            serverSelectionTimeoutMS: 10000,
         });
         await db.connection.syncIndexes();
         logger.info("MongoDB indexes synced");

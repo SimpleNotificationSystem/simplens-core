@@ -20,7 +20,7 @@ import { NOTIFICATION_STATUS, OUTBOX_STATUS } from "@src/types/types.js";
 import mongoose from "mongoose";
 import notification_model from "@src/database/models/notification.models.js";
 import outbox_model from "@src/database/models/outbox.models.js";
-import api_key_model from "@src/database/models/api-key.models.js";
+import { ApiKeyUsageAggregator } from "./api-key-cache.js";
 import { apiLogger as logger } from "@src/workers/utils/logger.js";
 import { PluginRegistry } from "@src/plugins/index.js";
 import notification_template_model from "@src/database/models/notification-template.models.js";
@@ -416,12 +416,16 @@ export const process_notifications = async (
     const outbox_entries: outbox[] = [];
     const duplicate_keys: { request_id: string; channel: string }[] = [];
 
-    for (const notification of notifications) {
-      // Check for duplicates (include session for transactional read)
-      const existingNotification = await notification_model
-        .findOne({
-          request_id: notification.request_id,
-          channel: notification.channel,
+    const existingDuplicateSet = new Set<string>();
+
+    if (notifications.length > 1) {
+      const pairs = notifications.map((n) => ({
+        request_id: n.request_id,
+        channel: n.channel,
+      }));
+      const existingDocs = await notification_model
+        .find({
+          $or: pairs,
           status: {
             $in: [
               NOTIFICATION_STATUS.pending,
@@ -430,9 +434,47 @@ export const process_notifications = async (
             ],
           },
         })
-        .session(session);
+        .select('request_id channel')
+        .session(session)
+        .lean();
 
-      if (existingNotification) {
+      for (const doc of existingDocs) {
+        existingDuplicateSet.add(`${doc.request_id}:${doc.channel}`);
+      }
+    }
+
+    for (const notification of notifications) {
+      let isDuplicate = false;
+
+      if (notifications.length > 1) {
+        isDuplicate = existingDuplicateSet.has(
+          `${notification.request_id}:${notification.channel}`,
+        );
+      } else {
+        const query = notification_model
+          .findOne({
+            request_id: notification.request_id,
+            channel: notification.channel,
+            status: {
+              $in: [
+                NOTIFICATION_STATUS.pending,
+                NOTIFICATION_STATUS.processing,
+                NOTIFICATION_STATUS.delivered,
+              ],
+            },
+          })
+          .session(session);
+
+        const existingNotification =
+          typeof (query as unknown as { select?: (fields: string) => { lean: () => Promise<unknown> } }).select === 'function'
+            ? await (query as unknown as { select: (fields: string) => { lean: () => Promise<unknown> } })
+                .select('_id')
+                .lean()
+            : await query;
+        isDuplicate = Boolean(existingNotification);
+      }
+
+      if (isDuplicate) {
         duplicate_keys.push({
           request_id: notification.request_id as string,
           channel: notification.channel,
@@ -468,14 +510,12 @@ export const process_notifications = async (
       );
     }
 
-    // Insert notifications in bulk within transaction
+    // Insert notifications and outbox entries concurrently within transaction
     if (notifications_to_insert.length > 0) {
-      await notification_model.insertMany(notifications_to_insert, { session });
-    }
-
-    // Insert outbox entries in bulk within transaction
-    if (outbox_entries.length > 0) {
-      await outbox_model.insertMany(outbox_entries, { session });
+      await Promise.all([
+        notification_model.insertMany(notifications_to_insert, { session, ordered: false }),
+        outbox_model.insertMany(outbox_entries, { session, ordered: false }),
+      ]);
     }
 
     // Commit transaction - both succeed or both fail
@@ -572,22 +612,5 @@ export const updateApiKeyNotificationUsage = (
     channelCounts[n.channel] = (channelCounts[n.channel] || 0) + 1;
   }
 
-  const incObj: Record<string, number> = {
-    'usage.total_notifications': createdCount,
-  };
-  for (const [ch, count] of Object.entries(channelCounts)) {
-    incObj[`usage.by_channel.${ch}`] = count;
-  }
-
-  void api_key_model.updateOne(
-    { key_id: apiKey.key_id },
-    {
-      $set: { 'usage.last_used_at': new Date() },
-      $inc: incObj,
-    },
-  ).catch((err: unknown) =>
-    logger.warn('Failed to update API key notification usage', {
-      error: String(err),
-    }),
-  );
+  ApiKeyUsageAggregator.recordNotifications(apiKey.key_id, channelCounts, createdCount);
 };

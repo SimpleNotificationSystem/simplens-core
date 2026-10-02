@@ -27,6 +27,7 @@ import { disconnectRedis } from '@src/config/redis.config.js';
 import { createHealthProbeServer } from '@src/utils/k8s-health-probe.js';
 import type { HealthProbeServer } from '@src/types/types.js';
 import { auth_middleware } from './middlewares/auth_middleware.js';
+import { ApiKeyUsageAggregator } from './utils/api-key-cache.js';
 import http from 'http';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -117,6 +118,8 @@ const start_server = async () => {
         await createTopics(topics);
 
         const server = http.createServer(app);
+        server.keepAliveTimeout = 65000;
+        server.headersTimeout = 66000;
         server.listen(env.PORT, () => logger.success(`Notification Service running at http://localhost:${env.PORT}`));
 
         // 5. Start health probe server for Kubernetes
@@ -144,6 +147,7 @@ const start_server = async () => {
                         });
                     });
                 }
+                await ApiKeyUsageAggregator.flush();
                 await disconnectRedis();
                 await db.disconnect();
             } catch (e) {

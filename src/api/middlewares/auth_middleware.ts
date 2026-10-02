@@ -10,6 +10,7 @@ import type { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import api_key_model from '@src/database/models/api-key.models.js';
 import { verifyAdminJwt } from '../utils/jwt.utils.js';
+import { ApiKeyCache, ApiKeyUsageAggregator } from '../utils/api-key-cache.js';
 import { apiLogger as logger } from '@src/workers/utils/logger.js';
 import type { ApiKeyDoc, AdminJwtPayload } from '@src/types/types.js';
 
@@ -31,14 +32,24 @@ async function handleDynamicApiKey(
 ): Promise<void> {
     try {
         const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-        const keyDoc = await api_key_model.findOne({ key_hash: tokenHash, status: 'active' });
-
+        
+        let keyDoc = ApiKeyCache.get(tokenHash);
         if (!keyDoc) {
-            res.status(401).json({ message: 'Invalid API KEY' });
-            return;
+            const dbDoc = await api_key_model.findOne({ key_hash: tokenHash, status: 'active' });
+            if (!dbDoc) {
+                res.status(401).json({ message: 'Invalid API KEY' });
+                return;
+            }
+            const rawExpiresAt = (dbDoc as unknown as { expires_at?: Date | string | null }).expires_at;
+            keyDoc = (typeof dbDoc.toObject === 'function' ? dbDoc.toObject() : dbDoc) as ApiKeyDoc;
+            if (rawExpiresAt && !keyDoc.expires_at) {
+                keyDoc.expires_at = typeof rawExpiresAt === 'string' ? new Date(rawExpiresAt) : rawExpiresAt;
+            }
+            ApiKeyCache.set(tokenHash, keyDoc);
         }
 
         if (keyDoc.expires_at && new Date() > new Date(keyDoc.expires_at)) {
+            ApiKeyCache.invalidate(tokenHash);
             res.status(401).json({ message: 'API key has expired' });
             return;
         }
@@ -70,17 +81,9 @@ async function handleDynamicApiKey(
             return;
         }
 
-        req.apiKey = keyDoc.toObject() as ApiKeyDoc;
+        req.apiKey = keyDoc;
 
-        void api_key_model.updateOne(
-            { key_id: keyDoc.key_id },
-            {
-                $set: { 'usage.last_used_at': new Date() },
-                $inc: { 'usage.total_requests': 1 },
-            }
-        ).catch((err: unknown) => {
-            logger.warn(`Failed to update usage for API key ${keyDoc.key_id}`, { error: String(err) });
-        });
+        ApiKeyUsageAggregator.recordRequest(keyDoc.key_id);
 
         next();
     } catch (err) {
