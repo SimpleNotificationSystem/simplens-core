@@ -1,0 +1,16 @@
+meta {
+  name: Reset Operational Settings
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{process.env.BASE_URL}}/api/settings/reset
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

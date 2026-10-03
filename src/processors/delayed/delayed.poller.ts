@@ -9,12 +9,14 @@
  */
 
 import { env } from '@src/config/env.config.js';
+import { dynamicConfig } from '@src/config/dynamic-config.service.js';
 import { claimDueEvents, confirmProcessed, reAddToQueue, getDueEventCount, releaseClaim } from './delayed.queue.js';
 import { publishToTarget } from './target.producer.js';
 import { publishDLQFailureStatus } from './dlq.status.js';
 import { delayedWorkerLogger as logger } from '@src/workers/utils/logger.js';
-import type { delayed_notification_topic } from '@src/types/types.js';
+import type { DelayedEventWithRetries } from '@src/types/types.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
+import { calculateExponentialBackoff } from '@src/utils/backoff.utils.js';
 
 let pollerInterval: NodeJS.Timeout | null = null;
 let isPolling = false;
@@ -22,19 +24,13 @@ let isPolling = false;
 /**
  * Extended event type with poller retry tracking
  */
-interface DelayedEventWithRetries extends delayed_notification_topic {
-    _pollerRetries?: number;
-}
-
 /**
  * Calculate exponential backoff delay
  * @param retryCount Current retry count
  * @returns Delay in milliseconds (5s, 10s, 20s, 40s, capped at 60s)
  */
 const calculateBackoff = (retryCount: number): number => {
-    const baseDelay = 5000; // 5 seconds
-    const maxDelay = 60000; // 60 seconds
-    return Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
+    return calculateExponentialBackoff(retryCount, 5000, 60000);
 };
 
 /**
@@ -181,6 +177,15 @@ export const startDelayedPoller = (): void => {
 
     logger.success('Delayed poller started');
 };
+
+// Listen for dynamic configuration updates and hot-adjust poller interval
+dynamicConfig.on('change', () => {
+    if (pollerInterval) {
+        clearInterval(pollerInterval);
+        pollerInterval = setInterval(pollForDueEvents, env.DELAYED_POLL_INTERVAL_MS);
+        logger.info(`Adjusted delayed poller interval to ${env.DELAYED_POLL_INTERVAL_MS}ms`);
+    }
+});
 
 /**
  * Stop the delayed poller

@@ -17,7 +17,7 @@
  *   -s, --subject <string>      Subject (for email)
  *   -m, --message <string>      Message content (for all channels)
  *   -u, --url <url>             Base API URL (default: http://localhost:3000)
- *   -k, --key <string>          SimpleNS API Key (defaults to NS_API_KEY env or dev key)
+ *   -k, --key <string>          SimpleNS API Key (defaults to API_KEY env or provided key)
  *   -h, --host <type>           Webhook host type: 'local', 'docker', or custom hostname (default: local)
  *   -w, --webhook <url>         Explicit webhook URL override
  *   -v, --variables <json>      Template variables as JSON string (e.g. '{"name":"Alex"}')
@@ -49,10 +49,6 @@ const projectRootDir = join(__dirname, '..');
 dotenv.config({ path: join(projectRootDir, '.env') });
 dotenv.config();
 
-// HTTP Connection Pooling for high concurrency load testing
-const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 200 });
-const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 200 });
-
 // --- Argument Parsing ---
 const args = process.argv.slice(2);
 const config = {
@@ -65,7 +61,7 @@ const config = {
   subject: 'Test Notification',
   message: 'This is a test notification from SimpleNS load test script.',
   baseUrl: process.env.BASE_URL || 'http://localhost:3000',
-  apiKey: process.env.NS_API_KEY || '4YCItWcuH2qJe3bXM9LbsbqefflWFlXlzvneMRSSQhU=',
+  apiKey: process.env.API_KEY || process.env.NS_API_KEY || '',
   hostType: 'local',
   webhookUrl: null,
   variables: null,
@@ -177,6 +173,10 @@ if (!webhookUrl) {
   const host = config.hostType === 'docker' ? 'host.docker.internal' : (config.hostType === 'local' ? 'localhost' : config.hostType);
   webhookUrl = `http://${host}:4000/webhook`;
 }
+
+// HTTP Connection Pooling for high concurrency load testing
+const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 200 });
+const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 200 });
 
 // Axios Client instance with connection pooling
 const apiClient = axios.create({
@@ -387,4 +387,3 @@ main().catch(err => {
   console.error('Fatal execution error:', err);
   process.exit(1);
 });
-

@@ -23,7 +23,7 @@ This repository contains:
 Recommended development paths:
 
 - Use `.devcontainer` (preferred for easy dev setup without any clutter).
-- Use `docker-compose.dev.yaml` for the full stack.
+- Use `docker-compose/` for full-stack Docker development with the environment switcher.
 - Run app code locally only if MongoDB, Redis, and Kafka are available.
 - Create the `simplens.config.yaml` file for any local development option below.
    - Refer the [Plugin Configuration Guide](https://www.simplens.in/docs/core/self-hosting#plugin-configuration) for manually creating `simplens.config.yaml` configuration file.
@@ -40,18 +40,21 @@ Recommended development paths:
 2. Let post-create scripts install dependencies automatically.
 3. Start developing with local source mounted in the container.
 
-### Option B: Docker Compose (`docker-compose.dev.yaml`)
+### Option B: Docker Compose (`docker-compose/`)
 
-Use when you want the full stack via Docker:
+Use when you want the full stack via Docker with the environment switcher:
 
 ```bash
-docker compose -f docker-compose.dev.yaml build
-docker compose -f docker-compose.dev.yaml up -d
+# Windows
+./docker-compose/scripts/switch-env.ps1 -Env local -Rebuild
+
+# Linux/macOS
+./docker-compose/scripts/switch-env.sh local --rebuild
 ```
 
 Note:
 
-- Code changes are not always reflected automatically in containerized runtime images.
+- Code changes are rebuilt into the local image when passing `-Rebuild` or `--rebuild`.
 - Rebuild/restart relevant services after source changes when needed.
 
 ### Option C: Run Core Locally + Infra Services
@@ -75,12 +78,12 @@ cp .env.example .env
 Copy-Item .env.example .env
 ```
 
-3. Start required infrastructure (MongoDB, Kafka, Redis) via Docker:
+3. Start required infrastructure (MongoDB, Kafka, Redis, Loki, Grafana) via Docker:
 
-- Set the env variable `INFRA_HOST=localhost` before starting the services in `docker-compose.infra.yaml`
+- Set the env variable `INFRA_HOST=localhost` before starting the services in `docker-compose/docker-compose.infra.yaml`
 
 ```bash
-docker compose -f docker-compose.infra.yaml up -d
+docker compose -f docker-compose/docker-compose.infra.yaml up -d
 ```
 
 ## Development Commands

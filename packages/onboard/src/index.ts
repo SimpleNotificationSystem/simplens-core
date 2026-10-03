@@ -36,6 +36,7 @@ import {
     normalizeBasePath,
     validateBasePath,
     DEFAULT_BASE_PATH,
+    isVersionGreaterThan130,
 } from './env-config.js';
 import {
     fetchAvailablePlugins,
@@ -62,15 +63,18 @@ const program = new Command();
 program
     .name('@simplens/onboard')
     .description('A CLI tool to setup a SimpleNS instance on your machine/server')
-    .version('1.0.0')
+    .version('1.0.13')
     .option('--full', 'Non-interactive mode - all options must be provided via CLI')
     .option('--infra [services...]', 'Infrastructure services (mongo, kafka, kafka-ui, redis, nginx, loki, grafana)')
     .option('--env <mode>', 'Environment setup mode: "default" or "interactive"')
     .option('--dir <path>', 'Target directory for setup')
     .option('--base-path <path>', 'Dashboard BASE_PATH (example: /dashboard, default: root)')
-    .option('--core-version <version>', 'Override CORE_VERSION in generated .env (primarily for --full mode)')
-    .option('--dashboard-version <version>', 'Override DASHBOARD_VERSION in generated .env (primarily for --full mode)')
+    .option('--app-version <version>', 'Override VERSION in generated .env (primarily for --full mode)')
+    .option('--version-tag <version>', 'Override VERSION in generated .env (alias)')
+    .option('--core-version <version>', 'Alias for --app-version / VERSION')
+    .option('--dashboard-version <version>', 'Alias for --app-version / VERSION')
     .option('--plugin [plugins...]', 'Plugins to install (e.g., @simplens/mock @simplens/nodemailer-gmail)')
+    .option('--skip-plugins', 'Skip plugin configuration (plugins can be installed via dashboard later)')
     .option('--ssl', 'Enable optional SSL certificate setup using Dockerized Certbot')
     .option('--ssl-domain <domain>', 'Public domain for SSL certificate (required with --ssl in --full mode)')
     .option('--ssl-email <email>', 'Email for Let\'s Encrypt registration (required with --ssl in --full mode)')
@@ -86,6 +90,8 @@ interface OnboardSetupOptions {
     enableSsl: boolean;
     sslDomain?: string;
     sslEmail?: string;
+    version: string;
+    skipPlugins?: boolean;
 }
 
 function printStep(step: number, total: number, title: string): void {
@@ -134,6 +140,7 @@ function showSetupSummary(setupOptions: OnboardSetupOptions, targetDir: string, 
 
     const summaryLines = [
         `Target directory   : ${targetDir}`,
+        `SimpleNS Version   : ${setupOptions.version}`,
         `Infrastructure     : ${infraLabel}`,
         `Environment mode   : ${setupOptions.envMode}`,
         `BASE_PATH          : ${basePathLabel}`,
@@ -373,6 +380,27 @@ async function promptSetupOptions(options: any): Promise<OnboardSetupOptions> {
         }
     }
 
+    // --- Version ---
+    let versionValue: string;
+    const versionOption = (typeof options.appVersion === 'string' && options.appVersion.trim()) ||
+                          (typeof options.versionTag === 'string' && options.versionTag.trim()) ||
+                          (typeof options.coreVersion === 'string' && options.coreVersion.trim()) ||
+                          (typeof options.dashboardVersion === 'string' && options.dashboardVersion.trim());
+    if (versionOption) {
+        versionValue = versionOption;
+    } else if (isFullMode) {
+        versionValue = 'latest';
+    } else {
+        const result = await text({
+            message: 'SimpleNS version to deploy (e.g. latest, 1.4.0, 1.3.0):',
+            defaultValue: 'latest',
+            placeholder: 'latest',
+            withGuide: true,
+        });
+        handleCancel(result);
+        versionValue = (result as string).trim() || 'latest';
+    }
+
     return {
         infra: infraValue,
         infraServices: infraServices,
@@ -383,6 +411,8 @@ async function promptSetupOptions(options: any): Promise<OnboardSetupOptions> {
         enableSsl: enableSslValue,
         sslDomain: sslDomainValue,
         sslEmail: sslEmailValue,
+        version: versionValue,
+        skipPlugins: options.skipPlugins === true,
     };
 }
 
@@ -416,6 +446,7 @@ async function main() {
 
         // Prompt for setup options if not provided
         const setupOptions = await promptSetupOptions(options);
+        const isLegacy = !isVersionGreaterThan130(setupOptions.version);
 
         // Get target directory
         const targetDir = path.resolve(setupOptions.targetDir);
@@ -475,6 +506,8 @@ async function main() {
         await writeAppCompose(targetDir, {
             includeNginx: false,
             includeSsl: false,
+            isLegacy,
+            hasPluginsConfig: isLegacy ? true : (setupOptions.plugins.length > 0),
         });
         const controlScriptFilename = await generateControlScript(targetDir, {
             os: detectOS(),
@@ -484,10 +517,10 @@ async function main() {
         // Step 4: Environment configuration
         log.step('Step 4/6 — Environment Configuration');
         const envMode = setupOptions.envMode;
+        const versionOverride = options.appVersion || options.versionTag || options.coreVersion || options.dashboardVersion;
         const envOverrides = options.full
             ? {
-                CORE_VERSION: options.coreVersion,
-                DASHBOARD_VERSION: options.dashboardVersion,
+                VERSION: versionOverride || setupOptions.version,
             }
             : undefined;
         const envVars = await promptEnvVariables(
@@ -495,16 +528,24 @@ async function main() {
             selectedInfraServices,
             setupOptions.basePath,
             options.full || false,
-            envOverrides
+            envOverrides,
+            setupOptions.version
         );
-        await generateEnvFile(targetDir, envVars);
+        await generateEnvFile(targetDir, envVars, isLegacy);
 
         // In full mode, notify user about auto-generated credentials
         if (options.full) {
-            logWarning(
-                '⚠️  Auto-generated credentials in .env file. ' +
-                'Please update NS_API_KEY, AUTH_SECRET, and ADMIN_PASSWORD before deploying to production!'
-            );
+            if (isLegacy) {
+                logWarning(
+                    '⚠️  Auto-generated credentials in .env file. ' +
+                    'Please update NS_API_KEY, AUTH_SECRET, and ADMIN_PASSWORD before deploying to production!'
+                );
+            } else {
+                logWarning(
+                    '⚠️  Auto-generated credentials in .env file. ' +
+                    'Please update JWT_SECRET before deploying to production!'
+                );
+            }
         }
 
         // Generate nginx.conf whenever nginx is active in either compose file
@@ -522,14 +563,36 @@ async function main() {
         let selectedPlugins: string[] = [];
         let pluginCredentialKeys: string[] = [];
 
-        // Use pre-provided plugins from CLI, or prompt for them
-        if (setupOptions.plugins.length > 0) {
-            selectedPlugins = setupOptions.plugins;
-            log.info(`Using plugins: ${selectedPlugins.join(', ')}`);
-        } else if (!options.full) {
-            // Only prompt in interactive mode
-            const availablePlugins = await fetchAvailablePlugins();
-            selectedPlugins = await promptPluginSelection(availablePlugins);
+        if (isLegacy) {
+            // Legacy SimpleNS <= 1.3.0: plugins always configured
+            if (setupOptions.plugins.length > 0) {
+                selectedPlugins = setupOptions.plugins;
+                log.info(`Using plugins: ${selectedPlugins.join(', ')}`);
+            } else if (!options.full) {
+                const availablePlugins = await fetchAvailablePlugins();
+                selectedPlugins = await promptPluginSelection(availablePlugins);
+            }
+        } else {
+            // SimpleNS > 1.3.0: plugins are completely optional
+            if (setupOptions.plugins.length > 0) {
+                selectedPlugins = setupOptions.plugins;
+                log.info(`Using plugins: ${selectedPlugins.join(', ')}`);
+            } else if (setupOptions.skipPlugins || options.full) {
+                log.info('Skipping plugin configuration. You can install plugins via the Admin Dashboard.');
+            } else {
+                const shouldConfigure = await confirm({
+                    message: 'Do you want to configure notification plugins now? (Skip to install later via Dashboard)',
+                    initialValue: false,
+                    withGuide: true,
+                });
+                handleCancel(shouldConfigure);
+                if (shouldConfigure) {
+                    const availablePlugins = await fetchAvailablePlugins();
+                    selectedPlugins = await promptPluginSelection(availablePlugins);
+                } else {
+                    log.info('Skipping plugin configuration. You can install plugins via the Admin Dashboard.');
+                }
+            }
         }
 
         if (selectedPlugins.length > 0) {
@@ -554,6 +617,24 @@ async function main() {
                     await appendPluginEnv(targetDir, pluginCreds);
                 }
             }
+
+            // For SimpleNS > 1.3.0, attach simplens.config.yaml mount and SIMPLENS_CONFIG_PATH
+            if (!isLegacy) {
+                await writeAppCompose(targetDir, {
+                    includeNginx: false,
+                    includeSsl: false,
+                    isLegacy: false,
+                    hasPluginsConfig: true,
+                });
+            }
+        } else if (!isLegacy) {
+            // SimpleNS > 1.3.0 with no plugins selected: ensure compose file has no plugin mounts
+            await writeAppCompose(targetDir, {
+                includeNginx: false,
+                includeSsl: false,
+                isLegacy: false,
+                hasPluginsConfig: false,
+            });
         }
 
         // Step 6: Service orchestration
@@ -655,25 +736,30 @@ async function main() {
 
         // In full mode, show a comprehensive security warning
         if (options.full) {
-            const credentialWarnings = [
-                '  • NS_API_KEY - API authentication key',
-                '  • AUTH_SECRET - Session secret for dashboard',
-                '  • ADMIN_PASSWORD - Dashboard admin password',
-            ];
+            const credentialWarnings: string[] = [];
+            if (isLegacy) {
+                credentialWarnings.push('  • NS_API_KEY - API authentication key');
+                credentialWarnings.push('  • AUTH_SECRET - Session secret for dashboard');
+                credentialWarnings.push('  • ADMIN_PASSWORD - Dashboard admin password');
+            } else {
+                credentialWarnings.push('  • JWT_SECRET - Secret key for API authentication tokens');
+            }
 
             if (pluginCredentialKeys.length > 0) {
                 credentialWarnings.push(`  • Plugin credentials: ${pluginCredentialKeys.join(', ')}`);
             }
 
-            note(
-                '⚠️  IMPORTANT: Auto-generated credentials were used for non-interactive setup.\n' +
-                '\n' +
+            let securityNotice = '⚠️  IMPORTANT: Auto-generated credentials were used for non-interactive setup.\n\n' +
                 'Please update the following in your .env file before production use:\n' +
                 credentialWarnings.join('\n') +
                 '\n\n' +
-                'Default credentials are NOT secure for production environments.',
-                'Security Notice'
-            );
+                'Default credentials are NOT secure for production environments.';
+
+            if (!isLegacy) {
+                securityNotice += '\n\nAdministrator credentials are set up upon first launch in the Dashboard at /setup.';
+            }
+
+            note(securityNotice, 'Security Notice');
         }
 
         // Display access information
@@ -693,6 +779,13 @@ async function main() {
             note(
                 'Dashboard : http://localhost:3002\nAPI       : http://localhost:3000',
                 'Service Access'
+            );
+        }
+
+        if (!isLegacy) {
+            note(
+                'First-time setup: Open the Dashboard in your browser to configure your administrator account (/setup).',
+                'Next Steps'
             );
         }
 

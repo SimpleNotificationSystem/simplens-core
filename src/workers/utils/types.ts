@@ -1,14 +1,1 @@
-/**
- * Common types used across worker modules
- */
-
-export interface SendResult {
-    successCount: number;
-    failedCount: number;
-}
-
-export interface ProcessingStats {
-    processed: number;
-    success: number;
-    failed: number;
-}
+export type { ProcessingStats, SendResult } from '@src/types/types.js';

@@ -1,5 +1,6 @@
 import {
     APP_COMPOSE_TEMPLATE,
+    LEGACY_APP_COMPOSE_TEMPLATE,
     APP_NGINX_SERVICE_TEMPLATE,
     APP_NGINX_SSL_SERVICE_TEMPLATE,
     APP_CERTBOT_SERVICES_TEMPLATE,
@@ -305,21 +306,38 @@ export async function generateInfraCompose(
     s.stop('Generated docker-compose.infra.yaml');
 }
 
+export interface AppComposeOptions {
+    includeSsl?: boolean;
+    isLegacy?: boolean;
+    hasPluginsConfig?: boolean;
+}
+
 /**
  * Build app docker-compose content.
  * Optionally inject nginx reverse-proxy service before the volumes section.
  */
 export function buildAppComposeContent(
     includeNginx: boolean,
-    options: { includeSsl?: boolean } = {}
+    options: AppComposeOptions = {}
 ): string {
-    let content = APP_COMPOSE_TEMPLATE;
+    const isLegacy = options.isLegacy === true;
+    let content = isLegacy ? LEGACY_APP_COMPOSE_TEMPLATE : APP_COMPOSE_TEMPLATE;
     const includeSsl = options.includeSsl === true;
     const shouldIncludeNginx = includeNginx || includeSsl;
     const marker = '\nvolumes:';
 
     if (!content.includes(marker)) {
         return content;
+    }
+
+    if (!isLegacy && options.hasPluginsConfig === true) {
+        const apiMarker = '  api:\n    image: ghcr.io/simplenotificationsystem/simplens-core:${VERSION:-latest}\n    container_name: api\n    ports:\n      - 3000:3000\n    env_file:\n      - .env\n    volumes:\n      - logs-data:/app/logs';
+        const apiReplacement = '  api:\n    image: ghcr.io/simplenotificationsystem/simplens-core:${VERSION:-latest}\n    container_name: api\n    ports:\n      - 3000:3000\n    env_file:\n      - .env\n    environment:\n      SIMPLENS_CONFIG_PATH: ${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}\n    volumes:\n      - logs-data:/app/logs\n      - ./simplens.config.yaml:/app/simplens.config.yaml:ro';
+        content = content.replace(apiMarker, apiReplacement);
+
+        const npMarker = '  notification_processor:\n    image: ghcr.io/simplenotificationsystem/simplens-core:${VERSION:-latest}\n    container_name: notification_processor\n    env_file:\n      - .env\n    volumes:\n      - logs-data:/app/logs';
+        const npReplacement = '  notification_processor:\n    image: ghcr.io/simplenotificationsystem/simplens-core:${VERSION:-latest}\n    container_name: notification_processor\n    env_file:\n      - .env\n    environment:\n      SIMPLENS_CONFIG_PATH: ${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}\n    volumes:\n      - logs-data:/app/logs\n      - ./simplens.config.yaml:/app/simplens.config.yaml:ro';
+        content = content.replace(npMarker, npReplacement);
     }
 
     if (shouldIncludeNginx) {
@@ -331,10 +349,17 @@ export function buildAppComposeContent(
 
     if (includeSsl) {
         content = content.replace(marker, `\n${APP_CERTBOT_SERVICES_TEMPLATE}\n${marker}`);
-        content = content.replace(
-            '\nvolumes:\n  plugin-data:',
-            '\nvolumes:\n  certbot-etc:\n  certbot-www:\n  plugin-data:'
-        );
+        if (isLegacy) {
+            content = content.replace(
+                '\nvolumes:\n  plugin-data:',
+                '\nvolumes:\n  certbot-etc:\n  certbot-www:\n  plugin-data:'
+            );
+        } else {
+            content = content.replace(
+                '\nvolumes:\n  logs-data:',
+                '\nvolumes:\n  certbot-etc:\n  certbot-www:\n  logs-data:'
+            );
+        }
     }
 
     return content;
@@ -345,13 +370,20 @@ export function buildAppComposeContent(
  */
 export async function writeAppCompose(
     targetDir: string,
-    options: { includeNginx?: boolean; includeSsl?: boolean } = {}
+    options: {
+        includeNginx?: boolean;
+        includeSsl?: boolean;
+        isLegacy?: boolean;
+        hasPluginsConfig?: boolean;
+    } = {}
 ): Promise<void> {
     const s = spinner();
     s.start('Generating docker-compose.yaml...');
     const appPath = path.join(targetDir, 'docker-compose.yaml');
     const appContent = buildAppComposeContent(options.includeNginx === true, {
         includeSsl: options.includeSsl === true,
+        isLegacy: options.isLegacy === true,
+        hasPluginsConfig: options.hasPluginsConfig === true,
     });
     await writeFile(appPath, appContent);
     s.stop('Generated docker-compose.yaml');

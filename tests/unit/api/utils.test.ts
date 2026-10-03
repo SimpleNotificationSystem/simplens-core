@@ -38,6 +38,12 @@ vi.mock("../../../src/database/models/notification-template.models.js", () => ({
   },
 }));
 
+vi.mock("../../../src/database/models/api-key.models.js", () => ({
+  default: {
+    updateOne: vi.fn().mockReturnValue({ catch: vi.fn() }),
+  },
+}));
+
 vi.mock("../../../src/workers/utils/logger.js", () => ({
   apiLogger: {
     info: vi.fn(),
@@ -1281,6 +1287,64 @@ describe("API Utility Functions", () => {
       expect(result.duplicate_count).toBe(0);
       // insertMany should not be called for empty array
       expect(outbox_model.insertMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("updateApiKeyNotificationUsage", () => {
+    it("should do nothing if apiKey is undefined", async () => {
+      const api_key_model = (
+        await import("../../../src/database/models/api-key.models.js")
+      ).default;
+      const { updateApiKeyNotificationUsage } =
+        await import("../../../src/api/utils/utils.js");
+
+      updateApiKeyNotificationUsage(undefined, [], 5);
+
+      expect(api_key_model.updateOne).not.toHaveBeenCalled();
+    });
+
+    it("should do nothing if createdCount is 0 or negative", async () => {
+      const api_key_model = (
+        await import("../../../src/database/models/api-key.models.js")
+      ).default;
+      const { updateApiKeyNotificationUsage } =
+        await import("../../../src/api/utils/utils.js");
+
+      const mockApiKey = { key_id: "ak_test123" } as any;
+
+      updateApiKeyNotificationUsage(mockApiKey, [], 0);
+      updateApiKeyNotificationUsage(mockApiKey, [], -1);
+
+      expect(api_key_model.updateOne).not.toHaveBeenCalled();
+    });
+
+    it("should update key usage with total notifications and channel breakdown", async () => {
+      const api_key_model = (
+        await import("../../../src/database/models/api-key.models.js")
+      ).default;
+      const { updateApiKeyNotificationUsage } =
+        await import("../../../src/api/utils/utils.js");
+
+      const mockApiKey = { key_id: "ak_test123" } as any;
+      const mockNotifications = [
+        { channel: "email" },
+        { channel: "email" },
+        { channel: "sms" },
+      ] as any[];
+
+      updateApiKeyNotificationUsage(mockApiKey, mockNotifications, 3);
+
+      expect(api_key_model.updateOne).toHaveBeenCalledWith(
+        { key_id: "ak_test123" },
+        expect.objectContaining({
+          $set: expect.objectContaining({ "usage.last_used_at": expect.any(Date) }),
+          $inc: {
+            "usage.total_notifications": 3,
+            "usage.by_channel.email": 2,
+            "usage.by_channel.sms": 1,
+          },
+        }),
+      );
     });
   });
 });

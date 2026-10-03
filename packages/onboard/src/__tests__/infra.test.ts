@@ -27,4 +27,28 @@ describe('infra app compose generation', () => {
         expect(compose).toContain('certbot-etc:');
         expect(compose).toContain('certbot-www:');
     });
+
+    it('generates legacy compose with shared plugin-data volume and static config mount when isLegacy is true', () => {
+        const compose = buildAppComposeContent(false, { isLegacy: true });
+        expect(compose).toContain('plugin-data:/app/.plugins');
+        expect(compose).toContain('plugin-data:');
+        expect(compose).toContain('./simplens.config.yaml:/app/simplens.config.yaml:ro');
+        expect(compose).toContain('SIMPLENS_CONFIG_PATH');
+    });
+
+    it('generates new compose (> 1.3.0) without plugin-data volume and without config mount when plugins skipped', () => {
+        const compose = buildAppComposeContent(false, { isLegacy: false, hasPluginsConfig: false });
+        expect(compose).not.toContain('plugin-data');
+        expect(compose).not.toContain('simplens.config.yaml');
+        expect(compose).not.toContain('SIMPLENS_CONFIG_PATH');
+        expect(compose).toContain('logs-data:');
+    });
+
+    it('generates new compose (> 1.3.0) with config mount and SIMPLENS_CONFIG_PATH when plugins are configured', () => {
+        const compose = buildAppComposeContent(false, { isLegacy: false, hasPluginsConfig: true });
+        expect(compose).not.toContain('plugin-data');
+        expect(compose).toContain('./simplens.config.yaml:/app/simplens.config.yaml:ro');
+        expect(compose).toContain('SIMPLENS_CONFIG_PATH: ${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}');
+        expect(compose).toContain('logs-data:');
+    });
 });

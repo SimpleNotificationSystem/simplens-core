@@ -19,7 +19,7 @@
         }
     },
     "postCreateCommand": "npm install && cd dashboard && npm install",
-    "postStartCommand": "docker compose -f docker-compose.infra.yaml up -d",
+    "postStartCommand": "docker compose -f ./docker-compose/docker-compose.infra.yaml up -d",
     "remoteEnv": {
         "NODE_ENV": "development",
         "INFRA_HOST": "localhost"

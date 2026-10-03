@@ -1,0 +1,30 @@
+meta {
+  name: Update Provider
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{process.env.BASE_URL}}/api/providers/{{process.env.PROVIDER_ID}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "enabled": true,
+    "options": {
+      "priority": 2,
+      "rateLimit": {
+        "maxTokens": 200,
+        "refillRate": 20,
+        "refillInterval": "second"
+      }
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

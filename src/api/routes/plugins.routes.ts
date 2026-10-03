@@ -1,18 +1,34 @@
 /**
  * Plugins Routes
  * 
- * Exposes plugin metadata for dashboard
+ * Exposes plugin metadata, installation, update, and uninstallation endpoints
  */
 
 import { Router } from 'express';
-import { getPluginsMetadata } from '../controllers/plugins.controller.js';
+import {
+  getPluginsMetadata,
+  listInstalledPlugins,
+  listPluginCatalog,
+  installPlugin,
+  changePluginVersion,
+  uninstallPlugin,
+  getNpmAuth,
+  saveNpmAuth,
+  deleteNpmAuth,
+} from '../controllers/plugins.controller.js';
 
 const router = Router();
 
-/**
- * GET /plugins
- * Returns available channels and their provider schemas
- */
 router.get('/', getPluginsMetadata);
+router.get('/installed', listInstalledPlugins);
+router.get('/catalog/:category', listPluginCatalog);
+router.get('/npm-auth', getNpmAuth);
+router.post('/npm-auth', saveNpmAuth);
+router.delete('/npm-auth', deleteNpmAuth);
+router.post('/install', installPlugin);
+router.put('/version', changePluginVersion);
+router.delete('/:scope/:package', uninstallPlugin);
+router.delete('/:package', uninstallPlugin);
+router.delete('/', uninstallPlugin);
 
 export default router;

@@ -1,0 +1,23 @@
+meta {
+  name: Change Plugin Version
+  type: http
+  seq: 8
+}
+
+put {
+  url: {{process.env.BASE_URL}}/api/plugins/version
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "package": "{{process.env.PACKAGE_NAME}}",
+    "version": "1.0.1"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

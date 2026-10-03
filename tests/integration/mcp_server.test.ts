@@ -103,9 +103,9 @@ describe('MCP Server Integration Tests', () => {
         await server.close();
     });
 
-    it('should register exactly 29 tools', async () => {
+    it('should register all expected tools', async () => {
         const toolsResult = await client.listTools();
-        expect(toolsResult.tools.length).toBe(29);
+        expect(toolsResult.tools.length).toBe(54);
 
         const toolNames = toolsResult.tools.map(t => t.name);
         expect(toolNames).toContain('send_notification');

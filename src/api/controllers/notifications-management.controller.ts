@@ -104,6 +104,7 @@ export const listNotifications = async (req: Request, res: Response): Promise<vo
       scheduled_at: doc.scheduled_at,
       error_message: doc.error_message,
       retry_count: doc.retry_count,
+      provider_history: doc.provider_history ?? [],
       created_at: doc.created_at,
       updated_at: doc.updated_at
     }));
@@ -149,6 +150,7 @@ export const getRecentNotifications = async (req: Request, res: Response): Promi
       scheduled_at: doc.scheduled_at,
       error_message: doc.error_message,
       retry_count: doc.retry_count,
+      provider_history: doc.provider_history ?? [],
       created_at: doc.created_at,
       updated_at: doc.updated_at
     }));
@@ -195,6 +197,7 @@ export const getNotificationById = async (req: Request, res: Response): Promise<
       scheduled_at: notification.scheduled_at,
       error_message: notification.error_message,
       retry_count: notification.retry_count,
+      provider_history: notification.provider_history ?? [],
       created_at: notification.created_at,
       updated_at: notification.updated_at
     });
@@ -290,6 +293,7 @@ export const retryNotification = async (req: Request, res: Response): Promise<vo
           variables: notification.variables,
           webhook_url: notification.webhook_url,
           retry_count: 0,
+          provider_history: notification.provider_history ?? [],
           created_at: new Date()
         };
 

@@ -1,0 +1,20 @@
+meta {
+  name: Get Provider by Id
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{process.env.BASE_URL}}/api/providers/{{process.env.PROVIDER_ID}}?include_decrypted=false
+  body: none
+  auth: inherit
+}
+
+params:query {
+  include_decrypted: false
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

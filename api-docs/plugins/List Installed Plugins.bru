@@ -1,0 +1,16 @@
+meta {
+  name: List Installed Plugins
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{process.env.BASE_URL}}/api/plugins/installed
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -1,0 +1,24 @@
+meta {
+  name: Set Channel Routing
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{process.env.BASE_URL}}/api/channels/routing/{{process.env.ROUTING_CHANNEL}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "default_provider_id": "{{process.env.PROVIDER_ID}}",
+    "fallback_provider_ids": [],
+    "partitions": 6
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

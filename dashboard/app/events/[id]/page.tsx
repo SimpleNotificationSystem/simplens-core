@@ -382,6 +382,88 @@ export default function EventDetailPage({ params }: PageProps) {
                         </CardContent>
                     </Card>
 
+                    {/* Provider Execution History */}
+                    <Card className="md:col-span-2">
+                        <CardHeader>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle>Provider Execution History</CardTitle>
+                                    <CardDescription>
+                                        Timeline of provider dispatch attempts, rate limit cascades, and failure reasons
+                                    </CardDescription>
+                                </div>
+                                {notification.provider_history && notification.provider_history.length > 0 && (
+                                    <span className="text-xs font-mono px-2 py-1 bg-muted rounded-full text-muted-foreground">
+                                        {notification.provider_history.length} {notification.provider_history.length === 1 ? 'attempt' : 'attempts'}
+                                    </span>
+                                )}
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            {(!notification.provider_history || notification.provider_history.length === 0) ? (
+                                <div className="text-center py-6 text-muted-foreground text-sm">
+                                    No intermediate provider cascade attempts recorded.
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {notification.provider_history.map((attempt, index) => {
+                                        const isSuccess = attempt.status === 'delivered';
+                                        const isRateLimit = attempt.status === 'rate_limited';
+
+                                        return (
+                                            <div
+                                                key={index}
+                                                className={`p-4 rounded-lg border text-sm flex flex-col md:flex-row md:items-center justify-between gap-3 ${
+                                                    isSuccess
+                                                        ? 'bg-green-50/50 border-green-200 dark:bg-green-950/20 dark:border-green-900'
+                                                        : isRateLimit
+                                                        ? 'bg-yellow-50/50 border-yellow-200 dark:bg-yellow-950/20 dark:border-yellow-900'
+                                                        : 'bg-red-50/50 border-red-200 dark:bg-red-950/20 dark:border-red-900'
+                                                }`}
+                                            >
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-semibold">{index + 1}. {attempt.provider}</span>
+                                                        <span
+                                                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                                                isSuccess
+                                                                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                                                    : isRateLimit
+                                                                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                                                                    : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                                                            }`}
+                                                        >
+                                                            {isSuccess ? 'Delivered' : isRateLimit ? 'Rate Limited' : 'Failed'}
+                                                        </span>
+                                                        {attempt.error_code && (
+                                                            <span className="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                                                {attempt.error_code}
+                                                            </span>
+                                                        )}
+                                                        {attempt.duration_ms !== undefined && (
+                                                            <span className="text-xs text-muted-foreground">
+                                                                ({attempt.duration_ms}ms)
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {attempt.error_message && (
+                                                        <p className="text-xs text-muted-foreground font-mono mt-1">
+                                                            {attempt.error_message}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <div className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
+                                                    <Clock className="h-3 w-3" />
+                                                    {format(new Date(attempt.attempted_at), "PPpp")}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
                     {/* Error Message (if failed) */}
                     {isFailed && notification.error_message && (
                         <Card className="md:col-span-2 border-red-200 dark:border-red-900">

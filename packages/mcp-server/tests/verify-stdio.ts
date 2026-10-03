@@ -33,8 +33,8 @@ async function main() {
     console.log(`Found ${tools.tools.length} tools:`);
     tools.tools.forEach(t => console.log(`- ${t.name}`));
 
-    if (tools.tools.length !== 29) {
-        throw new Error(`Expected 29 tools, found ${tools.tools.length}`);
+    if (tools.tools.length !== 54) {
+        throw new Error(`Expected 54 tools, found ${tools.tools.length}`);
     }
 
 

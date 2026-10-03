@@ -1,0 +1,16 @@
+meta {
+  name: Delete API Key
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{process.env.BASE_URL}}/api/keys/{{process.env.API_KEY_ID}}
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

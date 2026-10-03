@@ -3,11 +3,36 @@ import { text, password } from '@clack/prompts';
 import { handleCancel } from './ui.js';
 import path from 'path';
 import crypto from 'crypto';
-import { CRITICAL_ENV_KEYS } from './config/constants.js';
+import { CRITICAL_ENV_KEYS, LEGACY_CRITICAL_ENV_KEYS } from './config/constants.js';
 import type { EnvVariable } from './types/domain.js';
 
 export const DEFAULT_BASE_PATH = '';
-const AUTO_GENERATE_ON_EMPTY_KEYS = ['NS_API_KEY', 'AUTH_SECRET', 'CORE_VERSION', 'DASHBOARD_VERSION'] as const;
+
+/**
+ * Check if the provided SimpleNS version is greater than 1.3.0.
+ * Versions <= 1.3.0 are considered legacy.
+ * 'latest', 'master', empty/undefined, or non-numeric tags default to true (> 1.3.0).
+ */
+export function isVersionGreaterThan130(version: string | undefined): boolean {
+    if (!version || version === 'latest' || version === 'master') {
+        return true;
+    }
+    const clean = version.trim().replace(/^v/, '');
+    const match = clean.match(/^(\d+)\.(\d+)(?:\.(\d+))?/);
+    if (!match) {
+        return true;
+    }
+    const major = parseInt(match[1], 10);
+    const minor = parseInt(match[2], 10);
+    const patch = match[3] !== undefined ? parseInt(match[3], 10) : 0;
+
+    if (major > 1) return true;
+    if (major < 1) return false;
+    if (minor > 3) return true;
+    if (minor < 3) return false;
+    return patch > 0;
+}
+const AUTO_GENERATE_ON_EMPTY_KEYS = ['NS_API_KEY', 'AUTH_SECRET', 'JWT_SECRET', 'VERSION'] as const;
 
 function shouldAutoGenerateOnEmpty(key: string, fullMode: boolean): boolean {
     return !fullMode && AUTO_GENERATE_ON_EMPTY_KEYS.includes(key as (typeof AUTO_GENERATE_ON_EMPTY_KEYS)[number]);
@@ -35,13 +60,13 @@ export function generateDefaultValue(key: string): string {
     if (key === 'NS_API_KEY') {
         return `ns_${generateSecureRandom(48)}`;
     }
-    if (key === 'AUTH_SECRET') {
+    if (key === 'AUTH_SECRET' || key === 'JWT_SECRET') {
         return generateSecureRandom(64);
     }
     if (key === 'ADMIN_PASSWORD') {
         return `Admin${generateSecureRandom(16)}`;
     }
-    if (key === 'CORE_VERSION' || key ==='DASHBOARD_VERSION') {
+    if (key === 'VERSION') {
         return `latest`;
     }
     return '';
@@ -101,12 +126,53 @@ export async function promptBasePath(defaultValue: string = DEFAULT_BASE_PATH): 
     return normalizeBasePath(result as string);
 }
 
-/**
- * Load and parse .env.example from embedded template
- */
-export async function loadEnvExample(): Promise<EnvVariable[]> {
-    // Embedded .env template - always available regardless of installation
-    const envTemplate = `
+export const ESSENTIAL_ENV_TEMPLATE = `
+NODE_ENV=production
+# ============================================
+# API SERVER
+# ============================================
+PORT=3000
+JWT_SECRET=
+
+# ============================================
+# DATABASE
+# ============================================
+MONGO_URI=
+
+# ============================================
+# KAFKA
+# ============================================
+BROKERS=
+
+# ============================================
+# REDIS
+# ============================================
+REDIS_URL=
+
+# ============================================
+# LOGGING (Grafana/Loki)
+# ============================================
+LOKI_URL=
+LOG_LEVEL=info
+LOG_TO_FILE=true
+
+# ============================================
+# DOCKER IMAGE VERSION
+# ============================================
+VERSION=latest
+
+# ============================================
+# ADMIN DASHBOARD
+# ============================================
+AUTH_TRUST_HOST=true
+API_BASE_URL=http://api:3000
+WEBHOOK_HOST=dashboard
+WEBHOOK_PORT=3002
+DASHBOARD_PORT=3002
+BASE_PATH=
+`;
+
+export const LEGACY_ENV_TEMPLATE = `
 NODE_ENV=production
 # ============================================
 # API SERVER
@@ -186,10 +252,9 @@ LOG_LEVEL=info
 LOG_TO_FILE=true
 
 # ============================================
-# DOCKER IMAGE VERSIONS
+# DOCKER IMAGE VERSION
 # ============================================
-CORE_VERSION=latest
-DASHBOARD_VERSION=latest
+VERSION=latest
 
 # ============================================
 # ADMIN DASHBOARD
@@ -205,13 +270,10 @@ BASE_PATH=
 DASHBOARD_PORT=3002
 `;
 
-    return parseEnvContent(envTemplate);
-}
-
 /**
  * Parse .env content into structured format
  */
-function parseEnvContent(content: string): EnvVariable[] {
+function parseEnvContent(content: string, criticalKeys: readonly string[] = CRITICAL_ENV_KEYS): EnvVariable[] {
     const lines = content.split('\n');
     const variables: EnvVariable[] = [];
     let currentComment = '';
@@ -237,15 +299,24 @@ function parseEnvContent(content: string): EnvVariable[] {
             const [, key, value] = match;
             variables.push({
                 key,
-                value: value || '',
+                value: value ? value.trim() : '',
                 description: currentComment || undefined,
-                required: CRITICAL_ENV_KEYS.includes(key) || !value,
+                required: criticalKeys.includes(key) || !value,
             });
             currentComment = '';
         }
     }
 
     return variables;
+}
+
+/**
+ * Load and parse .env.example from embedded template
+ */
+export async function loadEnvExample(isLegacy: boolean = false): Promise<EnvVariable[]> {
+    const template = isLegacy ? LEGACY_ENV_TEMPLATE : ESSENTIAL_ENV_TEMPLATE;
+    const criticalKeys = isLegacy ? LEGACY_CRITICAL_ENV_KEYS : CRITICAL_ENV_KEYS;
+    return parseEnvContent(template, criticalKeys);
 }
 
 /**
@@ -262,11 +333,15 @@ export async function promptEnvVariables(
     infraServices: string[],
     basePath: string = DEFAULT_BASE_PATH,
     fullMode: boolean = false,
-    envOverrides: Partial<Record<'CORE_VERSION' | 'DASHBOARD_VERSION', string>> = {}
+    envOverrides: Partial<Record<'VERSION' | 'CORE_VERSION' | 'DASHBOARD_VERSION', string>> = {},
+    version?: string
 ): Promise<Map<string, string>> {
     logInfo('Configuring environment variables...');
 
-    const envVars = await loadEnvExample();
+    const effectiveVersion = envOverrides.VERSION || envOverrides.CORE_VERSION || envOverrides.DASHBOARD_VERSION || version || 'latest';
+    const isLegacy = !isVersionGreaterThan130(effectiveVersion);
+    const criticalKeys = isLegacy ? LEGACY_CRITICAL_ENV_KEYS : CRITICAL_ENV_KEYS;
+    const envVars = await loadEnvExample(isLegacy);
     const result = new Map<string, string>();
     const normalizedBasePath = normalizeBasePath(basePath);
     const basePathLabel = normalizedBasePath || '(root)';
@@ -291,8 +366,8 @@ export async function promptEnvVariables(
     if (mode === 'default') {
         // Use defaults, only prompt for critical values
         for (const envVar of envVars) {
-            if (fullMode && envVar.key in envOverrides) {
-                const overrideValue = envOverrides[envVar.key as keyof typeof envOverrides];
+            if (fullMode && (envVar.key in envOverrides || (envVar.key === 'VERSION' && ('CORE_VERSION' in envOverrides || 'VERSION' in envOverrides)))) {
+                const overrideValue = envOverrides[envVar.key as keyof typeof envOverrides] || (envVar.key === 'VERSION' ? (envOverrides.VERSION || envOverrides.CORE_VERSION) : undefined);
                 if (overrideValue) {
                     result.set(envVar.key, overrideValue);
                     continue;
@@ -311,14 +386,20 @@ export async function promptEnvVariables(
                 continue;
             }
 
+            // VERSION collected upfront or overridden
+            if (envVar.key === 'VERSION') {
+                result.set(envVar.key, effectiveVersion);
+                continue;
+            }
+
             // Use default value if available
-            if (envVar.value && !CRITICAL_ENV_KEYS.includes(envVar.key)) {
+            if (envVar.value && !criticalKeys.includes(envVar.key)) {
                 result.set(envVar.key, envVar.value);
                 continue;
             }
 
             // Prompt for critical values (only if not auto-filled)
-            if (CRITICAL_ENV_KEYS.includes(envVar.key)) {
+            if (criticalKeys.includes(envVar.key)) {
                 if (fullMode) {
                     // In full mode, auto-generate critical values
                     const defaultValue = generateDefaultValue(envVar.key);
@@ -327,7 +408,7 @@ export async function promptEnvVariables(
                     }
                 } else {
                     // Show changelog info for version variables
-                    if (envVar.key === 'CORE_VERSION' || envVar.key === 'DASHBOARD_VERSION') {
+                    if (envVar.key === 'VERSION') {
                         logInfo('ℹ️  Visit https://simplens.in/changelog for version information');
                     }
 
@@ -375,8 +456,8 @@ export async function promptEnvVariables(
         logInfo('Interactive mode: You will be prompted for each environment variable.');
         
         for (const envVar of envVars) {
-            if (fullMode && envVar.key in envOverrides) {
-                const overrideValue = envOverrides[envVar.key as keyof typeof envOverrides];
+            if (fullMode && (envVar.key in envOverrides || (envVar.key === 'VERSION' && ('CORE_VERSION' in envOverrides || 'VERSION' in envOverrides)))) {
+                const overrideValue = envOverrides[envVar.key as keyof typeof envOverrides] || (envVar.key === 'VERSION' ? (envOverrides.VERSION || envOverrides.CORE_VERSION) : undefined);
                 if (overrideValue) {
                     result.set(envVar.key, overrideValue);
                     continue;
@@ -390,9 +471,15 @@ export async function promptEnvVariables(
                 result.set(envVar.key, normalizedBasePath);
                 continue;
             }
+
+            // VERSION collected upfront or overridden
+            if (envVar.key === 'VERSION') {
+                result.set(envVar.key, effectiveVersion);
+                continue;
+            }
             
             // Show changelog info for version variables
-            if (envVar.key === 'CORE_VERSION' || envVar.key === 'DASHBOARD_VERSION') {
+            if (envVar.key === 'VERSION') {
                 logInfo('ℹ️  Visit https://simplens.in/changelog for version information');
             }
 
@@ -443,7 +530,7 @@ export async function promptEnvVariables(
  * Get suggested value for specific keys
  */
 function getSuggestedValue(key: string): string {
-    if (key === 'NS_API_KEY' || key === 'AUTH_SECRET') {
+    if (key === 'NS_API_KEY' || key === 'AUTH_SECRET' || key === 'JWT_SECRET') {
         return `Replace with: openssl rand -base64 32 (or) Press <Enter> to auto-generate value`;
     }
     if (key === 'NODE_ENV') {
@@ -452,7 +539,7 @@ function getSuggestedValue(key: string): string {
     if (key === 'ADMIN_USERNAME') {
         return 'admin';
     }
-    if (key === 'CORE_VERSION' || key === 'DASHBOARD_VERSION') {
+    if (key === 'VERSION' || key === 'CORE_VERSION' || key === 'DASHBOARD_VERSION') {
         return 'latest';
     }
     return '';
@@ -463,12 +550,23 @@ function getSuggestedValue(key: string): string {
  */
 export async function generateEnvFile(
     targetDir: string,
-    envVars: Map<string, string>
+    envVars: Map<string, string>,
+    isLegacy: boolean = false
 ): Promise<void> {
     const envPath = path.join(targetDir, '.env');
     
     let content = '# SimpleNS Environment Configuration\n';
-    content += '# Generated by @simplens/onboard\n\n';
+    content += '# Generated by @simplens/onboard\n';
+    if (!isLegacy) {
+        content += '#\n';
+        content += '# NOTE: All operational settings (worker batch sizes, poll intervals, retries,\n';
+        content += '# deduplication TTLs, recovery thresholds, and log levels) are now managed\n';
+        content += '# dynamically via MongoDB and the Admin Dashboard with live zero-downtime hot-reloading!\n';
+        content += '#\n';
+        content += '# Administrator credentials are configured interactively on first launch via\n';
+        content += '# the Dashboard Setup UI (/setup) and stored securely in MongoDB.\n';
+    }
+    content += '\n';
 
     for (const [key, value] of envVars.entries()) {
         content += `${key}=${value}\n`;

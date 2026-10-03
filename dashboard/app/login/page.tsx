@@ -11,7 +11,7 @@ import { AlertTriangle, Eye, EyeOff, Loader2, Lock, User } from "lucide-react";
 import { ElegantShape } from "@/components/elegant-shape";
 import { withBasePath } from "@/lib/utils";
 import { authService } from "@/lib/api-client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -20,6 +20,21 @@ export default function LoginPage() {
     const [error, setError] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+
+    useEffect(() => {
+        const checkStatus = async () => {
+            try {
+                const status = await authService.getAuthStatus();
+                if (!status.isConfigured) {
+                    router.replace(withBasePath("/setup"));
+                }
+            } catch (err) {
+                console.warn("Failed to check auth configuration status on login page", err);
+            }
+        };
+
+        checkStatus();
+    }, [router]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -30,8 +45,7 @@ export default function LoginPage() {
             const data = await authService.login({ username, password });
             setIsLoading(false);
             // Redirect to dashboard
-            router.push(data.redirectUrl || withBasePath(`/dashboard`));
-            router.refresh();
+            window.location.href = data.redirectUrl || withBasePath(`/dashboard`);
             return;
         } catch (err) {
             const error = err as Error;

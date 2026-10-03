@@ -79,22 +79,22 @@ npx @simplens/onboard --infra --dir /path/to/setup
 
 ```bash
 # Complete setup with all options via CLI (no prompts)
-npx @simplens/onboard --full --infra mongo kafka redis nginx --env default --base-path /dashboard --plugin @simplens/mock @simplens/nodemailer-gmail --no-output
+npx @simplens/onboard --full --infra mongo kafka redis nginx --env default --base-path /dashboard --app-version latest --skip-plugins --no-output
 ```
 
 This mode:
 - Requires `--full` flag to enable non-interactive mode
 - Requires `--env <mode>` to specify environment mode
-- **Auto-generates secure credentials** for NS_API_KEY, AUTH_SECRET, and ADMIN_PASSWORD
-- **Auto-generates placeholder credentials** for plugins
-- **Auto-generates version values** for CORE_VERSION and DASHBOARD_VERSION
+- **Auto-generates secure credentials** for `JWT_SECRET` (and `AUTH_SECRET`/`NS_API_KEY`/`ADMIN_PASSWORD` for legacy SimpleNS <= 1.3.0)
+- **Auto-generates placeholder credentials** for plugins if `--plugin` is provided
+- **Auto-generates version value** for `VERSION` (default: `latest`)
 - All other options are optional with sensible defaults
 - Services are not auto-started (use `docker compose up -d` manually; fallback: `docker-compose up -d`)
 
 **⚠️ IMPORTANT**: Auto-generated credentials are **NOT secure for production**. After setup completes, you **must** update the following in your `.env` file:
-- `NS_API_KEY` - API authentication key
-- `AUTH_SECRET` - Session secret for dashboard
-- `ADMIN_PASSWORD` - Dashboard admin password
+- `JWT_SECRET` - Secret key for API authentication tokens (for legacy <= 1.3.0, `AUTH_SECRET` was used for dashboard session)
+- `NS_API_KEY` - API authentication key (legacy SimpleNS <= 1.3.0 only; for > 1.3.0, external API keys are created and managed dynamically in the Dashboard at `/keys`)
+- `ADMIN_PASSWORD` - Dashboard admin password (legacy SimpleNS <= 1.3.0 only; for > 1.3.0, the admin account is set up interactively via the Dashboard at `/setup` upon first boot)
 - Plugin credentials (if any plugins were installed)
 
 The CLI will display a security notice with all credentials that need to be updated.
@@ -108,9 +108,11 @@ The CLI will display a security notice with all credentials that need to be upda
 | `--env <mode>` | Environment setup mode: `default` or `interactive` | Prompted |
 | `--dir <path>` | Target directory for setup files | Current directory |
 | `--base-path <path>` | Dashboard base path (example: `/dashboard`) | Empty (root) |
-| `--core-version <version>` | Override `CORE_VERSION` in generated `.env` (primarily for `--full`) | `latest` |
-| `--dashboard-version <version>` | Override `DASHBOARD_VERSION` in generated `.env` (primarily for `--full`) | `latest` |
+| `--app-version <version>` | Override `VERSION` in generated `.env` and compose (alias: `--version-tag`) | `latest` |
+| `--core-version <version>` | Backward-compatible alias for `--app-version` | `latest` |
+| `--dashboard-version <version>` | Backward-compatible alias for `--app-version` | `latest` |
 | `--plugin [plugins...]` | Plugins to install (e.g., `@simplens/mock @simplens/nodemailer-gmail`) | Prompted |
+| `--skip-plugins` | Skip plugin configuration during onboarding (install via Dashboard later) | `false` |
 | `--ssl` | Enable optional SSL automation with Certbot | `false` |
 | `--ssl-domain <domain>` | Public domain for SSL cert (required with `--ssl` in `--full`) | Prompted |
 | `--ssl-email <email>` | Email for Let's Encrypt registration (required with `--ssl` in `--full`) | Prompted |
@@ -125,6 +127,19 @@ The CLI will display a security notice with all credentials that need to be upda
 - `nginx` - Nginx reverse proxy (optional, Required only is BASE_PATH or SSL is configured)
 - `loki` - Loki log aggregation (optional)
 - `grafana` - Grafana observability dashboard (optional)
+
+## SimpleNS Version Compatibility (> 1.3.0 vs <= 1.3.0)
+
+SimpleNS versions **> 1.3.0** feature a modernized plugin management system and database-driven dynamic configuration. `@simplens/onboard` automatically selects the appropriate compose templates, volume mounts, and `.env` format based on the selected version:
+
+- **Unified Image Tag (`VERSION`)**: Both core services (`api`, `worker`, `processors`, `recovery`) and `dashboard` share a single `VERSION` variable in `.env` and `docker-compose.yaml` (default: `latest`).
+- **SimpleNS > 1.3.0**:
+  - **No Shared Plugins Volume**: Services have their own internal plugin directory. The shared `plugin-data` volume is completely removed.
+  - **Optional Plugins Configuration**: Configuring plugins via `simplens.config.yaml` during onboarding is completely optional. You can skip plugin setup during onboarding (`--skip-plugins`) and install plugins dynamically from the Admin Dashboard. If you configure plugins during onboarding, `simplens.config.yaml` is mounted and `SIMPLENS_CONFIG_PATH` is passed to the container.
+  - **First-Boot Dashboard Admin Setup**: `ADMIN_USERNAME` and `ADMIN_PASSWORD` are not stored in `.env`. On first launch, navigate to the Dashboard to initialize the administrator account via the guided setup screen (`/setup`).
+  - **Dynamic Operational Settings**: Operational configurations (outbox interval/batch size, idempotency TTL, recovery timeouts, cleanup retention) are stored in MongoDB and dynamically updated live via the Dashboard Settings page.
+- **SimpleNS <= 1.3.0**:
+  - Automatically activates legacy mode with the shared `plugin-data` volume, required `simplens.config.yaml`, `ADMIN_PASSWORD` in `.env`, and operational settings in `.env`.
 
 ## Workflow
 
@@ -144,15 +159,12 @@ The CLI will display a security notice with all credentials that need to be upda
    - Load defaults from `.env.example`
    - Auto-fill infra connection URLs
    - Ask for `BASE_PATH` first and reuse it throughout setup
-   - Prompt for critical values (API keys, passwords)
+   - Prompt for critical values (API keys, session secret)
    - Generate `.env` file
 
 4. **Plugin Installation**
-   - Fetch official plugins from registry
-   - Interactive multi-select
-   - Generate `simplens.config.yaml`
-   - Extract and prompt for plugin credentials
-   - Append credentials to `.env`
+   - For SimpleNS > 1.3.0: Plugins are optional. Choose to configure plugins now or skip (`--skip-plugins`) and install later via Dashboard.
+   - For SimpleNS <= 1.3.0: Interactive plugin selection, generate `simplens.config.yaml`, and append credentials to `.env`.
 
 5. **Service Orchestration**
    - Optionally start infrastructure services
@@ -252,8 +264,7 @@ npx @simplens/onboard \
   --full \
   --infra mongo kafka redis nginx \
   --env default \
-  --core-version 1.2 \
-  --dashboard-version 1.2 \
+  --app-version latest \
   --base-path /dashboard \
   --plugin @simplens/mock @simplens/nodemailer-gmail \
   --dir ./my-simplens-setup \
@@ -271,8 +282,8 @@ npx @simplens/onboard \
 npx @simplens/onboard \
   --full \
   --env default \
-  --core-version 1.2 \
-  --dashboard-version 1.2 \
+  --app-version latest \
+  --skip-plugins \
   --dir /app/simplens
 
 # Then start services in CI:

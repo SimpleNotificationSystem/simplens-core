@@ -1,0 +1,23 @@
+meta {
+  name: Login Admin Account
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{process.env.BASE_URL}}/api/admin/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "username": "{{process.env.ADMIN_USERNAME}}",
+    "password": "{{process.env.ADMIN_PASSWORD}}"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

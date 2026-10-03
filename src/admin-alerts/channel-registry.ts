@@ -3,8 +3,7 @@
  * Extensible pattern - new channels register themselves here
  */
 
-import type { AdminChannelProvider, CredentialField } from './admin-channel.interface.js';
-import type { AdminChannelType } from '@src/types/types.js';
+import type { AdminChannelProvider, AdminChannelMeta, AdminChannelType } from '@src/types/types.js';
 
 /**
  * Factory function type for creating channel provider instances
@@ -67,12 +66,6 @@ export function getRegisteredChannelTypes(): AdminChannelType[] {
 /**
  * Admin channel metadata for dashboard
  */
-export interface AdminChannelMeta {
-    channelType: AdminChannelType;
-    displayName: string;
-    credentialFields: CredentialField[];
-}
-
 /**
  * Get metadata for all registered admin channel providers
  * Used by dashboard for dynamic form generation
