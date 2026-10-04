@@ -5,16 +5,6 @@ import { API_BASE_URL } from "./lib/api-config";
 const basePath = process.env.BASE_PATH || "";
 const SESSION_COOKIE_NAME = "simplens_session";
 
-const localApiPaths = [
-    "/api/auth/",
-    "/api/runtime-config",
-    "/api/webhook"
-];
-
-function isLocalApiRoute(pathname: string): boolean {
-    return localApiPaths.some((p) => pathname.startsWith(p));
-}
-
 function proxyToBackend(request: NextRequest, pathname: string, jwtToken?: string) {
     const requestHeaders = new Headers(request.headers);
     if (jwtToken) {
@@ -33,7 +23,6 @@ function proxyToBackend(request: NextRequest, pathname: string, jwtToken?: strin
 const publicRoutes = [
     "/login",
     "/setup",
-    "/api/admin/auth",
     "/api/auth/login",
     "/api/auth/setup",
     "/api/auth/status",
@@ -67,13 +56,10 @@ function validateSessionFromRequest(request: NextRequest): {
 }
 
 function isPublicRoute(pathname: string): boolean {
-    // Remove base path prefix if present
     let normalizedPath = pathname;
     if (basePath && pathname.startsWith(basePath)) {
         normalizedPath = pathname.slice(basePath.length) || "/";
     }
-
-    // Check if it's a public route
     return publicRoutes.some((route) => normalizedPath.startsWith(route));
 }
 
@@ -85,7 +71,6 @@ export async function middleware(request: NextRequest) {
     let pathname = request.nextUrl.pathname;
 
     // STEP 0: Handle root path when base path is configured
-    // Redirect "/" to basePath (e.g., "/dashboard")
     if (basePath && pathname === "/" && basePath !== "") {
         return NextResponse.redirect(new URL(basePath, request.url));
     }
@@ -93,11 +78,10 @@ export async function middleware(request: NextRequest) {
     // STEP 1: Strip base path if present and rewrite the request
     if (basePath && pathname.startsWith(basePath)) {
         const strippedPath = pathname.slice(basePath.length) || '/';
-        
         const url = request.nextUrl.clone();
         url.pathname = strippedPath;
         pathname = strippedPath;
-        
+
         if (isStaticFile(pathname)) {
             return NextResponse.rewrite(url);
         }
@@ -124,12 +108,31 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL(`${basePath}/dashboard`, request.url));
     }
 
-    // STEP 4.5: Proxy public backend auth routes directly to API server
-    if (pathname.startsWith("/api/admin/auth")) {
-        return proxyToBackend(request, pathname);
+    // STEP 5: Proxy API requests directly to backend when accessed on standalone dashboard port
+    if (pathname.startsWith("/api/")) {
+        // Public API routes
+        if (isPublicRoute(pathname)) {
+            return proxyToBackend(request, pathname);
+        }
+
+        // Authenticated session
+        if (session.isValid) {
+            return proxyToBackend(request, pathname, session.token);
+        }
+
+        // Bearer token fallback for external/MCP clients
+        const authHeader = request.headers.get("authorization");
+        if (authHeader && authHeader.startsWith("Bearer ")) {
+            return proxyToBackend(request, pathname);
+        }
+
+        return NextResponse.json(
+            { error: "Unauthorized: valid session or API key required" },
+            { status: 401 }
+        );
     }
 
-    // STEP 5: Allow public routes
+    // STEP 6: Allow public UI pages
     if (isPublicRoute(pathname)) {
         if (basePath && request.nextUrl.pathname.startsWith(basePath)) {
             const url = request.nextUrl.clone();
@@ -139,39 +142,11 @@ export async function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
-    // STEP 6: Protected routes
+    // STEP 7: Protected UI pages - redirect unauthenticated users to login
     if (!session.isValid) {
-        // For API routes, fall back to Authorization header (API key or Bearer token)
-        // passed by external services or MCP server directly through the dashboard
-        if (pathname.startsWith("/api/")) {
-            const authHeader = request.headers.get("authorization");
-            if (authHeader && authHeader.startsWith("Bearer ")) {
-                if (isLocalApiRoute(pathname)) {
-                    if (basePath && request.nextUrl.pathname.startsWith(basePath)) {
-                        const url = request.nextUrl.clone();
-                        url.pathname = pathname;
-                        return NextResponse.rewrite(url);
-                    }
-                    return NextResponse.next();
-                }
-                return proxyToBackend(request, pathname);
-            }
-
-            return NextResponse.json(
-                { error: "Unauthorized: valid session or API key required" },
-                { status: 401 }
-            );
-        }
-
-        // Non-API routes: redirect to login
         const loginUrl = new URL(`${basePath}/login`, request.url);
         loginUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);
         return NextResponse.redirect(loginUrl);
-    }
-
-    // STEP 7: Proxy non-local API requests attaching the user's Core API JWT token
-    if (pathname.startsWith("/api/") && !isLocalApiRoute(pathname)) {
-        return proxyToBackend(request, pathname, session.token);
     }
 
     if (basePath && request.nextUrl.pathname.startsWith(basePath)) {

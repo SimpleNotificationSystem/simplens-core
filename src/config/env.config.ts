@@ -71,6 +71,9 @@ export const env = {
     // Admin Alerts (optional - auto-generated if not provided)
     ADMIN_ALERT_ENCRYPTION_KEY: <string>process.env.ADMIN_ALERT_ENCRYPTION_KEY || "",
 
+    // Application Base Path
+    BASE_PATH: <string>process.env.BASE_PATH || "",
+
     // ========================================================================
     // 2. DYNAMIC OPERATIONAL VARIABLES (Delegated to DynamicConfigService)
     // These reflect live in-memory MongoDB configuration with zero-restart updates.

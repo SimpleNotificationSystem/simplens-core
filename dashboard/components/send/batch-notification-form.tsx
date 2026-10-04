@@ -16,6 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { pluginService, templateService, notificationService } from "@/lib/api-client";
+import { withBasePath } from "@/lib/utils";
 
 // Generate a UUIDv4
 function generateUUID(): string {
@@ -400,8 +401,9 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                 client_id: clientId,
                 channel: selectedChannels,
                 recipients: processedRecipients,
-                //hard-coded the webhook url as the simplest solution. This url may not be correct all the times. Nop issues, the worker just fire and forgets while sending webhook, it does not retires
-                webhook_url: "http://localhost:3002/api/webhook"
+                webhook_url: typeof window !== "undefined"
+                    ? `${window.location.origin}${withBasePath("/api/webhook")}`
+                    : "http://localhost:3000/api/webhook",
             };
 
             const hasAnyTemplate = selectedChannels.some(

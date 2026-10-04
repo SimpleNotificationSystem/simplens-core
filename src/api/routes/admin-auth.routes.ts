@@ -12,8 +12,9 @@ import {
 
 const router = Router();
 
-// 1. Signup - Initial administrator account creation (only allowed if no admin exists)
+// 1. Signup / Setup - Initial administrator account creation (only allowed if no admin exists)
 router.post('/signup', signupAdmin);
+router.post('/setup', signupAdmin);
 
 // 2. Login - Verify administrator credentials and set session cookie
 router.post('/login', loginAdmin);

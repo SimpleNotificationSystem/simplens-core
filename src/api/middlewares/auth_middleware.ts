@@ -55,7 +55,8 @@ async function handleDynamicApiKey(
         }
 
         const fullPath = (req.originalUrl || `${req.baseUrl || ''}${req.path}`).split('?')[0];
-        if (fullPath.includes('/api/admin/auth/setup') || fullPath.includes('/api/admin/auth/verify')) {
+        const isAdminCredentialRoute = /(?:\/api)?(?:\/admin)?\/auth\/(?:setup|signup|login|verify)/.test(fullPath);
+        if (isAdminCredentialRoute) {
             res.status(403).json({
                 error: 'Forbidden: API keys cannot access administrator credential setup or verification routes.',
             });

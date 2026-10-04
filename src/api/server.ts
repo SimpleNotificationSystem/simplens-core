@@ -9,12 +9,13 @@ import plugins_router from './routes/plugins.routes.js';
 import providers_router from './routes/providers.routes.js';
 import channel_routing_router from './routes/channel-routing.routes.js';
 import admin_channels_router from './routes/admin-channels.routes.js';
-import notification_templates_router from '@src/api/routes/notification_templates.routes.js';
+import notification_templates_router from './routes/notification_templates.routes.js';
 import notifications_management_router from './routes/notifications-management.routes.js';
 import alerts_router from './routes/alerts.routes.js';
 import dashboard_router from './routes/dashboard.routes.js';
 import settings_router from './routes/settings.routes.js';
 import admin_auth_router from './routes/admin-auth.routes.js';
+import webhook_router from './routes/webhook.routes.js';
 import api_keys_router from './routes/api-key.routes.js';
 import health_router from './routes/health.routes.js';
 import {
@@ -63,7 +64,16 @@ app.use(cors({
     credentials: true,
 }));
 
-app.get("/api", (req: Request, res: Response) => {
+// check whether the BASE_PATH is a valid one
+let BASE_PATH = env.BASE_PATH;
+if (!(BASE_PATH.length > 0 && BASE_PATH.startsWith("/"))) {
+    BASE_PATH = "";
+}
+if (BASE_PATH.endsWith("/")) {
+    BASE_PATH = BASE_PATH.slice(0, BASE_PATH.length - 1);
+}
+
+app.get(`${BASE_PATH}/api`, (req: Request, res: Response) => {
     res.json({
         info: "Notification Service is running"
     });
@@ -71,20 +81,21 @@ app.get("/api", (req: Request, res: Response) => {
 });
 
 // Health check endpoints for Docker/Kubernetes and API consumers
-app.use('/api', health_router);
+app.use(`${BASE_PATH}/api`, health_router);
 
-app.use('/api/notification', auth_middleware, notification_router);
-app.use('/api/notifications', auth_middleware, notifications_management_router);
-app.use('/api/alerts', auth_middleware, alerts_router);
-app.use('/api/dashboard', auth_middleware, dashboard_router);
-app.use('/api/plugins', auth_middleware, plugins_router);
-app.use('/api/providers', auth_middleware, providers_router);
-app.use('/api/channels/routing', auth_middleware, channel_routing_router);
-app.use('/api/admin-channels', auth_middleware, admin_channels_router);
-app.use('/api/templates', auth_middleware, notification_templates_router);
-app.use('/api/settings', auth_middleware, settings_router);
-app.use('/api/keys', auth_middleware, api_keys_router);
-app.use('/api/admin/auth', admin_auth_router);
+app.use(`${BASE_PATH}/api/notification`, auth_middleware, notification_router);
+app.use(`${BASE_PATH}/api/notifications`, auth_middleware, notifications_management_router);
+app.use(`${BASE_PATH}/api/alerts`, auth_middleware, alerts_router);
+app.use(`${BASE_PATH}/api/dashboard`, auth_middleware, dashboard_router);
+app.use(`${BASE_PATH}/api/plugins`, auth_middleware, plugins_router);
+app.use(`${BASE_PATH}/api/providers`, auth_middleware, providers_router);
+app.use(`${BASE_PATH}/api/channels/routing`, auth_middleware, channel_routing_router);
+app.use(`${BASE_PATH}/api/admin-channels`, auth_middleware, admin_channels_router);
+app.use(`${BASE_PATH}/api/templates`, auth_middleware, notification_templates_router);
+app.use(`${BASE_PATH}/api/settings`, auth_middleware, settings_router);
+app.use(`${BASE_PATH}/api/keys`, auth_middleware, api_keys_router);
+app.use(`${BASE_PATH}/api/auth`, admin_auth_router);
+app.use(`${BASE_PATH}/api/webhook`, webhook_router);
 
 const start_server = async () => {
     try {
@@ -120,7 +131,7 @@ const start_server = async () => {
         const server = http.createServer(app);
         server.keepAliveTimeout = 65000;
         server.headersTimeout = 66000;
-        server.listen(env.PORT, () => logger.success(`Notification Service running at http://localhost:${env.PORT}`));
+        server.listen(env.PORT, () => logger.success(`Notification Service running at http://localhost:${env.PORT}${BASE_PATH}`));
 
         // 5. Start health probe server for Kubernetes
         probeServer = createHealthProbeServer({
@@ -148,6 +159,7 @@ const start_server = async () => {
                     });
                 }
                 await ApiKeyUsageAggregator.flush();
+                await PluginSyncService.stopSubscriber();
                 await disconnectRedis();
                 await db.disconnect();
             } catch (e) {
@@ -165,8 +177,8 @@ const start_server = async () => {
 
             void AdminAlertService.sendAlert('service_health',
                 `🔴 UNCAUGHT EXCEPTION IN API SERVER\n` +
-                `Error: ${err.message}\n` +
-                `Stack: ${err.stack?.split('\n').slice(0, 3).join('\n')}\n` +
+                `Error: ${err instanceof Error ? err.message : String(err)}\n` +
+                `Stack: ${err?.stack?.split('\n').slice(0, 3).join('\n') || "undefined"}\n` +
                 `Action: Review error handling. Check for async operations without try-catch.`,
                 { severity: 'critical' });
 

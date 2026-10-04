@@ -141,6 +141,7 @@ export const verifyAdmin = async (req: Request, res: Response): Promise<void> =>
                 const token = generateAdminJwt(user);
                 setSessionCookie(res, token);
                 res.status(200).json({
+                    success: true,
                     isValid: true,
                     token,
                     user,
@@ -160,6 +161,7 @@ export const verifyAdmin = async (req: Request, res: Response): Promise<void> =>
             const token = generateAdminJwt(user);
             setSessionCookie(res, token);
             res.status(200).json({
+                success: true,
                 isValid: true,
                 token,
                 user,
