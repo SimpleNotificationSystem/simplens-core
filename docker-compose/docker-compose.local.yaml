@@ -166,11 +166,10 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: ${DASHBOARD_PORT:-3002}
-      API_BASE_URL: http://api:${PORT:-3000}
+      API_BASE_URL: http://api:{PORT:-3000}{BASE_PATH:-}
+      BASE_PATH: ${BASE_PATH:-}
       MONGO_URI: mongodb://mongo:27017/simplens_local?replicaSet=rs0
       AUTH_TRUST_HOST: "true"
-      WEBHOOK_HOST: dashboard
-      WEBHOOK_PORT: "3002"
     depends_on:
       api:
         condition: service_healthy
