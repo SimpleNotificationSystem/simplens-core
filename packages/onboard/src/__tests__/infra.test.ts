@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildAppComposeContent } from '../infra.js';
+import { buildAppComposeContent, generateNginxConfig } from '../infra.js';
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
 
 describe('infra app compose generation', () => {
     it('does not include nginx when disabled', () => {
@@ -52,3 +55,59 @@ describe('infra app compose generation', () => {
         expect(compose).toContain('logs-data:');
     });
 });
+
+describe('generateNginxConfig', () => {
+    it('generates nginx config for root basePath correctly', async () => {
+        const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'onboard-test-'));
+        try {
+            await generateNginxConfig(tmpDir, '');
+            const content = await fs.readFile(path.join(tmpDir, 'nginx.conf'), 'utf-8');
+            expect(content).toContain('location ^~ /api {');
+            expect(content).toContain('proxy_pass http://api:3000;');
+            expect(content).toContain('location / {');
+            expect(content).toContain('proxy_pass http://dashboard:3002;');
+            expect(content).not.toContain('return 302');
+        } finally {
+            await fs.rm(tmpDir, { recursive: true, force: true });
+        }
+    });
+
+    it('generates nginx config for legacy version (<= 1.3.0) with custom basePath correctly', async () => {
+        const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'onboard-test-'));
+        try {
+            await generateNginxConfig(tmpDir, '/sns', { version: '1.3.0' });
+            const content = await fs.readFile(path.join(tmpDir, 'nginx.conf'), 'utf-8');
+            expect(content).toContain('location /api {');
+            expect(content).not.toContain('location ^~ /sns/api {');
+            expect(content).not.toContain('location ^~ /api {');
+            expect(content).not.toContain('return 302');
+        } finally {
+            await fs.rm(tmpDir, { recursive: true, force: true });
+        }
+    });
+
+    it('generates nginx config for legacy version using isLegacy flag', async () => {
+        const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'onboard-test-'));
+        try {
+            await generateNginxConfig(tmpDir, '/sns', { isLegacy: true });
+            const content = await fs.readFile(path.join(tmpDir, 'nginx.conf'), 'utf-8');
+            expect(content).toContain('location /api {');
+            expect(content).not.toContain('return 302');
+        } finally {
+            await fs.rm(tmpDir, { recursive: true, force: true });
+        }
+    });
+
+    it('generates nginx config for version > 1.3.0 with custom basePath correctly', async () => {
+        const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'onboard-test-'));
+        try {
+            await generateNginxConfig(tmpDir, '/sns', { version: '1.4.0' });
+            const content = await fs.readFile(path.join(tmpDir, 'nginx.conf'), 'utf-8');
+            expect(content).toContain('location ^~ /sns/api {');
+            expect(content).toContain('return 302 /sns;');
+        } finally {
+            await fs.rm(tmpDir, { recursive: true, force: true });
+        }
+    });
+});
+

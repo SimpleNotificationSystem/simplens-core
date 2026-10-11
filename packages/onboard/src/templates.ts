@@ -221,7 +221,7 @@ export const APP_COMPOSE_TEMPLATE = `services:
     command: [ "node", "dist/api/server.js" ]
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))" ]
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:3000\${BASE_PATH}/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -288,9 +288,8 @@ export const APP_COMPOSE_TEMPLATE = `services:
       - .env
     environment:
       PORT: \${DASHBOARD_PORT:-3002}
-      API_BASE_URL: http://api:\${PORT:-3000}
-      WEBHOOK_HOST: dashboard
-      WEBHOOK_PORT: \${DASHBOARD_PORT:-3002}
+      BASE_PATH: \${BASE_PATH:-}
+      API_BASE_URL: \${API_BASE_URL:-http://api:\${PORT:-3000}}
     depends_on:
       api:
         condition: service_healthy

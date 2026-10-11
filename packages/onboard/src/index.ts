@@ -555,6 +555,8 @@ async function main() {
                 enableSsl: setupOptions.enableSsl,
                 domain: setupOptions.sslDomain,
                 sslMode: setupOptions.enableSsl ? 'bootstrap' : 'final',
+                version: setupOptions.version,
+                isLegacy,
             });
         }
 
@@ -681,6 +683,8 @@ async function main() {
                     enableSsl: true,
                     domain: setupOptions.sslDomain,
                     sslMode: 'final',
+                    version: setupOptions.version,
+                    isLegacy,
                 });
 
                 await reloadNginxConfiguration(targetDir, {
@@ -701,6 +705,8 @@ async function main() {
                     domain: setupOptions.sslDomain,
                     sslMode: 'final',
                     filename: 'nginx.ssl.conf',
+                    version: setupOptions.version,
+                    isLegacy,
                 });
 
                 // Print detailed step-by-step SSL setup instructions

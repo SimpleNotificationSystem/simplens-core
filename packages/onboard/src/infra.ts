@@ -12,6 +12,7 @@ import { multiselect } from '@clack/prompts';
 import { handleCancel, spinner } from './ui.js';
 import path from 'path';
 import type { InfraService } from './types/domain.js';
+import { isVersionGreaterThan130 } from './env-config.js';
 
 const INFRA_SERVICES: InfraService[] = [
     { name: 'MongoDB (Database)', value: 'mongo', checked: true },
@@ -389,13 +390,22 @@ export async function writeAppCompose(
     s.stop('Generated docker-compose.yaml');
 }
 
+export interface NginxConfigOptions {
+    enableSsl?: boolean;
+    domain?: string;
+    sslMode?: 'bootstrap' | 'final';
+    filename?: string;
+    version?: string;
+    isLegacy?: boolean;
+}
+
 /**
  * Generate nginx.conf based on basePath configuration
  */
 export async function generateNginxConfig(
     targetDir: string,
     basePath: string,
-    options: { enableSsl?: boolean; domain?: string; sslMode?: 'bootstrap' | 'final'; filename?: string } = {}
+    options: NginxConfigOptions = {}
 ): Promise<void> {
     const outputFilename = options.filename ?? 'nginx.conf';
     const s = spinner();
@@ -407,9 +417,16 @@ export async function generateNginxConfig(
     const enableSsl = options.enableSsl === true;
     const domain = options.domain?.trim() || 'localhost';
     const sslMode = options.sslMode ?? 'final';
+    const isNewVersion = options.isLegacy !== undefined
+        ? !options.isLegacy
+        : isVersionGreaterThan130(options.version);
+
+    const apiRoutePrefix = isNewVersion
+        ? (hasBasePath ? `^~ /${normalizedPath}/api` : '^~ /api')
+        : '/api';
 
     const proxyRoutes = `
-    location /api {
+    location ${apiRoutePrefix} {
         proxy_pass http://api:3000;
         proxy_http_version 1.1;
 
@@ -494,6 +511,7 @@ ${hasBasePath ? `
 `;
 
     const rootRedirectPath = hasBasePath ? `/${normalizedPath}` : '/';
+    const shouldRedirectRoot = isNewVersion && hasBasePath;
 
     const nginxTemplate = enableSsl
         ? sslMode === 'bootstrap'
@@ -504,7 +522,10 @@ ${hasBasePath ? `
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
     }
-${proxyRoutes}
+${shouldRedirectRoot ? `    location = / {
+        return 302 ${rootRedirectPath};
+    }
+` : ''}${proxyRoutes}
 }
 `
             : `server {
@@ -536,7 +557,11 @@ ${hasBasePath ? `    location = / {
 `
         : `server {
     listen 80;
-    server_name localhost;${proxyRoutes}
+    server_name localhost;${shouldRedirectRoot ? `
+    location = / {
+        return 302 ${rootRedirectPath};
+    }
+` : ''}${proxyRoutes}
 }
 `;
 

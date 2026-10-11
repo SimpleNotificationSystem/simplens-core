@@ -112,7 +112,7 @@ export function normalizeBasePath(input: string): string {
  */
 export async function promptBasePath(defaultValue: string = DEFAULT_BASE_PATH): Promise<string> {
     const result = await text({
-        message: 'BASE_PATH for dashboard (leave empty for root, example: /dashboard):',
+        message: 'BASE_PATH for API and dashboard (leave empty for root, example: /sns):',
         placeholder: defaultValue || 'leave empty for root',
         defaultValue,
         validate: (value: string | undefined) => {
