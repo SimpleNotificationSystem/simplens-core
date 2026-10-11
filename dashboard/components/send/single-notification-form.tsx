@@ -439,7 +439,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>No Plugins Found</AlertTitle>
                 <AlertDescription>
-                    No notification plugins are configured. Please install and configure plugins in simplens.config.yaml.
+                    No notification plugins are configured. Please install and configure plugins.
                 </AlertDescription>
             </Alert>
         );

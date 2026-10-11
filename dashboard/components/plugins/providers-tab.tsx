@@ -215,7 +215,7 @@ function ProviderRateLimitRing({
           </div>
           {status.is_exhausted ? (
             <div className="flex items-center gap-1.5 text-rose-500 font-medium pt-1">
-              <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
               <span>Next token in {(status.resets_in_ms / 1000).toFixed(1)}s</span>
             </div>
           ) : remaining < maxTokens ? (
@@ -624,7 +624,7 @@ export function ProvidersTab() {
                       {p.plugin_name}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
                     <ProviderRateLimitRing
                       rateLimit={rateLimitsMap.get(p.id)}
                       onReset={() => handleResetRateLimit(p.id)}
