@@ -1,5 +1,6 @@
 import {
     APP_COMPOSE_TEMPLATE,
+    LEGACY_APP_COMPOSE_TEMPLATE,
     APP_NGINX_SERVICE_TEMPLATE,
     APP_NGINX_SSL_SERVICE_TEMPLATE,
     APP_CERTBOT_SERVICES_TEMPLATE,
@@ -11,6 +12,7 @@ import { multiselect } from '@clack/prompts';
 import { handleCancel, spinner } from './ui.js';
 import path from 'path';
 import type { InfraService } from './types/domain.js';
+import { isVersionGreaterThan130 } from './env-config.js';
 
 const INFRA_SERVICES: InfraService[] = [
     { name: 'MongoDB (Database)', value: 'mongo', checked: true },
@@ -305,21 +307,38 @@ export async function generateInfraCompose(
     s.stop('Generated docker-compose.infra.yaml');
 }
 
+export interface AppComposeOptions {
+    includeSsl?: boolean;
+    isLegacy?: boolean;
+    hasPluginsConfig?: boolean;
+}
+
 /**
  * Build app docker-compose content.
  * Optionally inject nginx reverse-proxy service before the volumes section.
  */
 export function buildAppComposeContent(
     includeNginx: boolean,
-    options: { includeSsl?: boolean } = {}
+    options: AppComposeOptions = {}
 ): string {
-    let content = APP_COMPOSE_TEMPLATE;
+    const isLegacy = options.isLegacy === true;
+    let content = isLegacy ? LEGACY_APP_COMPOSE_TEMPLATE : APP_COMPOSE_TEMPLATE;
     const includeSsl = options.includeSsl === true;
     const shouldIncludeNginx = includeNginx || includeSsl;
     const marker = '\nvolumes:';
 
     if (!content.includes(marker)) {
         return content;
+    }
+
+    if (!isLegacy && options.hasPluginsConfig === true) {
+        const apiMarker = '  api:\n    image: ghcr.io/simplenotificationsystem/simplens-core:${VERSION:-latest}\n    container_name: api\n    ports:\n      - 3000:3000\n    env_file:\n      - .env\n    volumes:\n      - logs-data:/app/logs';
+        const apiReplacement = '  api:\n    image: ghcr.io/simplenotificationsystem/simplens-core:${VERSION:-latest}\n    container_name: api\n    ports:\n      - 3000:3000\n    env_file:\n      - .env\n    environment:\n      SIMPLENS_CONFIG_PATH: ${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}\n    volumes:\n      - logs-data:/app/logs\n      - ./simplens.config.yaml:/app/simplens.config.yaml:ro';
+        content = content.replace(apiMarker, apiReplacement);
+
+        const npMarker = '  notification_processor:\n    image: ghcr.io/simplenotificationsystem/simplens-core:${VERSION:-latest}\n    container_name: notification_processor\n    env_file:\n      - .env\n    volumes:\n      - logs-data:/app/logs';
+        const npReplacement = '  notification_processor:\n    image: ghcr.io/simplenotificationsystem/simplens-core:${VERSION:-latest}\n    container_name: notification_processor\n    env_file:\n      - .env\n    environment:\n      SIMPLENS_CONFIG_PATH: ${SIMPLENS_CONFIG_PATH:-/app/simplens.config.yaml}\n    volumes:\n      - logs-data:/app/logs\n      - ./simplens.config.yaml:/app/simplens.config.yaml:ro';
+        content = content.replace(npMarker, npReplacement);
     }
 
     if (shouldIncludeNginx) {
@@ -331,10 +350,17 @@ export function buildAppComposeContent(
 
     if (includeSsl) {
         content = content.replace(marker, `\n${APP_CERTBOT_SERVICES_TEMPLATE}\n${marker}`);
-        content = content.replace(
-            '\nvolumes:\n  plugin-data:',
-            '\nvolumes:\n  certbot-etc:\n  certbot-www:\n  plugin-data:'
-        );
+        if (isLegacy) {
+            content = content.replace(
+                '\nvolumes:\n  plugin-data:',
+                '\nvolumes:\n  certbot-etc:\n  certbot-www:\n  plugin-data:'
+            );
+        } else {
+            content = content.replace(
+                '\nvolumes:\n  logs-data:',
+                '\nvolumes:\n  certbot-etc:\n  certbot-www:\n  logs-data:'
+            );
+        }
     }
 
     return content;
@@ -345,16 +371,32 @@ export function buildAppComposeContent(
  */
 export async function writeAppCompose(
     targetDir: string,
-    options: { includeNginx?: boolean; includeSsl?: boolean } = {}
+    options: {
+        includeNginx?: boolean;
+        includeSsl?: boolean;
+        isLegacy?: boolean;
+        hasPluginsConfig?: boolean;
+    } = {}
 ): Promise<void> {
     const s = spinner();
     s.start('Generating docker-compose.yaml...');
     const appPath = path.join(targetDir, 'docker-compose.yaml');
     const appContent = buildAppComposeContent(options.includeNginx === true, {
         includeSsl: options.includeSsl === true,
+        isLegacy: options.isLegacy === true,
+        hasPluginsConfig: options.hasPluginsConfig === true,
     });
     await writeFile(appPath, appContent);
     s.stop('Generated docker-compose.yaml');
+}
+
+export interface NginxConfigOptions {
+    enableSsl?: boolean;
+    domain?: string;
+    sslMode?: 'bootstrap' | 'final';
+    filename?: string;
+    version?: string;
+    isLegacy?: boolean;
 }
 
 /**
@@ -363,7 +405,7 @@ export async function writeAppCompose(
 export async function generateNginxConfig(
     targetDir: string,
     basePath: string,
-    options: { enableSsl?: boolean; domain?: string; sslMode?: 'bootstrap' | 'final'; filename?: string } = {}
+    options: NginxConfigOptions = {}
 ): Promise<void> {
     const outputFilename = options.filename ?? 'nginx.conf';
     const s = spinner();
@@ -375,9 +417,16 @@ export async function generateNginxConfig(
     const enableSsl = options.enableSsl === true;
     const domain = options.domain?.trim() || 'localhost';
     const sslMode = options.sslMode ?? 'final';
+    const isNewVersion = options.isLegacy !== undefined
+        ? !options.isLegacy
+        : isVersionGreaterThan130(options.version);
+
+    const apiRoutePrefix = isNewVersion
+        ? (hasBasePath ? `^~ /${normalizedPath}/api` : '^~ /api')
+        : '/api';
 
     const proxyRoutes = `
-    location /api {
+    location ${apiRoutePrefix} {
         proxy_pass http://api:3000;
         proxy_http_version 1.1;
 
@@ -462,6 +511,7 @@ ${hasBasePath ? `
 `;
 
     const rootRedirectPath = hasBasePath ? `/${normalizedPath}` : '/';
+    const shouldRedirectRoot = isNewVersion && hasBasePath;
 
     const nginxTemplate = enableSsl
         ? sslMode === 'bootstrap'
@@ -472,7 +522,10 @@ ${hasBasePath ? `
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
     }
-${proxyRoutes}
+${shouldRedirectRoot ? `    location = / {
+        return 302 ${rootRedirectPath};
+    }
+` : ''}${proxyRoutes}
 }
 `
             : `server {
@@ -504,7 +557,11 @@ ${hasBasePath ? `    location = / {
 `
         : `server {
     listen 80;
-    server_name localhost;${proxyRoutes}
+    server_name localhost;${shouldRedirectRoot ? `
+    location = / {
+        return 302 ${rootRedirectPath};
+    }
+` : ''}${proxyRoutes}
 }
 `;
 

@@ -1,0 +1,55 @@
+meta {
+  name: Update Operational Settings
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{process.env.BASE_URL}}/api/settings
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "api": {
+      "max_batch_req_limit": 1000
+    },
+    "worker": {
+      "outbox_poll_interval_ms": 5000,
+      "outbox_cleanup_interval_ms": 60000,
+      "outbox_batch_size": 100,
+      "outbox_retention_ms": 300000,
+      "outbox_claim_timeout_ms": 30000
+    },
+    "retry": {
+      "max_retry_count": 5,
+      "idempotency_ttl_seconds": 86400,
+      "processing_ttl_seconds": 120,
+      "rate_limit_retry_delay_ms": 5000
+    },
+    "delayed": {
+      "delayed_poll_interval_ms": 1000,
+      "delayed_batch_size": 10,
+      "max_poller_retries": 3
+    },
+    "recovery": {
+      "recovery_poll_interval_ms": 60000,
+      "processing_stuck_threshold_ms": 300000,
+      "pending_stuck_threshold_ms": 300000,
+      "recovery_batch_size": 50,
+      "recovery_claim_timeout_ms": 60000,
+      "cleanup_resolved_alerts_retention_ms": 86400000,
+      "cleanup_processed_status_outbox_retention_ms": 86400000
+    },
+    "logging": {
+      "log_level": "info",
+      "log_to_file": true
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -5,7 +5,7 @@
  */
 
 import mongoose from "mongoose";
-import { type outbox } from "@src/types/types.js";
+import { type outbox, type ValidatedOutboxEntry } from "@src/types/types.js";
 import {
     safeValidateOutbox,
     safeValidateBaseNotification,
@@ -14,6 +14,8 @@ import {
 import type { HydratedDocument } from "mongoose";
 import { producerLogger as logger } from "./logger.js";
 
+export type { ValidatedOutboxEntry } from '@src/types/types.js';
+
 // Type for outbox document from MongoDB
 export type OutboxDocument = HydratedDocument<outbox>;
 
@@ -21,14 +23,6 @@ export type OutboxDocument = HydratedDocument<outbox>;
 export type ValidPayload = Record<string, unknown>;
 
 // Validated outbox entry
-export interface ValidatedOutboxEntry {
-    _id: mongoose.Types.ObjectId;
-    notification_id: mongoose.Types.ObjectId | string;
-    topic: string;
-    payload: ValidPayload;
-    status: string;
-}
-
 /**
  * Validate an outbox entry and its payload
  * @returns ValidatedOutboxEntry if valid, null if validation fails

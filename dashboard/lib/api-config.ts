@@ -1,7 +1,12 @@
 /**
  * API Configuration
- * Centralized configuration for API endpoints
+ * Centralized configuration for backend API base URL resolution
  */
 
-export const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
-export const NS_API_KEY = process.env.NS_API_KEY || "";
+const rawBaseUrl = (process.env.API_BASE_URL || 'http://localhost:3000').trim().replace(/\/+$/, '');
+const rawBasePath = (process.env.BASE_PATH || '').trim().replace(/\/+$/, '');
+const normalizedBasePath = rawBasePath.startsWith('/') ? rawBasePath : rawBasePath ? `/${rawBasePath}` : '';
+
+export const API_BASE_URL = normalizedBasePath && !rawBaseUrl.endsWith(normalizedBasePath)
+  ? `${rawBaseUrl}${normalizedBasePath}`
+  : rawBaseUrl;

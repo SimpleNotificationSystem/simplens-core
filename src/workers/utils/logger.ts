@@ -5,7 +5,7 @@
 
 import winston from 'winston';
 import LokiTransport from 'winston-loki';
-import { env } from '@src/config/env.config.js';
+import type { LogMeta, Logger, ServiceContext } from '@src/types/types.js';
 
 // Service context types
 const SERVICE_LABELS = {
@@ -21,22 +21,9 @@ const SERVICE_LABELS = {
     adminAlert: 'admin-alert',
     pluginLoader: 'plugin-loader',
     pluginRegistry: 'plugin-registry',
-    rateLimiter: 'rate-limiter'
+    rateLimiter: 'rate-limiter',
+    configSync: 'config-sync'
 } as const;
-
-type ServiceContext = keyof typeof SERVICE_LABELS;
-
-// Log metadata interface
-interface LogMeta {
-    notificationId?: string;
-    requestId?: string;
-    clientId?: string;
-    channel?: string;
-    workerId?: string;
-    topic?: string;
-    partition?: number;
-    [key: string]: unknown;
-}
 
 // Custom log levels including 'success'
 const customLevels = {
@@ -81,7 +68,8 @@ const SERVICE_EMOJI: Record<ServiceContext, string> = {
     adminAlert: '🔔',
     pluginLoader: '🔌',
     pluginRegistry: '📦',
-    rateLimiter: '⏱️'
+    rateLimiter: '⏱️',
+    configSync: '⚙️'
 };
 
 /**
@@ -124,15 +112,15 @@ const createWinstonLogger = (service: ServiceContext) => {
     ];
 
     // Add Loki transport if LOKI_URL is configured
-    if (env.LOKI_URL) {
+    if (process.env.LOKI_URL) {
         transports.push(
             new LokiTransport({
-                host: env.LOKI_URL,
+                host: process.env.LOKI_URL,
                 labels: {
                     job: 'notification-service',
                     service: SERVICE_LABELS[service],
-                    workerId: env.WORKER_ID,
-                    environment: env.NODE_ENV
+                    workerId: process.env.WORKER_ID || 'worker-default',
+                    environment: process.env.NODE_ENV || 'development'
                 },
                 json: true,
                 batching: true,
@@ -146,7 +134,9 @@ const createWinstonLogger = (service: ServiceContext) => {
     }
 
     // Add file transport in production
-    if (env.NODE_ENV === 'production' && env.LOG_TO_FILE) {
+    const isProd = (process.env.NODE_ENV || 'development') === 'production';
+    const logToFile = process.env.LOG_TO_FILE === 'true';
+    if (isProd && logToFile) {
         transports.push(
             new winston.transports.File({
                 filename: `logs/${SERVICE_LABELS[service]}.log`,
@@ -164,27 +154,30 @@ const createWinstonLogger = (service: ServiceContext) => {
         );
     }
 
-    return winston.createLogger({
+    const winstonLogger = winston.createLogger({
         levels: customLevels.levels,
-        level: env.LOG_LEVEL || 'info',
+        level: process.env.LOG_LEVEL || 'info',
         defaultMeta: {
             service: SERVICE_LABELS[service],
-            workerId: "worker-default"
+            workerId: process.env.WORKER_ID || "worker-default"
         },
         transports
     });
+
+    activeWinstonLoggers.push(winstonLogger);
+    return winstonLogger;
 };
 
+const activeWinstonLoggers: winston.Logger[] = [];
+
 /**
- * Logger interface matching our usage patterns
+ * Dynamically update log level across all active loggers
  */
-export interface Logger {
-    info: (message: string, meta?: LogMeta) => void;
-    warn: (message: string, meta?: LogMeta) => void;
-    error: (message: string, meta?: LogMeta | unknown) => void;
-    debug: (message: string, meta?: LogMeta) => void;
-    success: (message: string, meta?: LogMeta) => void;
-}
+export const setLogLevel = (newLevel: string): void => {
+    for (const l of activeWinstonLoggers) {
+        l.level = newLevel;
+    }
+};
 
 /**
  * Create a typed logger for a service context
@@ -231,6 +224,7 @@ export const pluginLoaderLogger = createLogger('pluginLoader');
 export const pluginRegistryLogger = createLogger('pluginRegistry');
 export const rateLimiterLogger = createLogger('rateLimiter');
 export const adminAlertLogger = createLogger('adminAlert');
+export const configSyncLogger = createLogger('configSync');
 
 /**
  * Graceful shutdown - flush all logs before exit

@@ -1,0 +1,28 @@
+meta {
+  name: Install Plugin
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{process.env.BASE_URL}}/api/plugins/install
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "package": "{{process.env.PACKAGE_NAME}}",
+    "version": "latest",
+    "auth": {
+      "token": "{{process.env.NPM_AUTH_TOKEN}}",
+      "registry_url": "{{process.env.NPM_REGISTRY_URL}}",
+      "save_token": true
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
