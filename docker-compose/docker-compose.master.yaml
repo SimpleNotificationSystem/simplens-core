@@ -33,7 +33,7 @@ services:
       - simplens-infra
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))" ]
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:3000${BASE_PATH:-}/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))" ]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -163,7 +163,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: ${DASHBOARD_PORT:-3002}
-      API_BASE_PATH_URL: http://api:{PORT:-3000}{BASE_PATH:-}
+      API_BASE_URL: http://api:{PORT:-3000}{BASE_PATH:-}
       BASE_PATH: ${BASE_PATH:-}
       MONGO_URI: mongodb://mongo:27017/simplens_master?replicaSet=rs0
       AUTH_TRUST_HOST: "true"
