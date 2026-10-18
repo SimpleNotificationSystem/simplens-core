@@ -13,37 +13,16 @@ import { encrypt, decrypt } from '@src/utils/encryption.utils.js';
 import { PluginSyncService } from '@src/plugins/sync/plugin-sync.service.js';
 import { PLUGINS_DIR, initPluginsDir } from '@src/plugins/loader/plugin-fs.js';
 import type {
-  encrypted_config,
   npm_auth_status,
   npm_registry_status,
+  StoredNpmAuthConfig, 
+  StoredRegistryEntry,
+  DecryptedRegistryEntry
 } from '@src/types/types.js';
 import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
 
 export const NPM_AUTH_CONFIG_KEY = 'npm_auth_config';
 export const NPMRC_PATH = join(PLUGINS_DIR, '.npmrc');
-
-interface StoredRegistryEntry {
-  id: string;
-  scope?: string;
-  registry_url: string;
-  encrypted_token: encrypted_config;
-  updated_at: string;
-}
-
-interface StoredNpmAuthConfig {
-  registries?: StoredRegistryEntry[];
-  // Legacy fields for backwards compatibility
-  encrypted_token?: encrypted_config;
-  registry_url?: string;
-}
-
-export interface DecryptedRegistryEntry {
-  id: string;
-  scope?: string;
-  registry_url: string;
-  token: string;
-  updated_at: string;
-}
 
 /**
  * Extract npm scope from a package name if present

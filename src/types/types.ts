@@ -628,3 +628,29 @@ export interface PendingApiKeyUsage {
     last_used_at: Date;
 }
 
+// ============================================================================
+// NPM AUTH TYPES
+// ============================================================================
+
+export interface StoredRegistryEntry {
+  id: string;
+  scope?: string;
+  registry_url: string;
+  encrypted_token: encrypted_config;
+  updated_at: string;
+}
+
+export interface StoredNpmAuthConfig {
+  registries?: StoredRegistryEntry[];
+  // Legacy fields for backwards compatibility
+  encrypted_token?: encrypted_config;
+  registry_url?: string;
+}
+
+export interface DecryptedRegistryEntry {
+  id: string;
+  scope?: string;
+  registry_url: string;
+  token: string;
+  updated_at: string;
+}
