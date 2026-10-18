@@ -69,73 +69,107 @@ export class YamlMigrator {
 
     // 1. Process and install plugins
     const processedPlugins = new Set<string>();
+    const failedPlugins = new Set<string>();
 
     for (const entry of rawConfig.providers) {
       const packageName = entry.package;
-      if (!processedPlugins.has(packageName)) {
-        const targetVersion = entry.version || 'latest';
-        const installedPath = join(PLUGINS_NODE_MODULES, packageName);
+      if (processedPlugins.has(packageName) || failedPlugins.has(packageName)) {
+        continue;
+      }
 
-        // If not already in node_modules, install it
-        if (!existsSync(installedPath)) {
-          logger.info(`Migrating plugin: Installing '${packageName}@${targetVersion}'...`);
-          try {
-            installNpmPackage(packageName, targetVersion);
-          } catch (installErr) {
-            logger.error(`Could not install plugin package '${packageName}':`, installErr);
-          }
-        }
+      const targetVersion = entry.version || 'latest';
+      const installedPath = join(PLUGINS_NODE_MODULES, packageName);
 
+      // If not already in node_modules, install it
+      let installFailed = false;
+      if (!existsSync(installedPath)) {
+        logger.info(`Migrating plugin: Installing '${packageName}@${targetVersion}'...`);
         try {
-          const { manifest, version: authoritativeVersion } = await extractPackageManifest(packageName);
-          await Plugin.findOneAndUpdate(
-            { name: packageName },
-            {
-              name: packageName,
-              version: authoritativeVersion,
-              status: 'installed',
-              manifest,
-              error: undefined,
-            },
-            { upsert: true, new: true }
-          );
-          processedPlugins.add(packageName);
-          logger.success(`Migrated plugin '${packageName}' (version: ${authoritativeVersion})`);
-        } catch (manifestErr) {
-          logger.error(`Failed to extract manifest for '${packageName}':`, manifestErr);
+          installNpmPackage(packageName, targetVersion);
+        } catch (installErr) {
+          logger.error(`Could not install plugin package '${packageName}':`, installErr);
+          installFailed = true;
         }
+      }
+
+      if (installFailed) {
+        failedPlugins.add(packageName);
+        continue;
+      }
+
+      try {
+        const { manifest, version: authoritativeVersion } = await extractPackageManifest(packageName);
+        if (!manifest?.channel) {
+          throw new Error(`Package '${packageName}' manifest does not specify a valid channel.`);
+        }
+
+        await Plugin.findOneAndUpdate(
+          { name: packageName },
+          {
+            name: packageName,
+            version: authoritativeVersion,
+            status: 'installed',
+            manifest,
+            error: undefined,
+          },
+          { upsert: true, new: true }
+        );
+        processedPlugins.add(packageName);
+        logger.success(`Migrated plugin '${packageName}' (version: ${authoritativeVersion})`);
+      } catch (manifestErr) {
+        logger.error(`Failed to extract manifest for '${packageName}':`, manifestErr);
+        failedPlugins.add(packageName);
       }
     }
 
     // 2. Process and encrypt provider configurations
+    const migratedProviderIds = new Set<string>();
+
     for (const entry of rawConfig.providers) {
-      const resolvedCreds = resolveCredentials(entry.credentials);
-      const resolvedOpts = resolveOptionalConfig(entry.optionalConfig);
-      const mergedOptions = {
-        ...(entry.options || {}),
-        ...resolvedOpts,
-      };
-
-      const encryptedCreds = await encryptCredentials(resolvedCreds);
-
       // Find channel from installed plugin manifest
-      const pluginDoc = await Plugin.findOne({ name: entry.package });
-      const channel = pluginDoc?.manifest?.channel || 'generic';
+      const pluginDoc = await Plugin.findOne({ name: entry.package, status: 'installed' });
+      const channel = pluginDoc?.manifest?.channel;
 
-      await Provider.findOneAndUpdate(
-        { id: entry.id },
-        {
-          id: entry.id,
-          plugin_name: entry.package,
-          channel,
-          enabled: true,
-          credentials: encryptedCreds,
-          options: mergedOptions,
-        },
-        { upsert: true, new: true }
-      );
+      if (!pluginDoc || !channel) {
+        logger.error(
+          `Skipping migration for provider '${entry.id}': Plugin '${entry.package}' is not installed or has no valid channel in manifest.`
+        );
+        continue;
+      }
 
-      logger.success(`Migrated provider '${entry.id}' (${channel})`);
+      try {
+        const resolvedCreds = resolveCredentials(entry.credentials);
+        const resolvedOpts = resolveOptionalConfig(entry.optionalConfig);
+        const mergedOptions = {
+          ...(entry.options || {}),
+          ...resolvedOpts,
+        };
+
+        const encryptedCreds = await encryptCredentials(resolvedCreds);
+
+        await Provider.findOneAndUpdate(
+          { id: entry.id },
+          {
+            id: entry.id,
+            plugin_name: entry.package,
+            channel,
+            enabled: true,
+            credentials: encryptedCreds,
+            options: mergedOptions,
+          },
+          { upsert: true, new: true }
+        );
+
+        migratedProviderIds.add(entry.id);
+        logger.success(`Migrated provider '${entry.id}' (${channel})`);
+      } catch (providerErr) {
+        logger.error(`Failed to migrate provider '${entry.id}':`, providerErr);
+      }
+    }
+
+    if (migratedProviderIds.size === 0) {
+      logger.warn('No providers were successfully migrated from YAML configuration.');
+      return false;
     }
 
     // 3. Process channel routing
@@ -148,19 +182,55 @@ export class YamlMigrator {
           fallbackArray = [route.fallback.trim()];
         }
 
+        // Filter fallback providers to those actually migrated and matching this channel
+        const validFallbacks: string[] = [];
+        for (const fId of fallbackArray) {
+          if (migratedProviderIds.has(fId)) {
+            validFallbacks.push(fId);
+          } else {
+            const exists = await Provider.findOne({ id: fId, channel });
+            if (exists) {
+              validFallbacks.push(fId);
+            } else {
+              logger.warn(
+                `Omitting fallback provider '${fId}' from channel routing '${channel}': provider not migrated or does not exist for this channel.`
+              );
+            }
+          }
+        }
+
+        // Validate default provider
+        let effectiveDefault = (migratedProviderIds.has(route.default) || (await Provider.findOne({ id: route.default, channel })))
+          ? route.default
+          : undefined;
+
+        if (!effectiveDefault) {
+          if (validFallbacks.length > 0) {
+            effectiveDefault = validFallbacks.shift()!;
+            logger.warn(
+              `Default provider '${route.default}' for channel '${channel}' was not migrated. Promoted fallback '${effectiveDefault}' as default.`
+            );
+          } else {
+            logger.error(
+              `Skipping channel routing for '${channel}': default provider '${route.default}' was not migrated and no valid fallbacks are available.`
+            );
+            continue;
+          }
+        }
+
         await ChannelRouting.findOneAndUpdate(
           { channel },
           {
             channel,
-            default_provider_id: route.default,
-            fallback_provider_ids: fallbackArray,
+            default_provider_id: effectiveDefault,
+            fallback_provider_ids: validFallbacks,
             partitions: route.partitions || 6,
           },
           { upsert: true, new: true }
         );
 
         logger.success(
-          `Migrated channel routing '${channel}': default=${route.default}, fallbacks=[${fallbackArray.join(', ')}]`
+          `Migrated channel routing '${channel}': default=${effectiveDefault}, fallbacks=[${validFallbacks.join(', ')}]`
         );
       }
     }
