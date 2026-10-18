@@ -266,9 +266,25 @@ export class ProviderManagerService {
         (providerId: string) => providerId !== id
       );
 
+      let updatedDefault = routing.default_provider_id;
+      let updatedFallbacks = remainingFallbacks;
+
       if (routing.default_provider_id === id) {
-        const [nextDefault, ...fallbacks] = remainingFallbacks;
+        const enabledProviders = await Provider.find({
+          channel: routing.channel,
+          enabled: true,
+          id: { $ne: id },
+        }).lean();
+        const enabledProviderIds = new Set(enabledProviders.map((p) => p.id));
+
+        const nextDefault = remainingFallbacks.find((pid: string) => enabledProviderIds.has(pid))
+          || remainingFallbacks[0]
+          || enabledProviders[0]?.id;
+
         if (nextDefault) {
+          const fallbacks = remainingFallbacks.filter((pid: string) => pid !== nextDefault);
+          updatedDefault = nextDefault;
+          updatedFallbacks = fallbacks;
           await ChannelRouting.updateOne(
             { channel: routing.channel },
             {
@@ -277,6 +293,8 @@ export class ProviderManagerService {
             }
           );
         } else {
+          updatedDefault = '';
+          updatedFallbacks = [];
           await ChannelRouting.deleteOne({ channel: routing.channel });
         }
       } else {
@@ -287,8 +305,8 @@ export class ProviderManagerService {
       }
 
       PluginRegistry.setChannelConfig(routing.channel, {
-        default: remainingFallbacks[0] || '',
-        fallback: remainingFallbacks.slice(1),
+        default: updatedDefault,
+        fallback: updatedFallbacks,
       });
       await PluginSyncService.publish('CHANNEL_ROUTING_UPDATED', {
         channel: routing.channel,
@@ -487,6 +505,7 @@ export class ProviderManagerService {
       if (!provider_id) return;
 
       logger.info(`Sync: Handling remote PROVIDER_UPSERTED for '${provider_id}'...`);
+      ProviderManagerService.invalidateCredentialCache(provider_id);
       const providerDoc = await Provider.findOne({ id: provider_id });
 
       if (providerDoc && providerDoc.enabled) {
@@ -505,6 +524,7 @@ export class ProviderManagerService {
       if (!provider_id) return;
 
       logger.info(`Sync: Handling remote PROVIDER_DELETED for '${provider_id}'...`);
+      ProviderManagerService.invalidateCredentialCache(provider_id);
       PluginRegistry.unregister(provider_id);
     });
   }

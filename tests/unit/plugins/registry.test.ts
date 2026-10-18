@@ -92,6 +92,32 @@ describe('Plugin Registry', () => {
         });
     });
 
+    describe('registerOrReplace', () => {
+        it('should register a new provider if not present', () => {
+            const gmail = createMockProvider({ name: 'gmail', channel: 'email' });
+            PluginRegistry.registerOrReplace(gmail as any, 'gmail', 1);
+
+            expect(PluginRegistry.has('gmail')).toBe(true);
+            expect(PluginRegistry.get('gmail')).toBeDefined();
+        });
+
+        it('should replace an existing provider and preserve channelConfig default and fallback', () => {
+            const gmail1 = createMockProvider({ name: 'gmail-v1', channel: 'email' });
+            const gmail2 = createMockProvider({ name: 'gmail-v2', channel: 'email' });
+            const smtp = createMockProvider({ name: 'smtp', channel: 'email' });
+
+            PluginRegistry.register(gmail1 as any, 'gmail', 1);
+            PluginRegistry.register(smtp as any, 'smtp', 2);
+            PluginRegistry.setChannelConfig('email', { default: 'gmail', fallback: ['smtp'] });
+
+            PluginRegistry.registerOrReplace(gmail2 as any, 'gmail', 5);
+
+            expect(PluginRegistry.get('gmail')?.manifest.name).toBe('gmail-v2');
+            expect(PluginRegistry.getDefaultProviderId('email')).toBe('gmail');
+            expect(PluginRegistry.getFallbackProviderIds('email')).toEqual(['smtp']);
+        });
+    });
+
     describe('get', () => {
         it('should return provider by ID', () => {
             const mockProvider = createMockProvider({ name: 'gmail', channel: 'email' });

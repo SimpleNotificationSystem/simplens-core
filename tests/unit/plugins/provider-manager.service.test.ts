@@ -215,8 +215,15 @@ describe('ProviderManagerService', () => {
           },
         ]),
       } as any);
+      vi.spyOn(Provider, 'find').mockReturnValue({
+        lean: vi.fn().mockResolvedValue([
+          { id: 'smtp-prod', channel: 'email', enabled: true },
+          { id: 'backup-prod', channel: 'email', enabled: true },
+        ]),
+      } as any);
       const updateSpy = vi.spyOn(ChannelRouting, 'updateOne').mockResolvedValue({ acknowledged: true } as any);
       const deleteRoutingSpy = vi.spyOn(ChannelRouting, 'deleteOne').mockResolvedValue({ deletedCount: 0 } as any);
+      const setChannelConfigSpy = vi.spyOn(PluginRegistry, 'setChannelConfig');
       vi.spyOn(Provider, 'deleteOne').mockResolvedValue({ deletedCount: 1 } as any);
       vi.spyOn(PluginRegistry, 'unregister').mockReturnValue(true);
 
@@ -229,9 +236,60 @@ describe('ProviderManagerService', () => {
           fallback_provider_ids: ['backup-prod'],
         }
       );
+      expect(setChannelConfigSpy).toHaveBeenCalledWith('email', {
+        default: 'smtp-prod',
+        fallback: ['backup-prod'],
+      });
       expect(deleteRoutingSpy).not.toHaveBeenCalled();
       expect(PluginSyncService.publish).toHaveBeenCalledWith('CHANNEL_ROUTING_UPDATED', {
         channel: 'email',
+      });
+      expect(PluginSyncService.publish).toHaveBeenCalledWith('PROVIDER_DELETED', {
+        provider_id: 'gmail-prod',
+      });
+    });
+
+    it('should retain default provider and only update fallbacks when deleting a fallback provider', async () => {
+      vi.spyOn(Provider, 'findOne').mockResolvedValue({ id: 'smtp-prod' } as any);
+      vi.spyOn(ChannelRouting, 'find').mockReturnValue({
+        lean: vi.fn().mockResolvedValue([
+          {
+            channel: 'email',
+            default_provider_id: 'gmail-prod',
+            fallback_provider_ids: ['smtp-prod', 'backup-prod'],
+          },
+        ]),
+      } as any);
+      vi.spyOn(Provider, 'find').mockReturnValue({
+        lean: vi.fn().mockResolvedValue([
+          { id: 'gmail-prod', channel: 'email', enabled: true },
+          { id: 'backup-prod', channel: 'email', enabled: true },
+        ]),
+      } as any);
+      const updateSpy = vi.spyOn(ChannelRouting, 'updateOne').mockResolvedValue({ acknowledged: true } as any);
+      const deleteRoutingSpy = vi.spyOn(ChannelRouting, 'deleteOne').mockResolvedValue({ deletedCount: 0 } as any);
+      const setChannelConfigSpy = vi.spyOn(PluginRegistry, 'setChannelConfig');
+      vi.spyOn(Provider, 'deleteOne').mockResolvedValue({ deletedCount: 1 } as any);
+      vi.spyOn(PluginRegistry, 'unregister').mockReturnValue(true);
+
+      await ProviderManagerService.deleteProvider('smtp-prod');
+
+      expect(updateSpy).toHaveBeenCalledWith(
+        { channel: 'email' },
+        {
+          fallback_provider_ids: ['backup-prod'],
+        }
+      );
+      expect(setChannelConfigSpy).toHaveBeenCalledWith('email', {
+        default: 'gmail-prod',
+        fallback: ['backup-prod'],
+      });
+      expect(deleteRoutingSpy).not.toHaveBeenCalled();
+      expect(PluginSyncService.publish).toHaveBeenCalledWith('CHANNEL_ROUTING_UPDATED', {
+        channel: 'email',
+      });
+      expect(PluginSyncService.publish).toHaveBeenCalledWith('PROVIDER_DELETED', {
+        provider_id: 'smtp-prod',
       });
     });
 
@@ -246,13 +304,21 @@ describe('ProviderManagerService', () => {
           },
         ]),
       } as any);
+      vi.spyOn(Provider, 'find').mockReturnValue({
+        lean: vi.fn().mockResolvedValue([]),
+      } as any);
       const deleteRoutingSpy = vi.spyOn(ChannelRouting, 'deleteOne').mockResolvedValue({ deletedCount: 1 } as any);
       const deleteSpy = vi.spyOn(Provider, 'deleteOne').mockResolvedValue({ deletedCount: 1 } as any);
       const unregisterSpy = vi.spyOn(PluginRegistry, 'unregister').mockReturnValue(true);
+      const setChannelConfigSpy = vi.spyOn(PluginRegistry, 'setChannelConfig');
 
       await ProviderManagerService.deleteProvider('mock-unused');
 
       expect(deleteRoutingSpy).toHaveBeenCalledWith({ channel: 'mock' });
+      expect(setChannelConfigSpy).toHaveBeenCalledWith('mock', {
+        default: '',
+        fallback: [],
+      });
       expect(deleteSpy).toHaveBeenCalledWith({ id: 'mock-unused' });
       expect(unregisterSpy).toHaveBeenCalledWith('mock-unused');
       expect(PluginSyncService.publish).toHaveBeenCalledWith('PROVIDER_DELETED', {

@@ -117,9 +117,28 @@ class PluginRegistryClass {
      */
     registerOrReplace(provider: SimpleNSProvider, id: string, priority: number = 0): void {
         if (this.providers.has(id)) {
+            const registered = this.providers.get(id);
+            const channel = registered?.provider.manifest.channel;
+            const savedConfig = channel ? this.channelConfig.get(channel) : undefined;
+            const wasDefault = savedConfig?.default === id;
+            const fallbackIndex = Array.isArray(savedConfig?.fallback)
+                ? savedConfig.fallback.indexOf(id)
+                : -1;
+
             this.unregister(id);
+            this.register(provider, id, priority);
+
+            if (savedConfig) {
+                if (wasDefault) {
+                    savedConfig.default = id;
+                }
+                if (fallbackIndex !== -1 && Array.isArray(savedConfig.fallback) && !savedConfig.fallback.includes(id)) {
+                    savedConfig.fallback.splice(fallbackIndex, 0, id);
+                }
+            }
+        } else {
+            this.register(provider, id, priority);
         }
-        this.register(provider, id, priority);
     }
 
     /**

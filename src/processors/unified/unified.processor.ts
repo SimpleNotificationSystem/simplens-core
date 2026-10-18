@@ -244,6 +244,10 @@ const main = async (): Promise<void> => {
       await syncActiveConsumers();
     });
 
+    PluginSyncService.on('PROVIDER_DELETED', async () => {
+      await syncActiveConsumers();
+    });
+
     // 4. Load plugins and providers from MongoDB
     logger.info('Loading providers from MongoDB...');
     await loadProvidersFromDatabase({ initialize: true });
