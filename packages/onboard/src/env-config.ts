@@ -164,10 +164,7 @@ VERSION=latest
 # ============================================
 # ADMIN DASHBOARD
 # ============================================
-AUTH_TRUST_HOST=true
 API_BASE_URL=http://api:3000
-WEBHOOK_HOST=dashboard
-WEBHOOK_PORT=3002
 DASHBOARD_PORT=3002
 BASE_PATH=
 `;
