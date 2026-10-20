@@ -59,9 +59,11 @@ const admin_channel_schema = new mongoose.Schema<admin_channel>(
     }
 );
 
-const admin_channel_model = mongoose.model<admin_channel>(
-    'AdminNotificationChannel',
-    admin_channel_schema
-);
+const admin_channel_model =
+    mongoose.models.AdminNotificationChannel ||
+    mongoose.model<admin_channel>(
+        'AdminNotificationChannel',
+        admin_channel_schema
+    );
 
 export default admin_channel_model;

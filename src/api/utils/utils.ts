@@ -13,15 +13,17 @@ import {
   getTopicForChannel,
   CORE_TOPICS,
   delayed_notification_topic,
+  SimpleNSProvider,
+  ApiKeyDoc,
 } from "@src/types/types.js";
 import { NOTIFICATION_STATUS, OUTBOX_STATUS } from "@src/types/types.js";
 import mongoose from "mongoose";
 import notification_model from "@src/database/models/notification.models.js";
 import outbox_model from "@src/database/models/outbox.models.js";
+import { ApiKeyUsageAggregator } from "./api-key-cache.js";
 import { apiLogger as logger } from "@src/workers/utils/logger.js";
 import { PluginRegistry } from "@src/plugins/index.js";
 import notification_template_model from "@src/database/models/notification-template.models.js";
-import { SimpleNSProvider } from "@src/plugins/interfaces/provider.types.js";
 import { ZodError } from "zod";
 
 const preloadTemplatesByIds = async (
@@ -60,6 +62,7 @@ const preloadTemplatesByIds = async (
  */
 export const convert_notification_request_to_notification_schema = async (
   data: notification_request,
+  apiKeyId?: string,
 ): Promise<notification[]> => {
   const notifications: notification[] = [];
 
@@ -128,6 +131,7 @@ export const convert_notification_request_to_notification_schema = async (
       status: NOTIFICATION_STATUS.pending,
       scheduled_at: data.scheduled_at,
       retry_count: 0,
+      api_key_id: apiKeyId,
       created_at: new Date(),
     };
 
@@ -142,6 +146,7 @@ export const convert_notification_request_to_notification_schema = async (
  */
 export const convert_batch_notification_schema_to_notification_schema = async (
   data: batch_notification_request,
+  apiKeyId?: string,
 ): Promise<notification[]> => {
   const notifications: notification[] = [];
 
@@ -213,6 +218,7 @@ export const convert_batch_notification_schema_to_notification_schema = async (
         status: NOTIFICATION_STATUS.pending,
         scheduled_at: data.scheduled_at,
         retry_count: 0,
+        api_key_id: apiKeyId,
         created_at: new Date(),
       };
       notifications.push(notification_obj);
@@ -406,20 +412,69 @@ export const process_notifications = async (
     session.startTransaction();
 
     const notification_ids: mongoose.Types.ObjectId[] = [];
+    const notifications_to_insert: InstanceType<typeof notification_model>[] = [];
     const outbox_entries: outbox[] = [];
     const duplicate_keys: { request_id: string; channel: string }[] = [];
 
-    for (const notification of notifications) {
-      // Check for duplicates (include session for transactional read)
-      const existingNotification = await notification_model
-        .findOne({
-          request_id: notification.request_id,
-          channel: notification.channel,
-          status: { $ne: NOTIFICATION_STATUS.failed }, // Allow retrying failed notifications
-        })
-        .session(session);
+    const existingDuplicateSet = new Set<string>();
 
-      if (existingNotification) {
+    if (notifications.length > 1) {
+      const pairs = notifications.map((n) => ({
+        request_id: n.request_id,
+        channel: n.channel,
+      }));
+      const existingDocs = await notification_model
+        .find({
+          $or: pairs,
+          status: {
+            $in: [
+              NOTIFICATION_STATUS.pending,
+              NOTIFICATION_STATUS.processing,
+              NOTIFICATION_STATUS.delivered,
+            ],
+          },
+        })
+        .select('request_id channel')
+        .session(session)
+        .lean();
+
+      for (const doc of existingDocs) {
+        existingDuplicateSet.add(`${doc.request_id}:${doc.channel}`);
+      }
+    }
+
+    for (const notification of notifications) {
+      let isDuplicate = false;
+
+      if (notifications.length > 1) {
+        isDuplicate = existingDuplicateSet.has(
+          `${notification.request_id}:${notification.channel}`,
+        );
+      } else {
+        const query = notification_model
+          .findOne({
+            request_id: notification.request_id,
+            channel: notification.channel,
+            status: {
+              $in: [
+                NOTIFICATION_STATUS.pending,
+                NOTIFICATION_STATUS.processing,
+                NOTIFICATION_STATUS.delivered,
+              ],
+            },
+          })
+          .session(session);
+
+        const existingNotification =
+          typeof (query as unknown as { select?: (fields: string) => { lean: () => Promise<unknown> } }).select === 'function'
+            ? await (query as unknown as { select: (fields: string) => { lean: () => Promise<unknown> } })
+                .select('_id')
+                .lean()
+            : await query;
+        isDuplicate = Boolean(existingNotification);
+      }
+
+      if (isDuplicate) {
         duplicate_keys.push({
           request_id: notification.request_id as string,
           channel: notification.channel,
@@ -427,12 +482,11 @@ export const process_notifications = async (
         continue;
       }
 
-      // Create notification document within transaction
+      // Create notification document within transaction (generates _id)
       const notification_doc = new notification_model(notification);
-      await notification_doc.save({ session });
-
       const notification_id = notification_doc._id as mongoose.Types.ObjectId;
       notification_ids.push(notification_id);
+      notifications_to_insert.push(notification_doc);
 
       // Create outbox entry
       const outbox_entry = convert_notification_schema_to_outbox_schema(
@@ -456,9 +510,12 @@ export const process_notifications = async (
       );
     }
 
-    // Insert outbox entries in bulk within transaction
-    if (outbox_entries.length > 0) {
-      await outbox_model.insertMany(outbox_entries, { session });
+    // Insert notifications and outbox entries concurrently within transaction
+    if (notifications_to_insert.length > 0) {
+      await Promise.all([
+        notification_model.insertMany(notifications_to_insert, { session, ordered: false }),
+        outbox_model.insertMany(outbox_entries, { session, ordered: false }),
+      ]);
     }
 
     // Commit transaction - both succeed or both fail
@@ -536,4 +593,24 @@ export const validateContentSchema = (
       validationResult.error,
     );
   }
+};
+
+/**
+ * Update notification usage counters for an API key asynchronously.
+ */
+export const updateApiKeyNotificationUsage = (
+  apiKey: ApiKeyDoc | undefined,
+  notifications: notification[],
+  createdCount: number,
+): void => {
+  if (!apiKey || createdCount <= 0) {
+    return;
+  }
+
+  const channelCounts: Record<string, number> = {};
+  for (const n of notifications) {
+    channelCounts[n.channel] = (channelCounts[n.channel] || 0) + 1;
+  }
+
+  ApiKeyUsageAggregator.recordNotifications(apiKey.key_id, channelCounts, createdCount);
 };

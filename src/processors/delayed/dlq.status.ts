@@ -87,3 +87,10 @@ export const disconnectDLQStatusProducer = async (): Promise<void> => {
         logger.info('DLQ status producer disconnected');
     }
 };
+
+/**
+ * Check if DLQ status producer is active
+ */
+export const isDLQProducerActive = (): boolean => {
+    return producer !== null;
+};

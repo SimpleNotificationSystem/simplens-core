@@ -1,0 +1,21 @@
+meta {
+  name: Delete npm Auth Config
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{process.env.BASE_URL}}/api/plugins/npm-auth?id=
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~id: 
+  ~scope: 
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

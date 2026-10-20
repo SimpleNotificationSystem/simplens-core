@@ -53,3 +53,10 @@ export const disconnectStatusProducer = async (): Promise<void> => {
         producer = null;
     }
 };
+
+/**
+ * Check if status producer is active
+ */
+export const isStatusProducerActive = (): boolean => {
+    return producer !== null;
+};

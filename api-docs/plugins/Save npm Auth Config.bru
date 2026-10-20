@@ -1,0 +1,23 @@
+meta {
+  name: Save npm Auth Config
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{process.env.BASE_URL}}/api/plugins/npm-auth
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "token": "{{process.env.NPM_AUTH_TOKEN}}",
+    "registry_url": "{{process.env.NPM_REGISTRY_URL}}"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

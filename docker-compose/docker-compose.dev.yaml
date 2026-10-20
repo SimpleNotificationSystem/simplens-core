@@ -1,0 +1,102 @@
+# ==============================================================================
+# SimpleNS Dev Environment 
+# Connects to shared 'simplens-infra' network and 'simplens_dev' database.
+# ==============================================================================
+
+name: simplens-dev
+services:
+  api:
+    image: ghcr.io/simplenotificationsystem/simplens-core:development
+    container_name: simplens-api-dev
+    ports:
+      - 3000:3000
+    env_file:
+      - ../.env
+    volumes:
+      - logs-data-dev:/app/logs
+    command: [ "node", "dist/api/server.js" ]
+    restart: unless-stopped
+    networks:
+      - simplens-infra
+    labels:
+      simplens.environment: "dev"
+
+  worker:
+    image: ghcr.io/simplenotificationsystem/simplens-core:development
+    container_name: simplens-worker-dev
+    env_file:
+      - ../.env
+    volumes:
+      - logs-data-dev:/app/logs
+    command: [ "node", "dist/workers/worker.js" ]
+    restart: unless-stopped
+    networks:
+      - simplens-infra
+    labels:
+      simplens.environment: "dev"
+
+
+  notification_processor:
+    image: ghcr.io/simplenotificationsystem/simplens-core:development
+    container_name: simplens-notification-processor-dev
+    env_file:
+      - ../.env
+    volumes:
+      - logs-data-dev:/app/logs
+    command: [ "node", "dist/processors/unified/unified.processor.js" ]
+    restart: unless-stopped
+    networks:
+      - simplens-infra
+    labels:
+      simplens.environment: "dev"
+
+  delayed_processor:
+    image: ghcr.io/simplenotificationsystem/simplens-core:development
+    container_name: simplens-delayed-processor-dev
+    env_file:
+      - ../.env
+    volumes:
+      - logs-data-dev:/app/logs
+    command: [ "node", "dist/processors/delayed/delayed.processor.js" ]
+    restart: unless-stopped
+    networks:
+      - simplens-infra
+    labels:
+      simplens.environment: "dev"
+
+  recovery:
+    image: ghcr.io/simplenotificationsystem/simplens-core:development
+    container_name: simplens-recovery-dev
+    env_file:
+      - ../.env
+    volumes:
+      - logs-data-dev:/app/logs
+    command: [ "node", "dist/workers/recovery/recovery.service.js" ]
+    restart: unless-stopped
+    networks:
+      - simplens-infra
+    labels:
+      simplens.environment: "dev"
+
+  dashboard:
+    image: ghcr.io/simplenotificationsystem/simplens-dashboard:development
+    ports:
+      - 3002:3002
+    container_name: simplens-dashboard-dev
+    env_file:
+      - ../.env
+    environment:
+      PORT: ${DASHBOARD_PORT:-3002}
+    restart: unless-stopped
+    networks:
+      - simplens-infra
+    labels:
+      simplens.environment: "dev"
+
+volumes:
+  logs-data-dev:
+
+networks:
+  simplens-infra:
+    external: true
+    name: simplens-infra

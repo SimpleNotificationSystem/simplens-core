@@ -1,6 +1,6 @@
 {
   "name": "@simplens/onboard",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "type": "module",
   "main": "dist/index.js",
   "engines": {

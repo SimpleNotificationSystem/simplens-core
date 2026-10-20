@@ -1,0 +1,101 @@
+# ==============================================================================
+# SimpleNS Master Environment 
+# Connects to shared 'simplens-infra' network and 'simplens_master' database.
+# ==============================================================================
+
+name: simplens-master
+services:
+  api:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    container_name: simplens-api-master
+    ports:
+      - 3000:3000
+    env_file:
+      - ../.env
+    volumes:
+      - logs-data-master:/app/logs
+    command: [ "node", "dist/api/server.js" ]
+    restart: unless-stopped
+    networks:
+      - simplens-infra
+    labels:
+      simplens.environment: "master"
+
+  worker:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    container_name: simplens-worker-master
+    env_file:
+      - ../.env
+    volumes:
+      - logs-data-master:/app/logs
+    command: [ "node", "dist/workers/worker.js" ]
+    restart: unless-stopped
+    networks:
+      - simplens-infra
+    labels:
+      simplens.environment: "master"
+
+  notification_processor:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    container_name: simplens-notification-processor-master
+    env_file:
+      - ../.env
+    volumes:
+      - logs-data-master:/app/logs
+    command: [ "node", "dist/processors/unified/unified.processor.js" ]
+    restart: unless-stopped
+    networks:
+      - simplens-infra
+    labels:
+      simplens.environment: "master"
+
+  delayed_processor:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    container_name: simplens-delayed-processor-master
+    env_file:
+      - ../.env
+    volumes:
+      - logs-data-master:/app/logs
+    command: [ "node", "dist/processors/delayed/delayed.processor.js" ]
+    restart: unless-stopped
+    networks:
+      - simplens-infra
+    labels:
+      simplens.environment: "master"
+
+  recovery:
+    image: ghcr.io/simplenotificationsystem/simplens-core:latest
+    container_name: simplens-recovery-master
+    env_file:
+      - ../.env
+    volumes:
+      - logs-data-master:/app/logs
+    command: [ "node", "dist/workers/recovery/recovery.service.js" ]
+    restart: unless-stopped
+    networks:
+      - simplens-infra
+    labels:
+      simplens.environment: "master"
+
+  dashboard:
+    image: ghcr.io/simplenotificationsystem/simplens-dashboard:latest
+    ports:
+      - 3002:3002
+    container_name: simplens-dashboard-master
+    env_file:
+      - ../.env
+    environment:
+      PORT: ${DASHBOARD_PORT:-3002}
+    restart: unless-stopped
+    networks:
+      - simplens-infra
+    labels:
+      simplens.environment: "master"
+
+volumes:
+  logs-data-master:
+
+networks:
+  simplens-infra:
+    external: true
+    name: simplens-infra

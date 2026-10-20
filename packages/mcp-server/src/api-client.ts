@@ -351,6 +351,256 @@ export class ApiClient {
             headers: this.authHeader,
         });
     }
+
+    // ============================================================================
+    // CHANNEL ROUTING
+    // ============================================================================
+
+    /** GET /api/channels/routing - List all channel routings */
+    async listChannelRoutings(): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/channels/routing', {
+            headers: this.authHeader,
+        });
+    }
+
+    /** GET /api/channels/routing/:channel - Get routing for a specific channel */
+    async getChannelRouting(channel: string): Promise<ApiResponse> {
+        return request(this.baseUrl, `api/channels/routing/${encodeURIComponent(channel)}`, {
+            headers: this.authHeader,
+        });
+    }
+
+    /** PUT /api/channels/routing/:channel - Set or update routing for a channel */
+    async setChannelRouting(channel: string, payload: {
+        default_provider_id: string;
+        fallback_provider_ids?: string[];
+        partitions?: number;
+    }): Promise<ApiResponse> {
+        return request(this.baseUrl, `api/channels/routing/${encodeURIComponent(channel)}`, {
+            method: 'PUT',
+            headers: this.authHeader,
+            body: payload,
+        });
+    }
+
+    /** DELETE /api/channels/routing/:channel - Delete routing for a channel */
+    async deleteChannelRouting(channel: string): Promise<ApiResponse> {
+        return request(this.baseUrl, `api/channels/routing/${encodeURIComponent(channel)}`, {
+            method: 'DELETE',
+            headers: this.authHeader,
+        });
+    }
+
+    // ============================================================================
+    // PROVIDERS & RATE LIMITS
+    // ============================================================================
+
+    /** GET /api/providers - List configured providers */
+    async listProviders(): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/providers', {
+            headers: this.authHeader,
+        });
+    }
+
+    /** GET /api/providers/:id - Get single provider by ID */
+    async getProvider(id: string, includeDecrypted = false): Promise<ApiResponse> {
+        return request(this.baseUrl, `api/providers/${encodeURIComponent(id)}`, {
+            headers: this.authHeader,
+            params: includeDecrypted ? { include_decrypted: 'true' } : undefined,
+        });
+    }
+
+    /** POST /api/providers - Create a new provider */
+    async createProvider(payload: {
+        id: string;
+        plugin_name: string;
+        credentials: Record<string, unknown>;
+        options?: Record<string, unknown>;
+        enabled?: boolean;
+    }): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/providers', {
+            method: 'POST',
+            headers: this.authHeader,
+            body: payload,
+        });
+    }
+
+    /** PUT /api/providers/:id - Update an existing provider */
+    async updateProvider(id: string, payload: {
+        credentials?: Record<string, unknown>;
+        options?: Record<string, unknown>;
+        enabled?: boolean;
+    }): Promise<ApiResponse> {
+        return request(this.baseUrl, `api/providers/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            headers: this.authHeader,
+            body: payload,
+        });
+    }
+
+    /** DELETE /api/providers/:id - Delete a provider instance */
+    async deleteProvider(id: string): Promise<ApiResponse> {
+        return request(this.baseUrl, `api/providers/${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+            headers: this.authHeader,
+        });
+    }
+
+    /** POST /api/providers/test - Test provider connection/credentials */
+    async testProvider(payload: {
+        provider_id?: string;
+        plugin_name?: string;
+        credentials?: Record<string, unknown>;
+        options?: Record<string, unknown>;
+    }): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/providers/test', {
+            method: 'POST',
+            headers: this.authHeader,
+            body: payload,
+        });
+    }
+
+    /** GET /api/providers/rate-limits - Get rate limits for all providers */
+    async getProvidersRateLimits(): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/providers/rate-limits', {
+            headers: this.authHeader,
+        });
+    }
+
+    /** GET /api/providers/:id/rate-limit - Get rate limit status for a provider */
+    async getProviderRateLimit(id: string): Promise<ApiResponse> {
+        return request(this.baseUrl, `api/providers/${encodeURIComponent(id)}/rate-limit`, {
+            headers: this.authHeader,
+        });
+    }
+
+    /** POST /api/providers/:id/rate-limit/reset - Reset rate limit for a provider */
+    async resetProviderRateLimit(id: string): Promise<ApiResponse> {
+        return request(this.baseUrl, `api/providers/${encodeURIComponent(id)}/rate-limit/reset`, {
+            method: 'POST',
+            headers: this.authHeader,
+        });
+    }
+
+    // ============================================================================
+    // OPERATIONAL DYNAMIC SETTINGS
+    // ============================================================================
+
+    /** GET /api/settings - Get operational settings */
+    async getOperationalSettings(): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/settings', {
+            headers: this.authHeader,
+        });
+    }
+
+    /** PUT /api/settings - Update operational settings */
+    async updateOperationalSettings(payload: Record<string, unknown>): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/settings', {
+            method: 'PUT',
+            headers: this.authHeader,
+            body: payload,
+        });
+    }
+
+    /** POST /api/settings/reset - Reset operational settings to defaults */
+    async resetOperationalSettings(): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/settings/reset', {
+            method: 'POST',
+            headers: this.authHeader,
+        });
+    }
+
+    // ============================================================================
+    // EXTENDED PLUGINS & NPM AUTH
+    // ============================================================================
+
+    /** GET /api/plugins/installed - List installed plugins in MongoDB */
+    async listInstalledPlugins(): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/plugins/installed', {
+            headers: this.authHeader,
+        });
+    }
+
+    /** GET /api/plugins/catalog/:category - Get plugin catalog */
+    async getPluginCatalog(category: 'official' | 'community'): Promise<ApiResponse> {
+        return request(this.baseUrl, `api/plugins/catalog/${category}`, {
+            headers: this.authHeader,
+        });
+    }
+
+    /** POST /api/plugins/install - Install npm plugin package */
+    async installPlugin(payload: {
+        package: string;
+        version?: string;
+        auth?: { token?: string; registry_url?: string };
+    }): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/plugins/install', {
+            method: 'POST',
+            headers: this.authHeader,
+            body: payload,
+        });
+    }
+
+    /** PUT /api/plugins/version - Change version of installed plugin */
+    async changePluginVersion(payload: {
+        package: string;
+        version: string;
+    }): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/plugins/version', {
+            method: 'PUT',
+            headers: this.authHeader,
+            body: payload,
+        });
+    }
+
+    /** DELETE /api/plugins - Uninstall plugin */
+    async uninstallPlugin(packageName: string): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/plugins', {
+            method: 'DELETE',
+            headers: this.authHeader,
+            params: { package: packageName },
+        });
+    }
+
+    /** GET /api/plugins/npm-auth - Get npm auth status */
+    async getNpmAuth(): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/plugins/npm-auth', {
+            headers: this.authHeader,
+        });
+    }
+
+    /** POST /api/plugins/npm-auth - Save npm auth credentials */
+    async saveNpmAuth(payload: {
+        token: string;
+        registry_url?: string;
+        scope?: string;
+    }): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/plugins/npm-auth', {
+            method: 'POST',
+            headers: this.authHeader,
+            body: payload,
+        });
+    }
+
+    /** DELETE /api/plugins/npm-auth - Delete npm auth configuration */
+    async deleteNpmAuth(target?: string): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/plugins/npm-auth', {
+            method: 'DELETE',
+            headers: this.authHeader,
+            params: target ? { id: target } : undefined,
+        });
+    }
+
+    // ============================================================================
+    // ADMIN AUTH STATUS
+    // ============================================================================
+
+    /** GET /api/admin/auth/status - Check if admin credentials are configured */
+    async getAdminAuthStatus(): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/admin/auth/status', {
+            headers: this.authHeader,
+        });
+    }
 }
 
 

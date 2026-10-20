@@ -1,6 +1,6 @@
-import { Consumer, EachMessagePayload } from "kafkajs";
+import { EachMessagePayload } from "kafkajs";
 import { kafka } from "@src/config/kafka.config.js";
-import { CORE_TOPICS, NOTIFICATION_STATUS, NOTIFICATION_STATUS_SF, type notification_status_topic } from "@src/types/types.js";
+import { CORE_TOPICS, NOTIFICATION_STATUS, NOTIFICATION_STATUS_SF, type KafkaConsumerState, type notification_status_topic, type StatusProcessResult, type WebhookPayload } from "@src/types/types.js";
 import { safeValidateNotificationStatusTopic } from "@src/types/schemas.js";
 import notification_model from "@src/database/models/notification.models.js";
 import { consumerLogger as logger } from "@src/workers/utils/logger.js";
@@ -11,15 +11,14 @@ const CONSUMER_GROUP_ID = "notification-status-group";
 const WEBHOOK_TIMEOUT_MS = 30000; // 30 seconds
 
 // Consumer state management
-interface ConsumerState {
-    consumer: Consumer | null;
-    isConsuming: boolean;
-}
-
-const state: ConsumerState = {
+const state: KafkaConsumerState = {
     consumer: null,
     isConsuming: false
 };
+
+let lastHeartbeat = Date.now();
+let hasCrashed = false;
+let crashReason: string | undefined = undefined;
 
 /**
  * Map status from external format to internal notification status
@@ -33,7 +32,7 @@ const mapToNotificationStatus = (externalStatus: NOTIFICATION_STATUS_SF): NOTIFI
 /**
  * Build webhook payload from status data
  */
-const buildWebhookPayload = (data: notification_status_topic) => ({
+const buildWebhookPayload = (data: notification_status_topic): WebhookPayload => ({
     request_id: data.request_id,
     client_id: data.client_id,
     notification_id: data.notification_id.toString(),
@@ -89,18 +88,11 @@ const sendWebhookCallback = (
 /**
  * Result of processing a status message
  */
-interface ProcessResult {
-    dbUpdated: boolean;
-    webhookUrl?: string;
-    webhookPayload?: ReturnType<typeof buildWebhookPayload>;
-    notificationId?: string;
-}
-
 /**
  * Process a single status message
  * Returns result indicating if DB was updated and webhook info
  */
-const processStatusMessage = async ({ partition, message }: EachMessagePayload): Promise<ProcessResult> => {
+const processStatusMessage = async ({ partition, message }: EachMessagePayload): Promise<StatusProcessResult> => {
     try {
         if (!message.value) {
             logger.warn("Received empty message, skipping");
@@ -125,6 +117,14 @@ const processStatusMessage = async ({ partition, message }: EachMessagePayload):
             updated_at: new Date()
         };
 
+        if (data.provider) {
+            updateData.provider = data.provider;
+        }
+
+        if (data.provider_history && data.provider_history.length > 0) {
+            updateData.provider_history = data.provider_history;
+        }
+
         // Store error message if failed
         if (newStatus === NOTIFICATION_STATUS.failed) {
             updateData.error_message = data.message;
@@ -133,7 +133,7 @@ const processStatusMessage = async ({ partition, message }: EachMessagePayload):
         const result = await notification_model.findByIdAndUpdate(
             data.notification_id,
             updateData,
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         if (result) {
@@ -176,6 +176,40 @@ export const startStatusConsumer = async (): Promise<void> => {
     await state.consumer.connect();
     logger.info("Status consumer connected");
 
+    lastHeartbeat = Date.now();
+    hasCrashed = false;
+    crashReason = undefined;
+
+    if (typeof state.consumer.on === 'function' && state.consumer.events) {
+        state.consumer.on(state.consumer.events.HEARTBEAT, () => {
+            lastHeartbeat = Date.now();
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        state.consumer.on(state.consumer.events.CRASH, (event: any) => {
+            hasCrashed = true;
+            state.isConsuming = false;
+            const crashError = event?.payload?.error;
+            crashReason = crashError ? String(crashError.message || crashError) : 'Unknown crash';
+            logger.error(`Status consumer crashed: ${crashReason}`);
+        });
+
+        state.consumer.on(state.consumer.events.STOP, () => {
+            state.isConsuming = false;
+            logger.warn('Status consumer stopped event received');
+        });
+
+        state.consumer.on(state.consumer.events.DISCONNECT, () => {
+            state.isConsuming = false;
+            logger.warn('Status consumer disconnected');
+        });
+
+        state.consumer.on(state.consumer.events.CONNECT, () => {
+            state.isConsuming = true;
+            lastHeartbeat = Date.now();
+        });
+    }
+
     await state.consumer.subscribe({
         topic: CORE_TOPICS.notification_status,
         fromBeginning: false
@@ -187,6 +221,7 @@ export const startStatusConsumer = async (): Promise<void> => {
     await state.consumer.run({
         autoCommit: false,
         eachMessage: async (payload) => {
+            lastHeartbeat = Date.now();
             try {
                 const result = await processStatusMessage(payload);
 
@@ -228,6 +263,7 @@ export const stopStatusConsumer = async (): Promise<void> => {
 
     logger.info("Stopping status consumer...");
     state.isConsuming = false;
+    hasCrashed = false;
 
     try {
         await state.consumer.stop();
@@ -245,4 +281,15 @@ export const stopStatusConsumer = async (): Promise<void> => {
  */
 export const isStatusConsumerRunning = (): boolean => {
     return state.consumer !== null && state.isConsuming;
+};
+
+/**
+ * Check if the status consumer is healthy (running, not crashed, heartbeat fresh)
+ */
+export const isStatusConsumerHealthy = (maxHeartbeatStalenessMs = 90000): boolean => {
+    if (!state.consumer || !state.isConsuming || hasCrashed) {
+        return false;
+    }
+    const isStale = (Date.now() - lastHeartbeat) > maxHeartbeatStalenessMs;
+    return !isStale;
 };

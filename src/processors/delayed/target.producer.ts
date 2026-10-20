@@ -63,3 +63,10 @@ export const disconnectTargetProducer = async (): Promise<void> => {
         logger.info('Target producer disconnected');
     }
 };
+
+/**
+ * Check if target producer is active
+ */
+export const isTargetProducerActive = (): boolean => {
+    return producer !== null;
+};

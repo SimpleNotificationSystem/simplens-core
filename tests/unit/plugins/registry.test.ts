@@ -92,6 +92,32 @@ describe('Plugin Registry', () => {
         });
     });
 
+    describe('registerOrReplace', () => {
+        it('should register a new provider if not present', () => {
+            const gmail = createMockProvider({ name: 'gmail', channel: 'email' });
+            PluginRegistry.registerOrReplace(gmail as any, 'gmail', 1);
+
+            expect(PluginRegistry.has('gmail')).toBe(true);
+            expect(PluginRegistry.get('gmail')).toBeDefined();
+        });
+
+        it('should replace an existing provider and preserve channelConfig default and fallback', () => {
+            const gmail1 = createMockProvider({ name: 'gmail-v1', channel: 'email' });
+            const gmail2 = createMockProvider({ name: 'gmail-v2', channel: 'email' });
+            const smtp = createMockProvider({ name: 'smtp', channel: 'email' });
+
+            PluginRegistry.register(gmail1 as any, 'gmail', 1);
+            PluginRegistry.register(smtp as any, 'smtp', 2);
+            PluginRegistry.setChannelConfig('email', { default: 'gmail', fallback: ['smtp'] });
+
+            PluginRegistry.registerOrReplace(gmail2 as any, 'gmail', 5);
+
+            expect(PluginRegistry.get('gmail')?.manifest.name).toBe('gmail-v2');
+            expect(PluginRegistry.getDefaultProviderId('email')).toBe('gmail');
+            expect(PluginRegistry.getFallbackProviderIds('email')).toEqual(['smtp']);
+        });
+    });
+
     describe('get', () => {
         it('should return provider by ID', () => {
             const mockProvider = createMockProvider({ name: 'gmail', channel: 'email' });
@@ -154,6 +180,18 @@ describe('Plugin Registry', () => {
             const provider = PluginRegistry.getDefaultProvider('unknown');
             expect(provider).toBeUndefined();
         });
+
+        it('should fall back to registered fallback provider when configured default is unregistered', () => {
+            const fallback = createMockProvider({ name: 'fallback', channel: 'email' });
+            PluginRegistry.register(fallback as any, 'fallback', 1);
+
+            // Configure default to an unregistered provider, with fallback configured
+            PluginRegistry.setChannelConfig('email', { default: 'unregistered-default', fallback: ['fallback'] });
+
+            const defaultProvider = PluginRegistry.getDefaultProvider('email');
+            expect(defaultProvider).toBeDefined();
+            expect(defaultProvider?.manifest.name).toBe('fallback');
+        });
     });
 
     describe('getDefaultProviderId', () => {
@@ -165,6 +203,16 @@ describe('Plugin Registry', () => {
             const defaultId = PluginRegistry.getDefaultProviderId('email');
 
             expect(defaultId).toBe('gmail');
+        });
+
+        it('should return fallback provider ID when configured default is unregistered', () => {
+            const fallback = createMockProvider({ name: 'fallback', channel: 'email' });
+            PluginRegistry.register(fallback as any, 'fallback', 1);
+
+            PluginRegistry.setChannelConfig('email', { default: 'unregistered-default', fallback: ['fallback'] });
+
+            const defaultId = PluginRegistry.getDefaultProviderId('email');
+            expect(defaultId).toBe('fallback');
         });
 
         it('should return undefined for unknown channel', () => {

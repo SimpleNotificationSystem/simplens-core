@@ -17,6 +17,7 @@ import {
     FileText,
     Code,
     BellRing,
+    Key,
 } from "lucide-react";
 import {
     Sidebar,
@@ -81,6 +82,7 @@ const navCategories: NavCategory[] = [
     {
         label: "System",
         items: [
+            { title: "API Keys", href: "/keys", icon: Key },
             { title: "Admin Alerts", href: "/admin-alerts", icon: BellRing },
         ],
     },

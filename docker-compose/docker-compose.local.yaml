@@ -1,0 +1,107 @@
+# ==============================================================================
+# SimpleNS Local Environment 
+# Connects to shared 'simplens-infra' network and 'simplens_local' database.
+# ==============================================================================
+
+name: simplens-local
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: simplens-core:local
+    container_name: simplens-api-local
+    ports:
+      - 3000:3000
+    env_file:
+      - ../.env
+    volumes:
+      - logs-data-local:/app/logs
+    command: [ "node", "dist/api/server.js" ]
+    restart: unless-stopped
+    networks:
+      - simplens-infra
+    labels:
+      simplens.environment: "local"
+
+  worker:
+    image: simplens-core:local
+    container_name: simplens-worker-local
+    env_file:
+      - ../.env
+    volumes:
+      - logs-data-local:/app/logs
+    command: [ "node", "dist/workers/worker.js" ]
+    restart: unless-stopped
+    networks:
+      - simplens-infra
+    labels:
+      simplens.environment: "local"
+
+  notification_processor:
+    image: simplens-core:local
+    container_name: simplens-notification-processor-local
+    env_file:
+      - ../.env
+    volumes:
+      - logs-data-local:/app/logs
+    command: [ "node", "dist/processors/unified/unified.processor.js" ]
+    restart: unless-stopped
+    networks:
+      - simplens-infra
+    labels:
+      simplens.environment: "local"
+
+  delayed_processor:
+    image: simplens-core:local
+    container_name: simplens-delayed-processor-local
+    env_file:
+      - ../.env
+    volumes:
+      - logs-data-local:/app/logs
+    command: [ "node", "dist/processors/delayed/delayed.processor.js" ]
+    restart: unless-stopped
+    networks:
+      - simplens-infra
+    labels:
+      simplens.environment: "local"
+
+  recovery:
+    image: simplens-core:local
+    container_name: simplens-recovery-local
+    env_file:
+      - ../.env
+    volumes:
+      - logs-data-local:/app/logs
+    command: [ "node", "dist/workers/recovery/recovery.service.js" ]
+    restart: unless-stopped
+    networks:
+      - simplens-infra
+    labels:
+      simplens.environment: "local"
+
+  dashboard:
+    build:
+      context: ../dashboard
+      dockerfile: Dockerfile
+    image: simplens-dashboard:local
+    ports:
+      - 3002:3002
+    container_name: simplens-dashboard-local
+    env_file:
+      - ../.env
+    environment:
+      PORT: ${DASHBOARD_PORT:-3002}
+    restart: unless-stopped
+    networks:
+      - simplens-infra
+    labels:
+      simplens.environment: "local"
+
+volumes:
+  logs-data-local:
+
+networks:
+  simplens-infra:
+    external: true
+    name: simplens-infra

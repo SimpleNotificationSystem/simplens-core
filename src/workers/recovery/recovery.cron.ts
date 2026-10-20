@@ -13,7 +13,8 @@
 
 import mongoose from 'mongoose';
 import { env } from '@src/config/env.config.js';
-import { NOTIFICATION_STATUS, ALERT_TYPE } from '@src/types/types.js';
+import { dynamicConfig } from '@src/config/dynamic-config.service.js';
+import { NOTIFICATION_STATUS, ALERT_TYPE, type HealthChecker, type RecoveryCronState } from '@src/types/types.js';
 import notification_model from '@src/database/models/notification.models.js';
 import alert_model from '@src/database/models/alert.models.js';
 import status_outbox_model from '@src/database/models/status-outbox.models.js';
@@ -22,21 +23,10 @@ import { recoveryLogger as logger } from '@src/workers/utils/logger.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 import { NOTIFICATION_STATUS_SF } from '@src/types/types.js';
 
-// Health checker function type
-type HealthChecker = () => Promise<boolean>;
-
-// Cron state management
-interface CronState {
-    intervalId: NodeJS.Timeout | null;
-    isRunning: boolean;
-    shouldStop: boolean;
-    healthChecker: HealthChecker | null;
-    consecutiveFailures: number;
-}
-
 const MAX_CONSECUTIVE_FAILURES = 5;
 
-const state: CronState = {
+// Cron state management
+const state: RecoveryCronState = {
     intervalId: null,
     isRunning: false,
     shouldStop: false,
@@ -72,7 +62,7 @@ const recoverStuckProcessing = async (): Promise<void> => {
                     recovery_claimed_at: now
                 }
             },
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         if (!notification) break;
@@ -302,7 +292,7 @@ const detectOrphanedPending = async (): Promise<void> => {
                     recovery_claimed_at: now
                 }
             },
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         if (!notification) break;
@@ -414,7 +404,7 @@ const autoResolveDeliveredAlerts = async (): Promise<void> => {
                     recovery_claimed_at: now
                 }
             },
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         if (!alert) break;
@@ -536,6 +526,16 @@ export const startRecoveryCron = (): void => {
 
     logger.success('Recovery cron started');
 };
+
+// Listen for dynamic configuration updates and hot-adjust recovery interval
+dynamicConfig.on('change', () => {
+    if (state.shouldStop) return;
+    if (state.intervalId) {
+        clearInterval(state.intervalId);
+        state.intervalId = setInterval(runRecovery, env.RECOVERY_POLL_INTERVAL_MS);
+        logger.info(`Adjusted recovery cron interval to ${env.RECOVERY_POLL_INTERVAL_MS}ms`);
+    }
+});
 
 /**
  * Stop the recovery cron job gracefully

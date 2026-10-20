@@ -337,7 +337,7 @@ export function StatsGrid() {
                     <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-xl bg-muted/20">
                         <Zap className="h-8 w-8 text-muted-foreground mb-2" />
                         <p className="text-muted-foreground">No channels active yet.</p>
-                        <p className="text-xs text-muted-foreground/60">Install plugins to see channel metrics.</p>
+                        <p className="text-xs text-muted-foreground/60">Send channel-specific notifications to see channel metrics.</p>
                     </div>
                 )}
             </section>

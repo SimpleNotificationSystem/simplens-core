@@ -52,6 +52,45 @@ export const buildKafkaTopics = (): { topic: string; numPartitions: number; repl
     return topics;
 };
 
+/**
+ * Build Kafka topics dynamically from MongoDB channel routing records
+ */
+export const buildKafkaTopicsFromDatabase = async (): Promise<ITopicConfig[]> => {
+    const topics: ITopicConfig[] = [
+        {
+            topic: CORE_TOPICS.delayed_notification,
+            numPartitions: env.DELAYED_PARTITION,
+            replicationFactor: 1
+        },
+        {
+            topic: CORE_TOPICS.notification_status,
+            numPartitions: env.NOTIFICATION_STATUS_PARTITION,
+            replicationFactor: 1
+        },
+    ];
+
+    try {
+        const ChannelRouting = (await import('@src/database/models/channel-routing.models.js')).default;
+        const routings = await ChannelRouting.find().lean();
+        if (routings && routings.length > 0) {
+            for (const r of routings) {
+                topics.push({
+                    topic: getTopicForChannel(r.channel),
+                    numPartitions: r.partitions || 6,
+                    replicationFactor: 1,
+                });
+                logger.info(`Configured topic from DB: ${getTopicForChannel(r.channel)} (${r.partitions || 6} partitions)`);
+            }
+            return topics;
+        }
+    } catch (err) {
+        logger.warn('Could not query ChannelRouting for Kafka topics, falling back to static config:', {
+            error: err instanceof Error ? err.message : String(err)
+        });
+    }
+
+    return buildKafkaTopics();
+};
 
 export const createTopics = async (topics: ITopicConfig[]) => {
     const admin = kafka.admin();
@@ -77,10 +116,19 @@ export const createTopics = async (topics: ITopicConfig[]) => {
                     const currentPartitions = topicMetadata.partitions.length;
                     const desiredPartitions = configuredTopic.numPartitions;
 
-                    if (currentPartitions !== desiredPartitions) {
+                    if (desiredPartitions > currentPartitions) {
+                        logger.info(`Expanding topic "${topicMetadata.name}" from ${currentPartitions} to ${desiredPartitions} partitions...`);
+                        await admin.createPartitions({
+                            topicPartitions: [{
+                                topic: topicMetadata.name,
+                                count: desiredPartitions
+                            }]
+                        });
+                        logger.success(`Successfully expanded topic "${topicMetadata.name}" to ${desiredPartitions} partitions`);
+                    } else if (desiredPartitions < currentPartitions) {
                         logger.info(
-                            `Topic "${topicMetadata.name}" has ${currentPartitions} partitions but ${desiredPartitions} is configured. ` +
-                            `Partition count cannot be changed after creation. Delete and recreate the topic to apply changes.`
+                            `Topic "${topicMetadata.name}" has ${currentPartitions} partitions (configured: ${desiredPartitions}). ` +
+                            `Kafka partition count cannot be decreased.`
                         );
                     }
                 }
@@ -115,4 +163,78 @@ export const createTopics = async (topics: ITopicConfig[]) => {
         await admin.disconnect();
     }
 };
+
+/**
+ * Ensure a channel topic exists in Kafka with at least desiredPartitions
+ */
+export const ensureChannelTopic = async (
+    channel: string,
+    desiredPartitions: number = 6
+): Promise<void> => {
+    const topic = getTopicForChannel(channel);
+    await createTopics([
+        {
+            topic,
+            numPartitions: desiredPartitions,
+            replicationFactor: 1,
+        }
+    ]);
+};
+
+/**
+ * Dynamically expand partition count for a channel topic (or create if missing)
+ */
+export const expandTopicPartitions = async (
+    channel: string,
+    desiredPartitions: number
+): Promise<{ previous: number; current: number }> => {
+    const admin = kafka.admin();
+    const topic = getTopicForChannel(channel);
+
+    try {
+        await admin.connect();
+        const metadata = await admin.fetchTopicMetadata({ topics: [topic] });
+        const topicMetadata = metadata.topics.find(t => t.name === topic);
+
+        if (!topicMetadata) {
+            logger.info(`Topic '${topic}' for channel '${channel}' not found in Kafka, creating with ${desiredPartitions} partitions...`);
+            await admin.createTopics({
+                topics: [{
+                    topic,
+                    numPartitions: desiredPartitions,
+                    replicationFactor: 1,
+                }],
+                validateOnly: false,
+                timeout: 30000,
+            });
+            logger.success(`Created Kafka topic '${topic}' with ${desiredPartitions} partitions`);
+            return { previous: 0, current: desiredPartitions };
+        }
+
+        const currentPartitions = topicMetadata.partitions.length;
+
+        if (desiredPartitions < currentPartitions) {
+            throw new Error(
+                `Kafka partition count cannot be decreased. Current count is ${currentPartitions}, requested ${desiredPartitions}.`
+            );
+        }
+
+        if (desiredPartitions > currentPartitions) {
+            logger.info(`Expanding Kafka topic '${topic}' from ${currentPartitions} to ${desiredPartitions} partitions...`);
+            await admin.createPartitions({
+                topicPartitions: [{
+                    topic,
+                    count: desiredPartitions
+                }]
+            });
+            logger.success(`Expanded Kafka topic '${topic}' to ${desiredPartitions} partitions`);
+            return { previous: currentPartitions, current: desiredPartitions };
+        }
+
+        return { previous: currentPartitions, current: currentPartitions };
+    } finally {
+        await admin.disconnect();
+    }
+};
+
 
