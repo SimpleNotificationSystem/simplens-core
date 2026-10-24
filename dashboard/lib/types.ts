@@ -132,7 +132,7 @@ export interface ProviderMetadata {
 export interface ChannelMetadata {
   providers: ProviderMetadata[];
   default?: string;
-  fallback?: string;
+  fallback?: string | string[];
 }
 
 export interface PluginMetadata {
