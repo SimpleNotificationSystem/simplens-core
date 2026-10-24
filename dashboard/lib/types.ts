@@ -119,6 +119,19 @@ export interface FieldDefinition {
   description?: string;
 }
 
+export interface CsvRecipientField {
+  key: string;
+  label: string;
+  required: boolean;
+  variableName?: string;
+}
+
+export interface CsvImportData {
+  fileName: string;
+  headers: string[];
+  rows: Record<string, string>[];
+}
+
 export interface ProviderMetadata {
   id: string;
   name: string;
@@ -132,7 +145,7 @@ export interface ProviderMetadata {
 export interface ChannelMetadata {
   providers: ProviderMetadata[];
   default?: string;
-  fallback?: string;
+  fallback?: string | string[];
 }
 
 export interface PluginMetadata {
@@ -445,5 +458,4 @@ export interface ApiKeyUsageDetailResponse {
     failed: number;
   };
 }
-
 
