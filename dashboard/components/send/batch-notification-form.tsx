@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -9,20 +9,23 @@ import { Label } from "@/components/ui/label";
 import { DateTimePicker } from "@/components/ui/datetime-picker";
 import { HtmlPreview } from "./html-preview";
 import { toast } from "sonner";
-import { Loader2, Send, Plus, Trash2, AlertCircle } from "lucide-react";
+import { Loader2, Send, Plus, Trash2, AlertCircle, ImportIcon } from "lucide-react";
 import { DynamicField } from "./dynamic-field";
-import { PluginMetadata, FieldDefinition, NotificationTemplateDetail, NotificationTemplateListItem } from "@/lib/types";
+import { PluginMetadata, FieldDefinition, NotificationTemplateDetail, NotificationTemplateListItem, CsvImportData, CsvRecipientField } from "@/lib/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { pluginService, templateService, notificationService } from "@/lib/api-client";
 import { withBasePath } from "@/lib/utils";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { getMissingRequiredCsvFields, importCsvRecipients as createCsvRecipients, mapCsvHeaders, parseCsv } from "@/lib/csv-import";
 
 // Generate a UUIDv4
 function generateUUID(): string {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
         return crypto.randomUUID();
     }
+
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
         const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
@@ -68,7 +71,10 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
     // Dynamic Data
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [contentData, setContentData] = useState<Record<string, Record<string, any>>>({});
-    const [recipients, setRecipients] = useState<BatchRecipient[]>([createNewRecipient()]);
+    const [recipients, setRecipients] = useState<BatchRecipient[]>([]);
+    const [csvImport, setCsvImport] = useState<CsvImportData | null>(null);
+    const [csvMappings, setCsvMappings] = useState<Record<string, string>>({});
+    const csvInputRef = useRef<HTMLInputElement>(null);
     const [templatesByChannel, setTemplatesByChannel] = useState<Record<string, NotificationTemplateListItem[]>>({});
     const [templatesLoadingByChannel, setTemplatesLoadingByChannel] = useState<Record<string, boolean>>({});
     const [selectedTemplatesByChannel, setSelectedTemplatesByChannel] = useState<Record<string, string>>({});
@@ -204,12 +210,10 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
     }, [selectedChannels, plugins, selectedProviders]);
 
     // Recipient Management
-    const addRecipient = () => setRecipients([...recipients, createNewRecipient()]);
+    const addRecipient = () => setRecipients((current) => [...current, createNewRecipient()]);
 
     const removeRecipient = (id: string) => {
-        if (recipients.length > 1) {
-            setRecipients(recipients.filter(r => r.id !== id));
-        }
+        setRecipients((current) => current.filter((recipient) => recipient.id !== id));
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -360,6 +364,11 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
             return;
         }
 
+        if (recipients.length === 0) {
+            toast.error("Add at least one recipient");
+            return;
+        }
+
         setIsLoading(true);
 
         try {
@@ -461,7 +470,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
             onSuccess?.();
 
             // Reset
-            setRecipients([createNewRecipient()]);
+            setRecipients([]);
             setContentData({});
             setScheduledDate(undefined);
             setSelectedTemplatesByChannel({});
@@ -506,6 +515,61 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                 .flatMap((channel) => templateVariableNamesByChannel[channel] || [])
         )
     ).sort((left, right) => left.localeCompare(right));
+
+    const csvRecipientFields: CsvRecipientField[] = [
+        { key: "user_id", label: "User ID", required: true },
+        ...uniqueRecipientFields.map((field) => ({
+            key: field.name,
+            label: field.name,
+            required: field.required,
+        })),
+        ...activeTemplateVariableNames.map((name) => ({
+            key: `variables.${name}`,
+            label: `{{${name}}}`,
+            required: false,
+            variableName: name,
+        })),
+    ];
+
+    const handleCsvSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) return;
+
+        try {
+            const parsed = parseCsv(await file.text());
+            if (parsed.headers.length === 0 || parsed.rows.length === 0) {
+                toast.error("CSV must contain headers and at least one data row");
+                return;
+            }
+            const mappings = mapCsvHeaders(parsed.headers, csvRecipientFields);
+            setCsvMappings(mappings);
+            setCsvImport({ fileName: file.name, ...parsed });
+        } catch {
+            toast.error("Failed to read CSV file");
+        }
+    };
+
+    const importCsvRecipients = () => {
+        if (!csvImport) return;
+        const missing = getMissingRequiredCsvFields(csvRecipientFields, csvMappings);
+        if (missing.length > 0) {
+            toast.error(`Map required fields: ${missing.map((field) => field.label).join(", ")}`);
+            return;
+        }
+
+        const { recipients: imported, skipped } = createCsvRecipients(
+            csvImport.rows,
+            csvRecipientFields,
+            csvMappings,
+            generateUUID
+        );
+
+        setRecipients((current) => [...current, ...imported]);
+        setCsvImport(null);
+        setCsvMappings({});
+        toast.success(`Imported ${imported.length} recipient${imported.length === 1 ? "" : "s"}${skipped ? `; skipped ${skipped}` : ""}`);
+    };
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6 w-full">
@@ -566,9 +630,15 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                             <CardTitle className="text-sm font-medium">Recipients</CardTitle>
                             <CardDescription>Add multiple recipients with template variables</CardDescription>
                         </div>
-                        <Button type="button" variant="outline" size="sm" onClick={addRecipient}>
-                            <Plus className="h-4 w-4 mr-1" /> Add
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <Button type="button" variant="outline" size="sm" onClick={() => csvInputRef.current?.click()}>
+                                <ImportIcon className="h-4 w-4 mr-1" /> Import from CSV
+                            </Button>
+                            <input ref={csvInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleCsvSelected} />
+                            <Button type="button" variant="outline" size="sm" onClick={addRecipient}>
+                                <Plus className="h-4 w-4 mr-1" /> Add
+                            </Button>
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -576,7 +646,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                         <div key={recipient.id} className="border rounded-lg p-4 space-y-3">
                             <div className="flex items-center justify-between">
                                 <span className="text-sm font-medium">Recipient {index + 1}</span>
-                                {recipients.length > 1 && (
+                                {recipients.length > 0 && (
                                     <Button type="button" variant="ghost" size="sm" onClick={() => removeRecipient(recipient.id)}>
                                         <Trash2 className="h-4 w-4 text-destructive" />
                                     </Button>
@@ -652,6 +722,48 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                     ))}
                 </CardContent>
             </Card>
+
+            <Dialog open={Boolean(csvImport)} onOpenChange={(open) => !open && setCsvImport(null)}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Import Recipients from CSV</DialogTitle>
+                        <DialogDescription>
+                            Map CSV columns to recipient fields. A column can be used more than once.
+                            {csvImport && ` ${csvImport.fileName} (${csvImport.rows.length} rows)`}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="max-h-[55vh] space-y-3 overflow-y-auto pr-2">
+                        {csvRecipientFields.map((field) => (
+                            <div key={field.key} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[1fr_1fr]">
+                                <Label>{field.label}{field.required ? " *" : ""}</Label>
+                                <Select
+                                    value={csvMappings[field.key] || "__ignore__"}
+                                    onValueChange={(value) =>
+                                        setCsvMappings((current) => ({
+                                            ...current,
+                                            [field.key]: value === "__ignore__" ? "" : value,
+                                        }))
+                                    }
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Ignore field" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="__ignore__">Ignore field</SelectItem>
+                                        {csvImport?.headers.map((header) => (
+                                            <SelectItem key={`${field.key}-${header}`} value={header}>{header}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        ))}
+                    </div>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => setCsvImport(null)}>Cancel</Button>
+                        <Button type="button" onClick={importCsvRecipients}>Import Recipients</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {selectedChannels.map((channel) => {
                 const provider = getActiveProvider(channel);
