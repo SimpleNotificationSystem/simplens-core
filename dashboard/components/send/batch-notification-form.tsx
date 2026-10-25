@@ -18,6 +18,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { pluginService, templateService, notificationService } from "@/lib/api-client";
 import { withBasePath } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { getMissingRequiredCsvFields, importCsvRecipients as createCsvRecipients, mapCsvHeaders, parseCsv } from "@/lib/csv-import";
 
 // Generate a UUIDv4
 function generateUUID(): string {
@@ -29,50 +30,6 @@ function generateUUID(): string {
         const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
     });
-}
-
-function parseCsv(text: string): { headers: string[]; rows: Record<string, string>[] } {
-    const values: string[][] = [];
-    let row: string[] = [];
-    let value = "";
-    let quoted = false;
-
-    for (let index = 0; index < text.length; index += 1) {
-        const character = text[index];
-        const next = text[index + 1];
-        if (character === '"') {
-            if (quoted && next === '"') {
-                value += '"';
-                index += 1;
-            } else {
-                quoted = !quoted;
-            }
-        } else if (character === "," && !quoted) {
-            row.push(value);
-            value = "";
-        } else if ((character === "\n" || character === "\r") && !quoted) {
-            if (character === "\r" && next === "\n") index += 1;
-            row.push(value);
-            if (row.some((cell) => cell.trim() !== "")) values.push(row);
-            row = [];
-            value = "";
-        } else {
-            value += character;
-        }
-    }
-
-    if (value || row.length > 0) {
-        row.push(value);
-        if (row.some((cell) => cell.trim() !== "")) values.push(row);
-    }
-
-    const headers = (values.shift() || []).map((header, index) => header.replace(/^\uFEFF/, "").trim() || `Column ${index + 1}`);
-    return {
-        headers,
-        rows: values.map((cells) =>
-            Object.fromEntries(headers.map((header, index) => [header, (cells[index] || "").trim()]))
-        ),
-    };
 }
 
 interface BatchRecipient {
@@ -585,12 +542,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                 toast.error("CSV must contain headers and at least one data row");
                 return;
             }
-            const normalized = (value: string) => value.toLowerCase().replace(/[\s_-]+/g, "");
-            const mappings: Record<string, string> = {};
-            csvRecipientFields.forEach((field) => {
-                const matchingHeader = parsed.headers.find((header) => normalized(header) === normalized(field.key));
-                if (matchingHeader) mappings[field.key] = matchingHeader;
-            });
+            const mappings = mapCsvHeaders(parsed.headers, csvRecipientFields);
             setCsvMappings(mappings);
             setCsvImport({ fileName: file.name, ...parsed });
         } catch {
@@ -600,39 +552,18 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
 
     const importCsvRecipients = () => {
         if (!csvImport) return;
-        const missing = csvRecipientFields.filter((field) => field.required && !csvMappings[field.key]);
+        const missing = getMissingRequiredCsvFields(csvRecipientFields, csvMappings);
         if (missing.length > 0) {
             toast.error(`Map required fields: ${missing.map((field) => field.label).join(", ")}`);
             return;
         }
 
-        let skipped = 0;
-        const imported = csvImport.rows.flatMap((row) => {
-            const userId = csvMappings.user_id ? row[csvMappings.user_id] : "";
-            const requiredMissing = csvRecipientFields.some(
-                (field) => field.required && !row[csvMappings[field.key] || ""]
-            );
-            if (!userId || requiredMissing) {
-                skipped += 1;
-                return [];
-            }
-
-            const variables: Record<string, string> = {};
-            const recipient: BatchRecipient = {
-                id: generateUUID(),
-                request_id: generateUUID(),
-                user_id: userId,
-                variables: "{}",
-            };
-            csvRecipientFields.forEach((field) => {
-                const value = field.key === "user_id" ? userId : row[csvMappings[field.key] || ""];
-                if (!value) return;
-                if (field.variableName) variables[field.variableName] = value;
-                else if (field.key !== "user_id") recipient[field.key] = value;
-            });
-            recipient.variables = JSON.stringify(variables);
-            return [recipient];
-        });
+        const { recipients: imported, skipped } = createCsvRecipients(
+            csvImport.rows,
+            csvRecipientFields,
+            csvMappings,
+            generateUUID
+        );
 
         setRecipients((current) => [...current, ...imported]);
         setCsvImport(null);
