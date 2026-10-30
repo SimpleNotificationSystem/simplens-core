@@ -746,6 +746,25 @@ export default function SettingsPage() {
                                         />
                                         <span className="text-[10px] text-muted-foreground">Default: 86,400,000 (24h)</span>
                                     </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs">Delivered Attachments Retention (ms)</Label>
+                                        <Input
+                                            type="number"
+                                            min={60000}
+                                            max={2592000000}
+                                            value={settings.recovery.cleanup_delivered_attachments_retention_ms ?? 86400000}
+                                            onChange={(e) =>
+                                                updateGroupField(
+                                                    "recovery",
+                                                    "cleanup_delivered_attachments_retention_ms",
+                                                    parseInt(e.target.value) || 0
+                                                )
+                                            }
+                                            className="h-9 font-mono text-xs"
+                                        />
+                                        <span className="text-[10px] text-muted-foreground">Default: 86,400,000 (24h)</span>
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>

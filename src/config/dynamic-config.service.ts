@@ -50,6 +50,7 @@ export const SYSTEM_DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
     recovery_claim_timeout_ms: 60000,
     cleanup_resolved_alerts_retention_ms: 86400000,
     cleanup_processed_status_outbox_retention_ms: 86400000,
+    cleanup_delivered_attachments_retention_ms: 86400000,
   },
   logging: {
     log_level: 'info',

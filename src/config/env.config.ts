@@ -148,6 +148,9 @@ export const env = {
     get CLEANUP_PROCESSED_STATUS_OUTBOX_RETENTION_MS(): number {
         return dynamicConfig?.get?.('recovery')?.cleanup_processed_status_outbox_retention_ms ?? 86400000;
     },
+    get CLEANUP_DELIVERED_ATTACHMENTS_RETENTION_MS(): number {
+        return dynamicConfig?.get?.('recovery')?.cleanup_delivered_attachments_retention_ms ?? 86400000;
+    },
 
     // Logging
     get LOG_LEVEL(): string {

@@ -422,7 +422,6 @@ class PluginRegistryClass {
                     priority: registered.priority,
                     recipientFields,
                     contentFields,
-                    fileAttachment: manifest.fileAttachment,
                 });
             }
 

@@ -23,6 +23,20 @@ const mockNotificationModel = {
     find: vi.fn(),
     findOneAndUpdate: vi.fn(),
     updateOne: vi.fn(),
+    findById: vi.fn(),
+    distinct: vi.fn(),
+};
+
+const mockChannelRoutingModel = {
+    distinct: vi.fn(),
+};
+
+const mockFileAttachmentModel = {
+    find: vi.fn(),
+};
+
+const mockStorageService = {
+    deleteFile: vi.fn(),
 };
 
 const mockLogger = {
@@ -60,6 +74,24 @@ vi.mock('../../../../src/database/models/notification.models.js', () => ({
     default: mockNotificationModel,
 }));
 
+vi.mock('../../../../src/database/models/file-attachment.models.js', () => ({
+    default: mockFileAttachmentModel,
+}));
+
+vi.mock('../../../../src/database/models/channel-routing.models.js', () => ({
+    default: mockChannelRoutingModel,
+}));
+
+vi.mock('../../../../src/plugins/loader/registry.js', () => ({
+    PluginRegistry: {
+        getChannels: vi.fn().mockReturnValue([]),
+    },
+}));
+
+vi.mock('../../../../src/storage/storage.service.js', () => ({
+    StorageService: mockStorageService,
+}));
+
 vi.mock('../../../../src/workers/utils/logger.js', () => ({
     recoveryLogger: mockLogger,
 }));
@@ -84,6 +116,7 @@ vi.mock('../../../../src/config/env.config.js', () => ({
         RECOVERY_POLL_INTERVAL_MS: 60000,
         CLEANUP_RESOLVED_ALERTS_RETENTION_MS: 86400000,    // 24 hours
         CLEANUP_PROCESSED_STATUS_OUTBOX_RETENTION_MS: 86400000, // 24 hours
+        CLEANUP_DELIVERED_ATTACHMENTS_RETENTION_MS: 86400000, // 24 hours
         RECOVERY_CLAIM_TIMEOUT_MS: 300000, // 5 minutes
         WORKER_ID: 'test-worker-1',
     },
@@ -94,6 +127,15 @@ describe('Recovery Cron - Cleanup Functions', () => {
         vi.clearAllMocks();
         vi.useFakeTimers();
         vi.setSystemTime(new Date('2024-01-15T12:00:00.000Z'));
+
+        mockNotificationModel.distinct.mockResolvedValue(['email', 'sms', 'mock']);
+        mockChannelRoutingModel.distinct.mockResolvedValue([]);
+
+        mockFileAttachmentModel.find.mockReturnValue({
+            select: vi.fn().mockReturnValue({
+                lean: vi.fn().mockResolvedValue([]),
+            }),
+        });
     });
 
     afterEach(() => {
@@ -521,6 +563,278 @@ describe('Recovery Cron - Cleanup Functions', () => {
             expect(mockLogger.info).not.toHaveBeenCalledWith(
                 expect.stringContaining('Cleaned up 0 processed status outbox')
             );
+        });
+    });
+
+    describe('cleanupDeliveredFileAttachments', () => {
+        it('should delete file attachments when all referencing notifications are delivered and retention has elapsed', async () => {
+            const oldDate = new Date('2024-01-14T10:00:00.000Z'); // 26 hours ago (retention 24h)
+
+            mockNotificationModel.distinct.mockResolvedValue(['email', 'sms', 'mock']);
+        mockChannelRoutingModel.distinct.mockResolvedValue([]);
+
+        mockFileAttachmentModel.find.mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    lean: vi.fn().mockResolvedValue([
+                        { file_id: 'file-123', filename: 'report.pdf', created_at: oldDate }
+                    ]),
+                }),
+            });
+
+            mockNotificationModel.find.mockImplementation((filter: any) => {
+                if (filter?.status) {
+                    return { limit: vi.fn().mockResolvedValue([]) };
+                }
+                return {
+                    select: vi.fn().mockReturnValue({
+                        lean: vi.fn().mockResolvedValue([
+                            { status: 'delivered', updated_at: oldDate, created_at: oldDate }
+                        ]),
+                    }),
+                };
+            });
+
+            mockStorageService.deleteFile.mockResolvedValue(true);
+            mockAlertModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+            mockStatusOutboxModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+
+            const { startRecoveryCron, stopRecoveryCron, setHealthChecker } = await import(
+                '../../../../src/workers/recovery/recovery.cron.js'
+            );
+
+            setHealthChecker(async () => true);
+
+            startRecoveryCron();
+            await vi.advanceTimersByTimeAsync(100);
+            await stopRecoveryCron();
+
+            expect(mockStorageService.deleteFile).toHaveBeenCalledWith('file-123');
+            expect(mockLogger.info).toHaveBeenCalledWith(
+                expect.stringContaining('Cleaned up 1 delivered/orphaned file attachments')
+            );
+        });
+
+        it('should delete orphaned file attachment older than retention period', async () => {
+            const oldDate = new Date('2024-01-14T08:00:00.000Z'); // 28 hours ago
+
+            mockNotificationModel.distinct.mockResolvedValue(['email', 'sms', 'mock']);
+        mockChannelRoutingModel.distinct.mockResolvedValue([]);
+
+        mockFileAttachmentModel.find.mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    lean: vi.fn().mockResolvedValue([
+                        { file_id: 'file-orphan', filename: 'orphan.png', created_at: oldDate }
+                    ]),
+                }),
+            });
+
+            mockNotificationModel.find.mockImplementation((filter: any) => {
+                if (filter?.status) {
+                    return { limit: vi.fn().mockResolvedValue([]) };
+                }
+                return {
+                    select: vi.fn().mockReturnValue({
+                        lean: vi.fn().mockResolvedValue([]),
+                    }),
+                };
+            });
+
+            mockStorageService.deleteFile.mockResolvedValue(true);
+            mockAlertModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+            mockStatusOutboxModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+
+            const { startRecoveryCron, stopRecoveryCron, setHealthChecker } = await import(
+                '../../../../src/workers/recovery/recovery.cron.js'
+            );
+
+            setHealthChecker(async () => true);
+
+            startRecoveryCron();
+            await vi.advanceTimersByTimeAsync(100);
+            await stopRecoveryCron();
+
+            expect(mockStorageService.deleteFile).toHaveBeenCalledWith('file-orphan');
+        });
+
+        it('should not delete file attachment if any referencing notification is pending or processing', async () => {
+            const oldDate = new Date('2024-01-14T08:00:00.000Z');
+
+            mockNotificationModel.distinct.mockResolvedValue(['email', 'sms', 'mock']);
+        mockChannelRoutingModel.distinct.mockResolvedValue([]);
+
+        mockFileAttachmentModel.find.mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    lean: vi.fn().mockResolvedValue([
+                        { file_id: 'file-active', filename: 'invoice.pdf', created_at: oldDate }
+                    ]),
+                }),
+            });
+
+            mockNotificationModel.find.mockImplementation((filter: any) => {
+                if (filter?.status) {
+                    return { limit: vi.fn().mockResolvedValue([]) };
+                }
+                return {
+                    select: vi.fn().mockReturnValue({
+                        lean: vi.fn().mockResolvedValue([
+                            { status: 'delivered', updated_at: oldDate },
+                            { status: 'pending', updated_at: oldDate },
+                        ]),
+                    }),
+                };
+            });
+
+            mockAlertModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+            mockStatusOutboxModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+
+            const { startRecoveryCron, stopRecoveryCron, setHealthChecker } = await import(
+                '../../../../src/workers/recovery/recovery.cron.js'
+            );
+
+            setHealthChecker(async () => true);
+
+            startRecoveryCron();
+            await vi.advanceTimersByTimeAsync(100);
+            await stopRecoveryCron();
+
+            expect(mockStorageService.deleteFile).not.toHaveBeenCalled();
+        });
+
+        it('should not delete file attachment if delivered within retention window', async () => {
+            const recentDate = new Date('2024-01-15T11:00:00.000Z'); // 1 hour ago (retention 24h)
+
+            mockNotificationModel.distinct.mockResolvedValue(['email', 'sms', 'mock']);
+        mockChannelRoutingModel.distinct.mockResolvedValue([]);
+
+        mockFileAttachmentModel.find.mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    lean: vi.fn().mockResolvedValue([
+                        { file_id: 'file-recent', filename: 'recent.pdf', created_at: new Date('2024-01-14T08:00:00.000Z') }
+                    ]),
+                }),
+            });
+
+            mockNotificationModel.find.mockImplementation((filter: any) => {
+                if (filter?.status) {
+                    return { limit: vi.fn().mockResolvedValue([]) };
+                }
+                return {
+                    select: vi.fn().mockReturnValue({
+                        lean: vi.fn().mockResolvedValue([
+                            { status: 'delivered', updated_at: recentDate }
+                        ]),
+                    }),
+                };
+            });
+
+            mockAlertModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+            mockStatusOutboxModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+
+            const { startRecoveryCron, stopRecoveryCron, setHealthChecker } = await import(
+                '../../../../src/workers/recovery/recovery.cron.js'
+            );
+
+            setHealthChecker(async () => true);
+
+            startRecoveryCron();
+            await vi.advanceTimersByTimeAsync(100);
+            await stopRecoveryCron();
+
+            expect(mockStorageService.deleteFile).not.toHaveBeenCalled();
+        });
+
+        it('should handle storage deletion failure gracefully', async () => {
+            const oldDate = new Date('2024-01-14T08:00:00.000Z');
+
+            mockNotificationModel.distinct.mockResolvedValue(['email', 'sms', 'mock']);
+        mockChannelRoutingModel.distinct.mockResolvedValue([]);
+
+        mockFileAttachmentModel.find.mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    lean: vi.fn().mockResolvedValue([
+                        { file_id: 'file-err', filename: 'error.pdf', created_at: oldDate }
+                    ]),
+                }),
+            });
+
+            mockNotificationModel.find.mockImplementation((filter: any) => {
+                if (filter?.status) {
+                    return { limit: vi.fn().mockResolvedValue([]) };
+                }
+                return {
+                    select: vi.fn().mockReturnValue({
+                        lean: vi.fn().mockResolvedValue([]),
+                    }),
+                };
+            });
+
+            mockStorageService.deleteFile.mockRejectedValue(new Error('MinIO connection error'));
+            mockAlertModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+            mockStatusOutboxModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+
+            const { startRecoveryCron, stopRecoveryCron, setHealthChecker } = await import(
+                '../../../../src/workers/recovery/recovery.cron.js'
+            );
+
+            setHealthChecker(async () => true);
+
+            startRecoveryCron();
+            await vi.advanceTimersByTimeAsync(100);
+            await stopRecoveryCron();
+
+            expect(mockLogger.error).toHaveBeenCalledWith(
+                expect.stringContaining('Failed to delete expired file attachment file-err (error.pdf):'),
+                expect.any(Error)
+            );
+        });
+
+        it('should dynamically support arbitrary channels (e.g. telegram) without static configuration', async () => {
+            const oldDate = new Date('2024-01-14T06:00:00.000Z');
+
+            mockNotificationModel.distinct.mockResolvedValue(['telegram']);
+            mockChannelRoutingModel.distinct.mockResolvedValue(['telegram']);
+
+            mockFileAttachmentModel.find.mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    lean: vi.fn().mockResolvedValue([
+                        { file_id: 'file-telegram-999', filename: 'document.pdf', created_at: oldDate }
+                    ]),
+                }),
+            });
+
+            let queriedWithTelegram = false;
+            mockNotificationModel.find.mockImplementation((filter: any) => {
+                if (filter?.status) {
+                    return { limit: vi.fn().mockResolvedValue([]) };
+                }
+                if (filter?.$or?.some((cond: any) => cond['content.telegram.attachments.fileId'] === 'file-telegram-999')) {
+                    queriedWithTelegram = true;
+                }
+                return {
+                    select: vi.fn().mockReturnValue({
+                        lean: vi.fn().mockResolvedValue([
+                            { status: 'delivered', updated_at: oldDate, created_at: oldDate }
+                        ]),
+                    }),
+                };
+            });
+
+            mockStorageService.deleteFile.mockResolvedValue(true);
+            mockAlertModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+            mockStatusOutboxModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+
+            const { startRecoveryCron, stopRecoveryCron, setHealthChecker } = await import(
+                '../../../../src/workers/recovery/recovery.cron.js'
+            );
+
+            setHealthChecker(async () => true);
+
+            startRecoveryCron();
+            await vi.advanceTimersByTimeAsync(100);
+            await stopRecoveryCron();
+
+            expect(queriedWithTelegram).toBe(true);
+            expect(mockStorageService.deleteFile).toHaveBeenCalledWith('file-telegram-999');
         });
     });
 

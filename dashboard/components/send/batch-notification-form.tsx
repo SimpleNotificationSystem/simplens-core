@@ -877,16 +877,19 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                                 </>
                             )}
 
-                            {Boolean(
-                                provider.fileAttachment?.enabled !== false &&
-                                (provider.fileAttachment || provider.contentFields.some((f) => f.name === "attachments" || f.type === "attachment"))
-                            ) && (
-                                storageStatus?.hasActiveProvider ? (
+                            {(() => {
+                                const attachmentField = provider.contentFields.find(
+                                    (f) => f.name === "attachments" || f.type === "attachment"
+                                );
+                                if (!attachmentField || attachmentField.attachmentConfig?.enabled === false) {
+                                    return null;
+                                }
+                                return storageStatus?.hasActiveProvider ? (
                                     <FileAttachmentUpload
                                         channel={channel}
                                         attachments={contentData[channel]?.attachments || []}
                                         onChange={(atts) => updateContentData(channel, "attachments", atts)}
-                                        config={provider.fileAttachment || provider.contentFields.find((f) => f.name === "attachments")?.attachmentConfig}
+                                        config={attachmentField.attachmentConfig}
                                     />
                                 ) : (
                                     <Alert className="mt-3 border-amber-500/50 bg-amber-500/10 text-amber-500">
@@ -900,8 +903,8 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                                             to attach files.
                                         </AlertDescription>
                                     </Alert>
-                                )
-                            )}
+                                );
+                            })()}
                         </CardContent>
                     </Card>
                 );

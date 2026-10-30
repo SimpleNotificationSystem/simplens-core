@@ -8,6 +8,7 @@ import { FileUp, Paperclip, X, Loader2, FileIcon, CheckCircle2 } from "lucide-re
 import type { FileAttachmentItem, FileAttachmentConfig } from "@/lib/types";
 import { fileService } from "@/lib/api-client";
 import { toast } from "sonner";
+import { formatBytes } from "@/lib/utils";
 
 interface FileAttachmentUploadProps {
     channel: string;
@@ -15,15 +16,6 @@ interface FileAttachmentUploadProps {
     onChange: (attachments: FileAttachmentItem[]) => void;
     config?: FileAttachmentConfig;
     disabled?: boolean;
-}
-
-function formatBytes(bytes: number, decimals = 1): string {
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
 }
 
 export function FileAttachmentUpload({

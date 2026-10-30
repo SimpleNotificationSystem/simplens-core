@@ -18,6 +18,10 @@ import { NOTIFICATION_STATUS, ALERT_TYPE, type HealthChecker, type RecoveryCronS
 import notification_model from '@src/database/models/notification.models.js';
 import alert_model from '@src/database/models/alert.models.js';
 import status_outbox_model from '@src/database/models/status-outbox.models.js';
+import file_attachment_model from '@src/database/models/file-attachment.models.js';
+import channel_routing_model from '@src/database/models/channel-routing.models.js';
+import { PluginRegistry } from '@src/plugins/loader/registry.js';
+import { StorageService } from '@src/storage/storage.service.js';
 import { getIdempotencyStatus } from '@src/processors/shared/idempotency.js';
 import { recoveryLogger as logger } from '@src/workers/utils/logger.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
@@ -379,6 +383,113 @@ const cleanupProcessedStatusOutbox = async (): Promise<void> => {
 };
 
 /**
+ * Discover all active channel identifiers from notifications collection, channel routings, and plugin registry.
+ */
+const discoverActiveChannels = async (): Promise<string[]> => {
+    try {
+        const [notificationChannels, routingChannels] = await Promise.all([
+            notification_model.distinct('channel').catch(() => [] as string[]),
+            channel_routing_model.distinct('channel').catch(() => [] as string[]),
+        ]);
+        const registryChannels = PluginRegistry?.getChannels ? PluginRegistry.getChannels() : [];
+        return Array.from(new Set([...notificationChannels, ...routingChannels, ...registryChannels].filter(Boolean)));
+    } catch (err) {
+        logger.error('Failed to discover active channels for retention cleanup:', err);
+        return [];
+    }
+};
+
+/**
+ * Builds a dynamic MongoDB query to match notifications referencing a file attachment.
+ * Supports root-level attachments as well as channel-scoped content for any arbitrary channel.
+ */
+const buildNotificationAttachmentQuery = (fileId: string, channels: string[]) => {
+    const orConditions: Record<string, unknown>[] = [
+        { 'content.attachments.fileId': fileId },
+        { 'content.attachments.id': fileId },
+    ];
+
+    for (const channel of channels) {
+        if (!channel) continue;
+        orConditions.push(
+            { [`content.${channel}.attachments.fileId`]: fileId },
+            { [`content.${channel}.attachments.id`]: fileId },
+        );
+    }
+
+    return { $or: orConditions };
+};
+
+/**
+ * Cleanup file attachments once all referencing notifications are delivered and retention has elapsed.
+ * Also cleans up orphaned file uploads older than the retention threshold.
+ */
+const cleanupDeliveredFileAttachments = async (): Promise<void> => {
+    try {
+        const retentionMs = env.CLEANUP_DELIVERED_ATTACHMENTS_RETENTION_MS;
+        const threshold = new Date(Date.now() - retentionMs);
+
+        // Find candidate attachments created on or before the retention cutoff
+        const candidateFiles = await file_attachment_model.find({
+            created_at: { $lte: threshold }
+        }).select('file_id filename created_at').lean();
+
+        if (!candidateFiles || candidateFiles.length === 0) {
+            return;
+        }
+
+        // Dynamically discover all active channels across notifications, routings, and plugins
+        const activeChannels = await discoverActiveChannels();
+
+        let deletedCount = 0;
+
+        for (const file of candidateFiles) {
+            // Find all notifications referencing this file_id across root and arbitrary channels
+            const attachmentQuery = buildNotificationAttachmentQuery(file.file_id, activeChannels);
+            const matchingNotifications = await notification_model.find(attachmentQuery)
+                .select('status updated_at created_at')
+                .lean();
+
+            let shouldDelete = false;
+
+            if (matchingNotifications.length === 0) {
+                // Orphaned file upload older than retention period
+                shouldDelete = true;
+            } else {
+                // Check if ALL referencing notifications are delivered
+                const allDelivered = matchingNotifications.every(
+                    (n) => n.status === NOTIFICATION_STATUS.delivered
+                );
+
+                if (allDelivered) {
+                    const latestDeliveredAt = Math.max(
+                        ...matchingNotifications.map((n) => new Date(n.updated_at || n.created_at || Date.now()).getTime())
+                    );
+                    if (Date.now() - latestDeliveredAt >= retentionMs) {
+                        shouldDelete = true;
+                    }
+                }
+            }
+
+            if (shouldDelete) {
+                try {
+                    await StorageService.deleteFile(file.file_id);
+                    deletedCount++;
+                } catch (delErr) {
+                    logger.error(`Failed to delete expired file attachment ${file.file_id} (${file.filename}):`, delErr);
+                }
+            }
+        }
+
+        if (deletedCount > 0) {
+            logger.info(`🧹 Cleaned up ${deletedCount} delivered/orphaned file attachments older than retention period (${retentionMs}ms)`);
+        }
+    } catch (err) {
+        logger.error('Error during file attachments retention cleanup:', err);
+    }
+};
+
+/**
  * Auto-resolve alerts for delivered notifications (horizontally scalable)
  * Uses atomic claiming with worker ID to prevent race conditions
  */
@@ -481,9 +592,10 @@ const runRecovery = async (): Promise<void> => {
         // Auto-resolve alerts for delivered notifications
         await autoResolveDeliveredAlerts();
 
-        // Cleanup old resolved alerts and processed status outbox entries
+        // Cleanup old resolved alerts, processed status outbox, and delivered file attachments
         await cleanupResolvedAlerts();
         await cleanupProcessedStatusOutbox();
+        await cleanupDeliveredFileAttachments();
 
     } catch (err) {
         state.consecutiveFailures++;

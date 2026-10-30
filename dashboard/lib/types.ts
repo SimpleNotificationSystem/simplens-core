@@ -158,7 +158,6 @@ export interface ProviderMetadata {
   priority: number;
   recipientFields: FieldDefinition[];
   contentFields: FieldDefinition[];
-  fileAttachment?: FileAttachmentConfig;
 }
 
 export interface StorageProviderConfig {
@@ -409,6 +408,7 @@ export interface OperationalSettings {
     recovery_claim_timeout_ms: number;
     cleanup_resolved_alerts_retention_ms: number;
     cleanup_processed_status_outbox_retention_ms: number;
+    cleanup_delivered_attachments_retention_ms: number;
   };
   logging: {
     log_level: 'debug' | 'info' | 'warn' | 'error';

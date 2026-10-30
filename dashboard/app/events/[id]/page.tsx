@@ -20,13 +20,13 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog";
 
-import { ArrowLeft, RefreshCw, Trash2, Clock, User, Mail, Phone, Link as LinkIcon } from "lucide-react";
+import { ArrowLeft, RefreshCw, Trash2, Clock, User, Mail, Phone, Link as LinkIcon, Paperclip, Download } from "lucide-react";
 import { format } from "date-fns";
 import { Notification, NOTIFICATION_STATUS, PluginMetadata, ProviderMetadata } from "@/lib/types";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
-import { withBasePath } from "@/lib/utils";
+import { withBasePath, formatBytes } from "@/lib/utils";
 import { apiClient, notificationService } from "@/lib/api-client";
 
 const fetcher = <T,>(url: string): Promise<T> => apiClient.get(url) as unknown as Promise<T>;
@@ -344,40 +344,159 @@ export default function EventDetailPage({ params }: PageProps) {
                                 const channelContent = (notification.content as Record<string, unknown>)[notification.channel] as Record<string, unknown> | undefined
                                     || notification.content as Record<string, unknown>;
 
-                                // No schema available - fallback to JSON
-                                if (!providerMeta?.contentFields?.length) {
+                                const renderAttachmentList = (attachments: unknown[]) => {
+                                    if (!Array.isArray(attachments) || attachments.length === 0) return null;
                                     return (
-                                        <pre className="p-4 bg-muted rounded-lg text-xs overflow-auto">
-                                            {JSON.stringify(notification.content, null, 2)}
-                                        </pre>
+                                        <div className="grid gap-2 sm:grid-cols-2 mt-2">
+                                            {attachments.map((item, idx) => {
+                                                const att = (typeof item === 'object' && item !== null ? item : {}) as {
+                                                    id?: string;
+                                                    fileId?: string;
+                                                    filename?: string;
+                                                    name?: string;
+                                                    contentType?: string;
+                                                    mime_type?: string;
+                                                    size?: number;
+                                                    url?: string;
+                                                };
+                                                const fileId = att.fileId || att.id;
+                                                const filename = att.filename || att.name || (fileId ? `file-${fileId.slice(0, 8)}` : `attachment-${idx + 1}`);
+                                                const mimeType = att.contentType || att.mime_type;
+                                                const downloadUrl = att.url || (fileId ? withBasePath(`/api/file/${fileId}/download`) : undefined);
+
+                                                return (
+                                                    <div
+                                                        key={fileId || idx}
+                                                        className="flex items-center justify-between p-3 rounded-lg border bg-card text-card-foreground shadow-sm hover:border-primary/50 transition-colors"
+                                                    >
+                                                        <div className="flex items-center gap-3 min-w-0">
+                                                            <div className="p-2 rounded-md bg-muted text-muted-foreground shrink-0">
+                                                                <Paperclip className="h-4 w-4" />
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <p className="text-sm font-medium truncate" title={filename}>
+                                                                    {filename}
+                                                                </p>
+                                                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                                    {mimeType && <span className="truncate max-w-[140px]">{mimeType}</span>}
+                                                                    {att.size !== undefined && (
+                                                                        <>
+                                                                            {mimeType && <span>•</span>}
+                                                                            <span>{formatBytes(att.size)}</span>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {downloadUrl && (
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="h-8 shrink-0 ml-2 text-xs"
+                                                                asChild
+                                                            >
+                                                                <a
+                                                                    href={downloadUrl}
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    download={filename}
+                                                                >
+                                                                    <Download className="h-3.5 w-3.5 mr-1" />
+                                                                    Download
+                                                                </a>
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                };
+
+                                // No schema available - fallback to JSON (with attachment preview if available)
+                                if (!providerMeta?.contentFields?.length) {
+                                    const fallbackAttachments = Array.isArray(channelContent?.attachments) ? channelContent.attachments : [];
+                                    return (
+                                        <div className="space-y-4">
+                                            {fallbackAttachments.length > 0 && (
+                                                <div className="space-y-1">
+                                                    <span className="text-sm font-medium capitalize flex items-center gap-1.5">
+                                                        <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                                                        Attachments ({fallbackAttachments.length}):
+                                                    </span>
+                                                    {renderAttachmentList(fallbackAttachments)}
+                                                </div>
+                                            )}
+                                            <pre className="p-4 bg-muted rounded-lg text-xs overflow-auto">
+                                                {JSON.stringify(notification.content, null, 2)}
+                                            </pre>
+                                        </div>
                                     );
                                 }
 
-                                // Render fields from schema
-                                return providerMeta.contentFields.map(field => {
-                                    const value = channelContent[field.name];
-                                    if (value === undefined || value === null || value === '') return null;
+                                const hasSchemaAttachmentField = providerMeta.contentFields.some(
+                                    (f) => f.name === 'attachments' || f.type === 'attachment'
+                                );
+                                const fallbackAttachments = !hasSchemaAttachmentField && Array.isArray(channelContent?.attachments) && channelContent.attachments.length > 0
+                                    ? channelContent.attachments
+                                    : [];
 
-                                    const stringValue = String(value);
+                                return (
+                                    <>
+                                        {providerMeta.contentFields.map(field => {
+                                            const value = channelContent[field.name];
+                                            if (value === undefined || value === null || value === '') return null;
 
-                                    return (
-                                        <div key={field.name}>
-                                            <span className="text-sm font-medium capitalize">
-                                                {field.name.replace(/_/g, ' ')}:
-                                            </span>
-                                            {field.type === 'text' ? (
-                                                // Long text/HTML content - styled box
-                                                <div
-                                                    className="mt-2 p-4 bg-muted rounded-lg text-sm prose prose-sm max-w-none dark:prose-invert"
-                                                    dangerouslySetInnerHTML={{ __html: stringValue }}
-                                                />
-                                            ) : (
-                                                // Short string content - inline
-                                                <p className="mt-1 text-sm">{stringValue}</p>
-                                            )}
-                                        </div>
-                                    );
-                                });
+                                            const isAttachmentField = field.name === 'attachments' || field.type === 'attachment' || (Array.isArray(value) && field.name.toLowerCase().includes('attach'));
+
+                                            if (isAttachmentField) {
+                                                const attachmentList = Array.isArray(value) ? value : [];
+                                                if (attachmentList.length === 0) return null;
+
+                                                return (
+                                                    <div key={field.name} className="space-y-1">
+                                                        <span className="text-sm font-medium capitalize flex items-center gap-1.5">
+                                                            <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                                                            Attachments ({attachmentList.length}):
+                                                        </span>
+                                                        {renderAttachmentList(attachmentList)}
+                                                    </div>
+                                                );
+                                            }
+
+                                            const stringValue = String(value);
+
+                                            return (
+                                                <div key={field.name}>
+                                                    <span className="text-sm font-medium capitalize">
+                                                        {field.name.replace(/_/g, ' ')}:
+                                                    </span>
+                                                    {field.type === 'text' ? (
+                                                        // Long text/HTML content - styled box
+                                                        <div
+                                                            className="mt-2 p-4 bg-muted rounded-lg text-sm prose prose-sm max-w-none dark:prose-invert"
+                                                            dangerouslySetInnerHTML={{ __html: stringValue }}
+                                                        />
+                                                    ) : (
+                                                        // Short string content - inline
+                                                        <p className="mt-1 text-sm">{stringValue}</p>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+
+                                        {fallbackAttachments.length > 0 && (
+                                            <div className="space-y-1 pt-2">
+                                                <span className="text-sm font-medium capitalize flex items-center gap-1.5">
+                                                    <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                                                    Attachments ({fallbackAttachments.length}):
+                                                </span>
+                                                {renderAttachmentList(fallbackAttachments)}
+                                            </div>
+                                        )}
+                                    </>
+                                );
                             })()}
                         </CardContent>
                     </Card>

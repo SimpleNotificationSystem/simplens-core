@@ -346,7 +346,6 @@ export interface ProviderMetadata {
     priority: number;
     recipientFields: FieldDefinition[];
     contentFields: FieldDefinition[];
-    fileAttachment?: FileAttachmentConfig;
 }
 
 // ============================================================================
