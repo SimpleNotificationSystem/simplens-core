@@ -362,7 +362,7 @@ export default function EventDetailPage({ params }: PageProps) {
                                                 const fileId = att.fileId || att.id;
                                                 const filename = att.filename || att.name || (fileId ? `file-${fileId.slice(0, 8)}` : `attachment-${idx + 1}`);
                                                 const mimeType = att.contentType || att.mime_type;
-                                                const downloadUrl = att.url || (fileId ? withBasePath(`/api/file/${fileId}/download`) : undefined);
+                                                const downloadUrl = fileId ? withBasePath(`/api/file/${fileId}/download`) : undefined;
 
                                                 return (
                                                     <div
