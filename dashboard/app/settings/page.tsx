@@ -753,17 +753,19 @@ export default function SettingsPage() {
                                             type="number"
                                             min={60000}
                                             max={2592000000}
-                                            value={settings.recovery.cleanup_delivered_attachments_retention_ms ?? 86400000}
-                                            onChange={(e) =>
+                                            placeholder="Disabled (leave empty to disable retention cleanup)"
+                                            value={settings.recovery.cleanup_delivered_attachments_retention_ms ?? ""}
+                                            onChange={(e) => {
+                                                const raw = e.target.value.trim();
                                                 updateGroupField(
                                                     "recovery",
                                                     "cleanup_delivered_attachments_retention_ms",
-                                                    parseInt(e.target.value) || 0
-                                                )
-                                            }
+                                                    raw === "" ? null : parseInt(raw) || null
+                                                );
+                                            }}
                                             className="h-9 font-mono text-xs"
                                         />
-                                        <span className="text-[10px] text-muted-foreground">Default: 86,400,000 (24h)</span>
+                                        <span className="text-[10px] text-muted-foreground">Default: 86,400,000 (24h). Leave empty to disable retention cleanup.</span>
                                     </div>
                                 </div>
                             </CardContent>

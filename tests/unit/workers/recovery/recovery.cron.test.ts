@@ -836,6 +836,32 @@ describe('Recovery Cron - Cleanup Functions', () => {
             expect(queriedWithTelegram).toBe(true);
             expect(mockStorageService.deleteFile).toHaveBeenCalledWith('file-telegram-999');
         });
+
+        it('should skip retention cleanup when retention period is null or disabled', async () => {
+            const { env } = await import('../../../../src/config/env.config.js');
+            const originalVal = env.CLEANUP_DELIVERED_ATTACHMENTS_RETENTION_MS;
+            (env as any).CLEANUP_DELIVERED_ATTACHMENTS_RETENTION_MS = null;
+
+            mockAlertModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+            mockStatusOutboxModel.deleteMany.mockResolvedValue({ deletedCount: 0 });
+
+            const { startRecoveryCron, stopRecoveryCron, setHealthChecker } = await import(
+                '../../../../src/workers/recovery/recovery.cron.js'
+            );
+
+            setHealthChecker(async () => true);
+
+            startRecoveryCron();
+            await vi.advanceTimersByTimeAsync(100);
+            await stopRecoveryCron();
+
+            // When retention is null/disabled, candidate file query should not run
+            expect(mockFileAttachmentModel.find).not.toHaveBeenCalled();
+            expect(mockStorageService.deleteFile).not.toHaveBeenCalled();
+
+            // Restore
+            (env as any).CLEANUP_DELIVERED_ATTACHMENTS_RETENTION_MS = originalVal;
+        });
     });
 
     describe('cleanup integration with recovery job', () => {

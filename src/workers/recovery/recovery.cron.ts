@@ -427,6 +427,10 @@ const buildNotificationAttachmentQuery = (fileId: string, channels: string[]) =>
 const cleanupDeliveredFileAttachments = async (): Promise<void> => {
     try {
         const retentionMs = env.CLEANUP_DELIVERED_ATTACHMENTS_RETENTION_MS;
+        if (!retentionMs || retentionMs <= 0) {
+            return;
+        }
+
         const threshold = new Date(Date.now() - retentionMs);
 
         // Find candidate attachments created on or before the retention cutoff

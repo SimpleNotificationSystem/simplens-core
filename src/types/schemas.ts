@@ -622,7 +622,10 @@ export const operationalSettingsSchema = z.object({
     recovery_claim_timeout_ms: z.number().int().min(5000).max(300000).default(60000),
     cleanup_resolved_alerts_retention_ms: z.number().int().min(60000).max(2592000000).default(86400000),
     cleanup_processed_status_outbox_retention_ms: z.number().int().min(60000).max(2592000000).default(86400000),
-    cleanup_delivered_attachments_retention_ms: z.number().int().min(60000).max(2592000000).default(86400000),
+    cleanup_delivered_attachments_retention_ms: z.preprocess(
+      (val) => (val === '' || val === null || val === undefined || val === 0 ? null : Number(val)),
+      z.number().int().min(60000).max(2592000000).nullable().optional()
+    ).default(86400000),
   }),
   logging: z.object({
     log_level: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
