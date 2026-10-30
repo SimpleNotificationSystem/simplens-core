@@ -37,7 +37,7 @@ const hasNonEmptyTemplateIds = (
 ) => Array.isArray(templateIds) && templateIds.some((id) => Boolean(id));
 
 const hasNonEmptyContent = (
-  content?: Record<string, Record<string, string>>,
+  content?: Record<string, Record<string, unknown>>,
 ) => !!content && Object.keys(content).length > 0;
 
 export const providerAttemptSchema = z.object({
@@ -73,7 +73,7 @@ const notificationRequestFields = {
   provider: z
     .union([z.string(), z.array(z.string().nullable().optional())])
     .optional(),
-  content: z.record(z.string(), z.record(z.string(), z.string())).optional(),
+  content: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
   scheduled_at: z.coerce.date().optional(),
   webhook_url: z.url(),
 };
@@ -290,6 +290,81 @@ export const encryptedCredentialsSchema = z.object({
 });
 
 /**
+ * File attachment configuration schema for providers
+ */
+export const fileAttachmentConfigSchema = z.object({
+    enabled: z.boolean().optional(),
+    maxFileSize: z.number().int().positive().optional(),
+    maxCount: z.number().int().positive().optional(),
+    allowedMimeTypes: z.array(z.string()).optional(),
+});
+
+/**
+ * Standard file attachment item schema
+ */
+export const fileAttachmentItemSchema = z.object({
+    id: z.string().min(1, 'File ID is required'),
+    filename: z.string().min(1, 'Filename is required'),
+    mime_type: z.string().min(1, 'MIME type is required'),
+    size: z.number().nonnegative('Size cannot be negative'),
+    hash: z.string().min(1, 'File hash is required'),
+    url: z.string().optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    buffer: z.any().optional(),
+    stream: z.any().optional(),
+});
+
+/**
+ * Standard array of file attachments
+ */
+export const fileAttachmentArraySchema = z.array(fileAttachmentItemSchema);
+
+/**
+ * Helper to build an attachment array schema tailored to a provider's constraints
+ */
+export function createFileAttachmentArraySchema(config?: {
+    enabled?: boolean;
+    maxFileSize?: number;
+    maxCount?: number;
+    allowedMimeTypes?: string[];
+}): z.ZodType<Array<z.infer<typeof fileAttachmentItemSchema>>> {
+    let schema: z.ZodType<Array<z.infer<typeof fileAttachmentItemSchema>>> = z.array(fileAttachmentItemSchema);
+
+    if (config?.maxCount && config.maxCount > 0) {
+        schema = (schema as z.ZodArray<typeof fileAttachmentItemSchema>).max(
+            config.maxCount,
+            `Cannot attach more than ${config.maxCount} files`
+        );
+    }
+
+    if (config?.maxFileSize || (config?.allowedMimeTypes && config.allowedMimeTypes.length > 0)) {
+        schema = schema.refine((attachments) => {
+            for (const att of attachments) {
+                if (config.maxFileSize && att.size > config.maxFileSize) {
+                    return false;
+                }
+                if (config.allowedMimeTypes && config.allowedMimeTypes.length > 0) {
+                    const allowed = config.allowedMimeTypes.some(pattern => {
+                        if (pattern === '*/*' || pattern === '*') return true;
+                        if (pattern.endsWith('/*')) {
+                            const prefix = pattern.slice(0, -2);
+                            return att.mime_type.startsWith(prefix);
+                        }
+                        return att.mime_type === pattern;
+                    });
+                    if (!allowed) return false;
+                }
+            }
+            return true;
+        }, {
+            message: 'One or more attachments exceed file size or MIME type restrictions',
+        });
+    }
+
+    return schema;
+}
+
+/**
  * Provider manifest schema for plugins
  */
 export const providerManifestSchema = z.object({
@@ -302,6 +377,7 @@ export const providerManifestSchema = z.object({
     homepage: z.string().optional(),
     requiredCredentials: z.array(z.string()),
     optionalConfig: z.array(z.string()).optional(),
+    fileAttachment: fileAttachmentConfigSchema.optional(),
 });
 
   /** Options supplied by a YAML/JSON provider configuration entry. */
@@ -768,5 +844,43 @@ export const apiHealthResponseSchema = z.object({
   status: z.enum(['healthy', 'unhealthy', 'ready', 'not_ready']),
   timestamp: z.string(),
   checks: z.record(z.string(), z.boolean()),
+});
+
+// ============================================================================
+// STORAGE PROVIDER SCHEMAS
+// ============================================================================
+
+export const storageProviderCreateSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required').max(100),
+  provider_type: z.string().trim().min(1, 'Provider type is required'),
+  enabled: z.boolean().default(true),
+  is_active: z.boolean().default(false),
+  config: z.record(z.string(), z.string()),
+});
+
+export const storageProviderUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(100).optional(),
+  enabled: z.boolean().optional(),
+  is_active: z.boolean().optional(),
+  config: z.record(z.string(), z.string()).optional(),
+});
+
+export const minioStorageConfigSchema = z.object({
+  endPoint: z.string().trim().min(1, 'Endpoint is required'),
+  port: z.union([z.number(), z.string()]).optional().transform((val) => {
+    if (typeof val === 'string' && val.trim() !== '') {
+      const parsed = parseInt(val, 10);
+      return isNaN(parsed) ? undefined : parsed;
+    }
+    return typeof val === 'number' ? val : undefined;
+  }),
+  useSSL: z.union([z.boolean(), z.string()]).optional().transform((val) => {
+    if (typeof val === 'string') return val.toLowerCase() === 'true';
+    return Boolean(val);
+  }),
+  accessKey: z.string().trim().min(1, 'Access Key is required'),
+  secretKey: z.string().trim().min(1, 'Secret Key is required'),
+  bucket: z.string().trim().min(1, 'Bucket name is required'),
+  region: z.string().trim().optional(),
 });
 

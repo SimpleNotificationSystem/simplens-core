@@ -5,7 +5,7 @@
  * Handles provider lookup by ID or channel.
  */
 
-import type { SimpleNSProvider, ProviderManifest, RegisteredProvider, ChannelConfig, FieldDefinition, ProviderMetadata, ChannelMetadata, PluginMetadata } from '@src/types/types.js';
+import type { SimpleNSProvider, ProviderManifest, RegisteredProvider, ChannelConfig, FieldDefinition, ProviderMetadata, ChannelMetadata, PluginMetadata, FileAttachmentConfig } from '@src/types/types.js';
 import { pluginRegistryLogger as logger } from '@src/workers/utils/logger.js';
 
 export type {
@@ -23,7 +23,10 @@ export type {
 /**
  * Extract field definitions from a Zod object schema
  */
-function extractFieldsFromSchema(schema: { shape?: Record<string, unknown> }): FieldDefinition[] {
+function extractFieldsFromSchema(
+    schema: { shape?: Record<string, unknown> },
+    attachmentConfig?: FileAttachmentConfig
+): FieldDefinition[] {
     const fields: FieldDefinition[] = [];
 
     if (!schema.shape) {
@@ -52,7 +55,9 @@ function extractFieldsFromSchema(schema: { shape?: Record<string, unknown> }): F
         const typeName = innerSchema._def?.typeName;
         const checks = innerSchema._def?.checks || [];
 
-        if (typeName === 'ZodNumber') {
+        if (name === 'attachments' || typeName === 'ZodArray') {
+            type = 'attachment';
+        } else if (typeName === 'ZodNumber') {
             type = 'number';
         } else if (typeName === 'ZodBoolean') {
             type = 'boolean';
@@ -75,6 +80,7 @@ function extractFieldsFromSchema(schema: { shape?: Record<string, unknown> }): F
             type,
             required,
             description: zodSchema.description,
+            ...(type === 'attachment' && attachmentConfig ? { attachmentConfig } : {}),
         });
     }
 
@@ -406,7 +412,7 @@ class PluginRegistryClass {
 
                 // Extract field definitions from schemas
                 const recipientFields = extractFieldsFromSchema(provider.getRecipientSchema());
-                const contentFields = extractFieldsFromSchema(provider.getContentSchema());
+                const contentFields = extractFieldsFromSchema(provider.getContentSchema(), manifest.fileAttachment);
 
                 providers.push({
                     id,
@@ -416,6 +422,7 @@ class PluginRegistryClass {
                     priority: registered.priority,
                     recipientFields,
                     contentFields,
+                    fileAttachment: manifest.fileAttachment,
                 });
             }
 

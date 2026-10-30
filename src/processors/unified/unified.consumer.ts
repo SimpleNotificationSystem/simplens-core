@@ -30,8 +30,12 @@ import type {
     RateLimitResult,
     ConsumerHealthState,
     ConsumerHealthCheckResult,
-    ConsumerHealthDetails
+    ConsumerHealthDetails,
+    FileAttachmentItem
 } from '@src/types/types.js';
+
+// Storage service for resolving file attachments
+import { StorageService } from '@src/storage/storage.service.js';
 
 // Shared utilities
 import { tryAcquireProcessingLock, setDelivered, setFailed, setRateLimited } from '@src/processors/shared/idempotency.js';
@@ -118,6 +122,102 @@ const publishFailureStatus = async (
 };
 
 /**
+ * Strip binary buffers and streams from notification before queueing in Kafka delayed topic
+ */
+export const sanitizeNotificationForDelayedQueue = (
+    notification: BaseNotification | Record<string, unknown>
+): Record<string, unknown> => {
+    return JSON.parse(JSON.stringify(notification, (key, value) => {
+        if (key === 'buffer' || key === 'stream') {
+            return undefined;
+        }
+        return value;
+    }));
+};
+
+/**
+ * Resolve file attachments for a notification by downloading content from active storage provider.
+ * Enriches each attachment item with `buffer`, `stream`, and `url`.
+ */
+export const resolveNotificationAttachments = async (
+    notification: BaseNotification
+): Promise<{ success: boolean; error?: { message: string; retryable: boolean; code: string } }> => {
+    if (!notification.content || typeof notification.content !== 'object') {
+        return { success: true };
+    }
+
+    const contentObj = notification.content as Record<string, unknown>;
+    const rawAttachments = contentObj.attachments;
+
+    if (!Array.isArray(rawAttachments) || rawAttachments.length === 0) {
+        return { success: true };
+    }
+
+    const activeStorage = await StorageService.getActiveProvider();
+    if (!activeStorage) {
+        return {
+            success: false,
+            error: {
+                code: 'NO_ACTIVE_STORAGE_PROVIDER',
+                message: 'Notification contains file attachments, but no storage provider is currently active',
+                retryable: false,
+            },
+        };
+    }
+
+    for (const item of rawAttachments as FileAttachmentItem[]) {
+        if (!item || typeof item !== 'object' || !item.id) {
+            continue;
+        }
+
+        // Skip if buffer already loaded (e.g. from local tests or mocked payloads)
+        if (item.buffer) {
+            continue;
+        }
+
+        try {
+            const { attachment: doc, download } = await StorageService.downloadFile(item.id);
+
+            item.buffer = download.buffer;
+            item.stream = download.stream;
+            item.filename = item.filename || doc.filename;
+            item.mime_type = item.mime_type || doc.mime_type;
+            item.size = item.size || doc.size;
+            item.hash = item.hash || doc.hash;
+
+            if (!item.url) {
+                if (doc.url) {
+                    item.url = doc.url;
+                } else if (typeof activeStorage.provider.getUrl === 'function') {
+                    try {
+                        item.url = await activeStorage.provider.getUrl(
+                            item.id,
+                            { expiresInSeconds: 86400 },
+                            doc.storage_key
+                        );
+                    } catch {
+                        // Optional signed URL generation error is non-fatal
+                    }
+                }
+            }
+        } catch (err: unknown) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            const isNotFound = errMsg.toLowerCase().includes('not found');
+            return {
+                success: false,
+                error: {
+                    code: isNotFound ? 'ATTACHMENT_NOT_FOUND' : 'ATTACHMENT_DOWNLOAD_FAILED',
+                    message: `Failed to resolve file attachment '${item.filename || item.id}': ${errMsg}`,
+                    retryable: !isNotFound,
+                },
+            };
+        }
+    }
+
+    return { success: true };
+};
+
+/**
  * Hand off a retry-exhausted notification to the fallback provider via delayed queue.
  * This gives the fallback provider its own retry budget while preserving normal backoff.
  */
@@ -135,9 +235,9 @@ export const scheduleFallbackProviderHandoff = async (
     }
 
     const fallbackNotification: BaseNotification = {
-        ...notification,
+        ...sanitizeNotificationForDelayedQueue(notification),
         provider: fallbackProviderId,
-    };
+    } as BaseNotification;
 
     const validationResult = validateNotificationForProvider<BaseNotification>(
         fallbackProviderId,
@@ -154,13 +254,13 @@ export const scheduleFallbackProviderHandoff = async (
     await setFailed(notification.notification_id.toString(), notification.retry_count);
     const delayedPayload = delayMs !== undefined
         ? buildDelayedPayloadGeneric(
-            validationResult.data as unknown as Record<string, unknown>,
+            sanitizeNotificationForDelayedQueue(validationResult.data as unknown as Record<string, unknown>),
             channel,
             0,
             delayMs
         )
         : buildDelayedPayloadGeneric(
-            validationResult.data as unknown as Record<string, unknown>,
+            sanitizeNotificationForDelayedQueue(validationResult.data as unknown as Record<string, unknown>),
             channel,
             0
         );
@@ -359,7 +459,7 @@ const processMessage = async (
             await setRateLimited(notificationId, validationResult.data.retry_count);
             const retryDelay = lastRateLimitResult?.retryAfterMs ?? env.RATE_LIMIT_RETRY_DELAY_MS;
             const delayedPayload = buildDelayedPayloadGeneric(
-                notification as unknown as Record<string, unknown>,
+                sanitizeNotificationForDelayedQueue(notification as unknown as Record<string, unknown>),
                 channel,
                 newRetryCount,
                 retryDelay
@@ -373,6 +473,46 @@ const processMessage = async (
         // If selected fallback provider differs from original provider, update notification provider
         if (selectedProviderId !== notification.provider) {
             notification.provider = selectedProviderId;
+        }
+
+        // 4.5. Resolve file attachments from storage provider if present in notification content
+        const attachmentResolution = await resolveNotificationAttachments(notification);
+        if (!attachmentResolution.success) {
+            const err = attachmentResolution.error!;
+            logger.error(`[${channel}] Attachment resolution failed: ${notificationId} - ${err.message}`);
+
+            if (!err.retryable) {
+                void AdminAlertService.sendAlert('failed_notification',
+                    `❌ ATTACHMENT RESOLUTION FAILED (NON-RETRYABLE)\n` +
+                    `Notification ID: ${notificationId}\n` +
+                    `Channel: ${channel}\n` +
+                    `Error code: ${err.code}\n` +
+                    `Error: ${err.message}\n` +
+                    `Action: Check active storage provider and file availability.`,
+                    { severity: 'critical', notificationId, channel });
+
+                await setFailed(notificationId, validationResult.data.retry_count);
+                await publishFailureStatus(notification, channel, err.message);
+                return true;
+            } else {
+                const newRetryCount = notification.retry_count + 1;
+                if (newRetryCount > env.MAX_RETRY_COUNT) {
+                    await setFailed(notificationId, validationResult.data.retry_count);
+                    await publishFailureStatus(notification, channel, `Max retries exceeded resolving attachments: ${err.message}`);
+                    return true;
+                }
+
+                await setFailed(notificationId, validationResult.data.retry_count);
+                const delayedPayload = buildDelayedPayloadGeneric(
+                    sanitizeNotificationForDelayedQueue(notification),
+                    channel,
+                    newRetryCount
+                );
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                await publishDelayed(delayedPayload as any);
+                logger.warn(`[${channel}] Attachment resolution failed (retryable), scheduled retry: ${notificationId}`);
+                return true;
+            }
         }
 
         // 5. Send via plugin router (with auto-fallback)
@@ -497,7 +637,7 @@ const processMessage = async (
             // Push to delayed queue for retry
             await setFailed(notificationId, validationResult.data.retry_count);
             const delayedPayload = buildDelayedPayloadGeneric(
-                notification as unknown as Record<string, unknown>,
+                sanitizeNotificationForDelayedQueue(notification as unknown as Record<string, unknown>),
                 channel,
                 newRetryCount
             );

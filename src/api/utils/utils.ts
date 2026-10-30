@@ -100,7 +100,13 @@ export const convert_notification_request_to_notification_schema = async (
                 );
             }
     
-            content = templateContent;
+            content = { ...templateContent };
+
+            const reqAttachments = (data.content?.[channel] as Record<string, unknown> | undefined)?.attachments;
+            if (Array.isArray(reqAttachments) && reqAttachments.length > 0) {
+                const existingAttachments = Array.isArray(content.attachments) ? (content.attachments as unknown[]) : [];
+                content.attachments = [...existingAttachments, ...reqAttachments];
+            }
         }
         else{
             content = data.content![channel];
@@ -185,7 +191,13 @@ export const convert_batch_notification_schema_to_notification_schema = async (
                     );
                 }
         
-                content = templateContent;
+                content = { ...templateContent };
+
+                const reqAttachments = (data.content?.[channel] as Record<string, unknown> | undefined)?.attachments;
+                if (Array.isArray(reqAttachments) && reqAttachments.length > 0) {
+                    const existingAttachments = Array.isArray(content.attachments) ? (content.attachments as unknown[]) : [];
+                    content.attachments = [...existingAttachments, ...reqAttachments];
+                }
             }
             else{
                 content = data.content![channel];

@@ -11,6 +11,7 @@ import mongoose from 'mongoose';
 import { connectMongoDB } from '@src/config/db.config.js';
 import { dynamicConfig } from '@src/config/dynamic-config.service.js';
 import { connectRedis, disconnectRedis } from '@src/config/redis.config.js';
+import '@src/storage/providers/minio.storage.js';
 import { initStatusProducer, disconnectStatusProducer, isStatusProducerActive } from '@src/processors/shared/status.producer.js';
 import { initDelayedProducer, disconnectDelayedProducer, isDelayedProducerActive } from '@src/processors/shared/delayed.producer.js';
 import {

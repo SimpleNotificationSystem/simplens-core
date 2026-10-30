@@ -33,6 +33,10 @@ import {
   CreateApiKeyPayload,
   CreateApiKeyResponse,
   ApiKeyUsageDetailResponse,
+  FileAttachmentItem,
+  StorageProviderConfig,
+  StorageProviderMeta,
+  StorageStatus,
 } from './types';
 
 export class ApiError extends Error {
@@ -254,4 +258,32 @@ export const apiKeyService = {
     apiClient.post(`/api/keys/${id}/revoke`),
   delete: (id: string): Promise<{ success: boolean; message: string }> => 
     apiClient.delete(`/api/keys/${id}`),
+};
+
+export const fileService = {
+  upload: (formData: FormData): Promise<{ success: boolean; files: FileAttachmentItem[] }> =>
+    apiClient.post('/api/file/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  get: (id: string): Promise<{ success: boolean; file: FileAttachmentItem }> =>
+    apiClient.get(`/api/file/${id}`),
+};
+
+export const storageService = {
+  getStatus: (): Promise<StorageStatus> =>
+    apiClient.get('/api/storage/status'),
+  getProviders: (): Promise<{ providers: StorageProviderMeta[] }> =>
+    apiClient.get('/api/storage/providers'),
+  test: (payload: { provider_type: string; config: Record<string, string> }): Promise<{ success: boolean; message: string }> =>
+    apiClient.post('/api/storage/test', payload),
+  list: (): Promise<{ providers: StorageProviderConfig[] }> =>
+    apiClient.get('/api/storage'),
+  create: (payload: Record<string, unknown>): Promise<{ success: boolean; provider: StorageProviderConfig }> =>
+    apiClient.post('/api/storage', payload),
+  update: (id: string, payload: Record<string, unknown>): Promise<{ success: boolean; provider: StorageProviderConfig }> =>
+    apiClient.patch(`/api/storage/${id}`, payload),
+  activate: (id: string): Promise<{ success: boolean; provider: StorageProviderConfig }> =>
+    apiClient.patch(`/api/storage/${id}/activate`),
+  delete: (id: string): Promise<{ success: boolean; message?: string }> =>
+    apiClient.delete(`/api/storage/${id}`),
 };

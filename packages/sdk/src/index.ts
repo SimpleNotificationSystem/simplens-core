@@ -44,6 +44,8 @@ export type {
     RateLimitConfig,
     DeliveryResult,
     BaseNotification,
+    FileAttachmentConfig,
+    FileAttachmentItem,
 } from './interfaces/provider.interface.js';
 
 // Schemas
@@ -58,6 +60,9 @@ export {
     smsContentSchema,
     whatsappContentSchema,
     createNotificationSchema,
+    fileAttachmentItemSchema,
+    fileAttachmentArraySchema,
+    createFileAttachmentArraySchema,
 } from './schemas/base.schemas.js';
 
 // Utilities

@@ -100,6 +100,14 @@ function TemplateEditorContent() {
         const existing =
           map.get(provider.name) ?? new Map<string, FieldDefinition>();
         provider.contentFields.forEach((field) => {
+          if (
+            field.name === "attachments" ||
+            field.type === "attachment" ||
+            field.name === "fileAttachment" ||
+            field.name === "fileAttachments"
+          ) {
+            return;
+          }
           const current = existing.get(field.name);
           if (!current) {
             existing.set(field.name, { ...field });
@@ -153,6 +161,9 @@ function TemplateEditorContent() {
         if (next[field.name] !== undefined) return;
         next[field.name] = field.type === "boolean" ? false : "";
       });
+      delete next.attachments;
+      delete next.fileAttachment;
+      delete next.fileAttachments;
       return next;
     },
     [packageSchemas],
@@ -166,6 +177,12 @@ function TemplateEditorContent() {
     }
     const extras = Object.keys(form.content)
       .filter((key) => !schema.some((f) => f.name === key))
+      .filter(
+        (key) =>
+          key !== "attachments" &&
+          key !== "fileAttachment" &&
+          key !== "fileAttachments",
+      )
       .map<FieldDefinition>((key) => ({
         name: key,
         type: "text",
@@ -282,6 +299,11 @@ function TemplateEditorContent() {
     setIsSaving(true);
 
     try {
+      const cleanedContent = { ...form.content };
+      delete cleanedContent.attachments;
+      delete cleanedContent.fileAttachment;
+      delete cleanedContent.fileAttachments;
+
       const body =
         mode === "create"
           ? {
@@ -291,13 +313,13 @@ function TemplateEditorContent() {
                 : {}),
               description: form.description.trim() || undefined,
               package: form.package,
-              content: form.content,
+              content: cleanedContent,
             }
           : {
               name: form.name.trim(),
               description: form.description.trim(),
               package: form.package,
-              content: form.content,
+              content: cleanedContent,
             };
 
       if (mode === "create") {

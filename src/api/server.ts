@@ -9,6 +9,8 @@ import plugins_router from './routes/plugins.routes.js';
 import providers_router from './routes/providers.routes.js';
 import channel_routing_router from './routes/channel-routing.routes.js';
 import admin_channels_router from './routes/admin-channels.routes.js';
+import storage_router from './routes/storage.routes.js';
+import file_router from './routes/file.routes.js';
 import notification_templates_router from './routes/notification_templates.routes.js';
 import notifications_management_router from './routes/notifications-management.routes.js';
 import alerts_router from './routes/alerts.routes.js';
@@ -48,6 +50,9 @@ import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 //Import the admin channel provider files here for them to self-register
 import "@src/admin-alerts/channels/discord.channel.js";
 import "@src/admin-alerts/channels/telegram.channel.js";
+
+// Import storage provider files here for them to self-register
+import "@src/storage/providers/minio.storage.js";
 
 const app = express();
 let isShuttingDown = false;
@@ -91,6 +96,8 @@ app.use(`${BASE_PATH}/api/plugins`, auth_middleware, plugins_router);
 app.use(`${BASE_PATH}/api/providers`, auth_middleware, providers_router);
 app.use(`${BASE_PATH}/api/channels/routing`, auth_middleware, channel_routing_router);
 app.use(`${BASE_PATH}/api/admin-channels`, auth_middleware, admin_channels_router);
+app.use(`${BASE_PATH}/api/storage`, auth_middleware, storage_router);
+app.use(`${BASE_PATH}/api/file`, auth_middleware, file_router);
 app.use(`${BASE_PATH}/api/templates`, auth_middleware, notification_templates_router);
 app.use(`${BASE_PATH}/api/settings`, auth_middleware, settings_router);
 app.use(`${BASE_PATH}/api/keys`, auth_middleware, api_keys_router);

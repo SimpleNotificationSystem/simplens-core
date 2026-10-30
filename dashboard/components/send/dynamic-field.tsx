@@ -15,6 +15,10 @@ interface DynamicFieldProps {
 }
 
 export function DynamicField({ field, value, onChange, error }: DynamicFieldProps) {
+    if (field.type === 'attachment') {
+        return null;
+    }
+
     const id = `field-${field.name}`;
 
     if (field.type === 'boolean') {

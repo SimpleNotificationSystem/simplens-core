@@ -112,11 +112,29 @@ export interface Alert {
   updated_at: Date;
 }
 
+export interface FileAttachmentConfig {
+  enabled?: boolean;
+  maxFileSize?: number;
+  maxCount?: number;
+  allowedMimeTypes?: string[];
+}
+
+export interface FileAttachmentItem {
+  id: string;
+  filename: string;
+  mime_type: string;
+  size: number;
+  hash: string;
+  url?: string;
+  created_at?: string;
+}
+
 export interface FieldDefinition {
   name: string;
-  type: "string" | "email" | "phone" | "text" | "number" | "boolean";
+  type: "string" | "email" | "phone" | "text" | "number" | "boolean" | "attachment";
   required: boolean;
   description?: string;
+  attachmentConfig?: FileAttachmentConfig;
 }
 
 export interface CsvRecipientField {
@@ -140,6 +158,42 @@ export interface ProviderMetadata {
   priority: number;
   recipientFields: FieldDefinition[];
   contentFields: FieldDefinition[];
+  fileAttachment?: FileAttachmentConfig;
+}
+
+export interface StorageProviderConfig {
+  _id: string;
+  name: string;
+  provider_type: string;
+  enabled: boolean;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CredentialField {
+  name: string;
+  type: 'string' | 'url' | 'secret';
+  label: string;
+  placeholder?: string;
+  description?: string;
+  required: boolean;
+  pattern?: string;
+}
+
+export interface StorageProviderMeta {
+  providerType: string;
+  displayName: string;
+  credentialFields: CredentialField[];
+}
+
+export interface StorageStatus {
+  hasActiveProvider: boolean;
+  activeProvider?: {
+    id?: string;
+    name: string;
+    provider_type: string;
+  };
 }
 
 export interface ChannelMetadata {
@@ -226,15 +280,7 @@ export interface AdminChannelFormData {
   enabled?: boolean;
 }
 
-export interface AdminChannelProviderField {
-  name: string;
-  type: 'string' | 'url' | 'secret';
-  label: string;
-  placeholder?: string;
-  description?: string;
-  required: boolean;
-  pattern?: string;
-}
+export type AdminChannelProviderField = CredentialField;
 
 export interface AdminChannelProviderMeta {
   channelType: string;

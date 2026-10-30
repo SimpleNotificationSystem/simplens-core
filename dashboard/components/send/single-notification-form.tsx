@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -11,11 +12,12 @@ import { HtmlPreview } from "./html-preview";
 import { toast } from "sonner";
 import { Loader2, Send, RefreshCw, AlertCircle } from "lucide-react";
 import { DynamicField } from "./dynamic-field";
-import { PluginMetadata, ProviderMetadata, NotificationTemplateDetail, NotificationTemplateListItem } from "@/lib/types";
+import { FileAttachmentUpload } from "./file-attachment-upload";
+import { PluginMetadata, ProviderMetadata, NotificationTemplateDetail, NotificationTemplateListItem, StorageStatus } from "@/lib/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { pluginService, templateService, notificationService } from "@/lib/api-client";
+import { pluginService, templateService, notificationService, storageService } from "@/lib/api-client";
 import { withBasePath } from "@/lib/utils";
 
 // Generate a UUIDv4
@@ -38,6 +40,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
     const [isFetchingPlugins, setIsFetchingPlugins] = useState(true);
     const [plugins, setPlugins] = useState<PluginMetadata | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [storageStatus, setStorageStatus] = useState<StorageStatus | null>(null);
 
     // Selection
     const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
@@ -129,6 +132,10 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
         };
 
         fetchPlugins();
+
+        storageService.getStatus()
+            .then((res) => setStorageStatus(res))
+            .catch((err) => console.error("Error fetching storage status:", err));
     }, []);
 
     // Initialize provider selection when channels change
@@ -369,15 +376,20 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                 }
             }
 
-            const manualChannels = selectedChannels.filter(
-                (channel) => (contentModeByChannel[channel] || "content") === "content"
-            );
-            if (manualChannels.length > 0) {
-                payload.content = {};
-                manualChannels.forEach((channel) => {
-                    const channelContent = contentData[channel] || {};
-                    payload.content[channel] = channelContent;
-                });
+            payload.content = {};
+            selectedChannels.forEach((channel) => {
+                const isTemplate = (contentModeByChannel[channel] || "content") === "template";
+                if (!isTemplate) {
+                    payload.content[channel] = contentData[channel] || {};
+                } else if (contentData[channel]?.attachments?.length) {
+                    payload.content[channel] = {
+                        attachments: contentData[channel].attachments,
+                    };
+                }
+            });
+
+            if (Object.keys(payload.content).length === 0) {
+                delete payload.content;
             }
 
             if (scheduledDate) {
@@ -668,23 +680,53 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                                         )}
                                     </div>
                                 ) : (
-                                    provider.contentFields.map((field) => (
-                                        <div key={field.name} className="space-y-2">
-                                            <DynamicField
-                                                field={field}
-                                                value={contentData[channel]?.[field.name]}
-                                                onChange={(val) => updateContentData(channel, field.name, val)}
-                                            />
+                                    <>
+                                        {provider.contentFields
+                                            .filter((field) => field.name !== "attachments" && field.type !== "attachment")
+                                            .map((field) => (
+                                                <div key={field.name} className="space-y-2">
+                                                    <DynamicField
+                                                        field={field}
+                                                        value={contentData[channel]?.[field.name]}
+                                                        onChange={(val) => updateContentData(channel, field.name, val)}
+                                                    />
 
-                                            {(field.name === "message" || field.name === "body") &&
-                                                contentData[channel]?.[field.name] && (
-                                                    <div className="mt-2">
-                                                        <Label className="text-xs text-muted-foreground mb-1 block">Preview</Label>
-                                                        <HtmlPreview html={contentData[channel]?.[field.name]} />
-                                                    </div>
-                                                )}
-                                        </div>
-                                    ))
+                                                    {(field.name === "message" || field.name === "body") &&
+                                                        contentData[channel]?.[field.name] && (
+                                                            <div className="mt-2">
+                                                                <Label className="text-xs text-muted-foreground mb-1 block">Preview</Label>
+                                                                <HtmlPreview html={contentData[channel]?.[field.name]} />
+                                                            </div>
+                                                        )}
+                                                </div>
+                                            ))}
+                                    </>
+                                )}
+
+                                {Boolean(
+                                    provider.fileAttachment?.enabled !== false &&
+                                    (provider.fileAttachment || provider.contentFields.some((f) => f.name === "attachments" || f.type === "attachment"))
+                                ) && (
+                                    storageStatus?.hasActiveProvider ? (
+                                        <FileAttachmentUpload
+                                            channel={channel}
+                                            attachments={contentData[channel]?.attachments || []}
+                                            onChange={(atts) => updateContentData(channel, "attachments", atts)}
+                                            config={provider.fileAttachment || provider.contentFields.find((f) => f.name === "attachments")?.attachmentConfig}
+                                        />
+                                    ) : (
+                                        <Alert className="mt-3 border-amber-500/50 bg-amber-500/10 text-amber-500">
+                                            <AlertCircle className="h-4 w-4" />
+                                            <AlertTitle>File Attachments</AlertTitle>
+                                            <AlertDescription className="text-xs">
+                                                This notification channel supports file attachments, but no storage provider is currently active. Enable at most one active storage provider in{" "}
+                                                <Link href="/storage" className="underline font-semibold hover:text-amber-400">
+                                                    Storage Management
+                                                </Link>{" "}
+                                                to attach files.
+                                            </AlertDescription>
+                                        </Alert>
+                                    )
                                 )}
                             </CardContent>
                         </Card>

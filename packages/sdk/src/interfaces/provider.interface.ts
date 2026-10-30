@@ -53,6 +53,44 @@ export interface RateLimitConfig {
 }
 
 /**
+ * Configuration options for file attachments supported by a provider
+ */
+export interface FileAttachmentConfig {
+    /** Whether file attachments are enabled for this provider */
+    enabled?: boolean;
+    /** Maximum file size in bytes */
+    maxFileSize?: number;
+    /** Maximum number of file attachments allowed in a single notification */
+    maxCount?: number;
+    /** Allowed MIME types (e.g. ['application/pdf', 'image/*']) */
+    allowedMimeTypes?: string[];
+}
+
+/**
+ * Standard file attachment item structure in notification content
+ */
+export interface FileAttachmentItem {
+    /** Unique file identifier (from SimpleNS storage / upload) */
+    id: string;
+    /** Original file name (e.g. invoice.pdf) */
+    filename: string;
+    /** MIME type (e.g. application/pdf) */
+    mime_type: string;
+    /** File size in bytes */
+    size: number;
+    /** SHA-256 hash of the file content for deduplication and integrity */
+    hash: string;
+    /** Optional public or signed URL to access the file */
+    url?: string;
+    /** Optional provider-specific metadata */
+    metadata?: Record<string, unknown>;
+    /** Optional binary Buffer of the file content resolved by SimpleNS before delivery */
+    buffer?: Buffer;
+    /** Optional Readable stream of the file content resolved by SimpleNS before delivery */
+    stream?: NodeJS.ReadableStream | Buffer;
+}
+
+/**
  * Provider manifest - metadata about the provider
  */
 export interface ProviderManifest {
@@ -74,6 +112,8 @@ export interface ProviderManifest {
     requiredCredentials: string[];
     /** Optional configuration field names */
     optionalConfig?: string[];
+    /** Optional file attachment support configuration */
+    fileAttachment?: FileAttachmentConfig;
 }
 
 /**

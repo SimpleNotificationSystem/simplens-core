@@ -156,6 +156,12 @@ import {
     createApiKeySchema,
     apiKeyResponseSchema,
     createApiKeyResponseSchema,
+    fileAttachmentConfigSchema,
+    fileAttachmentItemSchema,
+    fileAttachmentArraySchema,
+    storageProviderCreateSchema,
+    storageProviderUpdateSchema,
+    minioStorageConfigSchema,
 } from "./schemas.js";
 
 // ============================================================================
@@ -220,6 +226,9 @@ export type notification_template = z.infer<typeof notificationTemplateSchema>;
 // ============================================================================
 
 export type encrypted_credentials = z.infer<typeof encryptedCredentialsSchema>;
+export type file_attachment_config = z.infer<typeof fileAttachmentConfigSchema>;
+export type file_attachment_item = z.infer<typeof fileAttachmentItemSchema>;
+export type file_attachment_array = z.infer<typeof fileAttachmentArraySchema>;
 export type provider_manifest = z.infer<typeof providerManifestSchema>;
 export type plugin_document = z.infer<typeof pluginSchema>;
 export type provider_document = z.infer<typeof providerSchema>;
@@ -302,11 +311,31 @@ export interface ChannelConfig {
     fallback?: string | string[];
 }
 
+export interface FileAttachmentConfig {
+    enabled?: boolean;
+    maxFileSize?: number;
+    maxCount?: number;
+    allowedMimeTypes?: string[];
+}
+
+export interface FileAttachmentItem {
+    id: string;
+    filename: string;
+    mime_type: string;
+    size: number;
+    hash: string;
+    url?: string;
+    metadata?: Record<string, unknown>;
+    buffer?: Buffer;
+    stream?: NodeJS.ReadableStream | Buffer;
+}
+
 export interface FieldDefinition {
     name: string;
-    type: 'string' | 'email' | 'phone' | 'text' | 'number' | 'boolean';
+    type: 'string' | 'email' | 'phone' | 'text' | 'number' | 'boolean' | 'attachment';
     required: boolean;
     description?: string;
+    attachmentConfig?: FileAttachmentConfig;
 }
 
 export interface ProviderMetadata {
@@ -317,7 +346,101 @@ export interface ProviderMetadata {
     priority: number;
     recipientFields: FieldDefinition[];
     contentFields: FieldDefinition[];
+    fileAttachment?: FileAttachmentConfig;
 }
+
+// ============================================================================
+// STORAGE PROVIDER CONTRACT & TYPES
+// ============================================================================
+
+export interface StorageUploadInput {
+    fileId: string;
+    filename: string;
+    mimeType: string;
+    size: number;
+    buffer: Buffer;
+    hash: string;
+    metadata?: Record<string, unknown>;
+}
+
+export interface StorageUploadResult {
+    success: boolean;
+    fileId: string;
+    storageKey?: string;
+    url?: string;
+    error?: string;
+}
+
+export interface StorageDownloadResult {
+    success: boolean;
+    stream?: NodeJS.ReadableStream | Buffer;
+    buffer?: Buffer;
+    contentType?: string;
+    filename?: string;
+    error?: string;
+}
+
+export interface StorageDeleteResult {
+    success: boolean;
+    error?: string;
+}
+
+export interface StorageResult {
+    success: boolean;
+    error?: string;
+}
+
+export interface StorageUrlOptions {
+    expiresInSeconds?: number;
+}
+
+export interface StorageProvider {
+    readonly providerType: string;
+    readonly displayName: string;
+    upload(file: StorageUploadInput): Promise<StorageUploadResult>;
+    download(fileId: string, storageKey?: string): Promise<StorageDownloadResult>;
+    delete(fileId: string, storageKey?: string): Promise<StorageDeleteResult>;
+    getUrl?(fileId: string, options?: StorageUrlOptions, storageKey?: string): Promise<string>;
+    exists(fileId: string, storageKey?: string): Promise<boolean>;
+    testConnection(): Promise<StorageResult>;
+    getCredentialSchema(): CredentialField[];
+}
+
+export interface StorageProviderMeta {
+    providerType: string;
+    displayName: string;
+    credentialFields: CredentialField[];
+}
+
+export interface FileAttachmentDoc {
+    file_id: string;
+    filename: string;
+    mime_type: string;
+    size: number;
+    hash: string;
+    storage_provider?: string;
+    storage_key?: string;
+    url?: string;
+    metadata?: Record<string, unknown>;
+    created_at?: Date;
+    updated_at?: Date;
+}
+
+export interface StorageProviderDoc {
+    _id?: string;
+    name: string;
+    provider_type: string;
+    enabled: boolean;
+    is_active: boolean;
+    config: encrypted_config;
+    created_at?: Date;
+    updated_at?: Date;
+}
+
+export type StorageProviderCreatePayload = z.infer<typeof storageProviderCreateSchema>;
+export type StorageProviderUpdatePayload = z.infer<typeof storageProviderUpdateSchema>;
+export type minio_storage_config = z.infer<typeof minioStorageConfigSchema>;
+export type MinioStorageConfig = minio_storage_config;
 
 export interface ChannelMetadata {
     providers: ProviderMetadata[];
