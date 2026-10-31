@@ -24,9 +24,22 @@ interface ChannelSelection {
 
 const fetcher = <T,>(url: string): Promise<T> => apiClient.get(url) as unknown as Promise<T>;
 
+// Detailed attachment object schema representation
+const ATTACHMENT_SCHEMA_ITEM = {
+    id: "string (file ID)",
+    filename: "string",
+    mime_type: "string",
+    size: "number (bytes)",
+    hash: "string (SHA-256)",
+    url: "string (optional)"
+};
+
 // Map field type to schema type display - show (optional) for non-required fields
-function getTypeDisplay(field: FieldDefinition): string {
-    const suffix = field.required ? "" : " (optional)";
+function getFieldSchemaDisplay(field: FieldDefinition, isTemplateEnabled: boolean = false): unknown {
+    if (field.type === "attachment" || field.name === "attachments") {
+        return [ATTACHMENT_SCHEMA_ITEM];
+    }
+    const suffix = (!field.required || isTemplateEnabled) ? " (optional)" : "";
     switch (field.type) {
         case "email": return `string (email)${suffix}`;
         case "phone": return `string (phone)${suffix}`;
@@ -93,14 +106,14 @@ export default function ApiDesignerPage() {
         }
 
         // Build recipient schema from provider fields
-        const recipientSchema: Record<string, string> = {};
+        const recipientSchema: Record<string, unknown> = {};
         enabledChannels.forEach(({ channel }) => {
             const provider = data?.channels[channel]?.providers.find(
                 p => p.id === channelSelections.find(s => s.channel === channel)?.provider
             );
             if (provider?.recipientFields) {
                 provider.recipientFields.forEach(field => {
-                    recipientSchema[field.name] = getTypeDisplay(field);
+                    recipientSchema[field.name] = getFieldSchemaDisplay(field);
                 });
             }
         });
@@ -116,17 +129,27 @@ export default function ApiDesignerPage() {
                 p => p.id === channelSelections.find(s => s.channel === channel)?.provider
             );
 
+            const channelKey = includeTemplateId ? `${channel} (optional)` : channel;
+
             if (provider?.contentFields && provider.contentFields.length > 0) {
-                const channelContent: Record<string, string> = {};
+                const channelContent: Record<string, unknown> = {};
                 provider.contentFields.forEach(field => {
-                    channelContent[field.name] = getTypeDisplay(field);
+                    const isAttachment = field.type === "attachment" || field.name === "attachments";
+                    const fieldKey = isAttachment
+                        ? (field.name.endsWith(" (optional)") ? field.name : `${field.name} (optional)`)
+                        : field.name;
+                    channelContent[fieldKey] = getFieldSchemaDisplay(field, includeTemplateId);
                 });
-                contentSchema[channel] = channelContent;
+                contentSchema[channelKey] = channelContent;
+            } else {
+                contentSchema[channelKey] = {
+                    [includeTemplateId ? "message (optional)" : "message"]: includeTemplateId ? "string (optional)" : "string"
+                };
             }
         });
         // Fallback if empty
         if (Object.keys(contentSchema).length === 0) {
-            contentSchema.message = "string";
+            contentSchema[includeTemplateId ? "message (optional)" : "message"] = includeTemplateId ? "string (optional)" : "string";
         }
 
         if (mode === "single") {
@@ -158,7 +181,7 @@ export default function ApiDesignerPage() {
             return result;
         } else {
             // Batch mode
-            const recipientItemSchema: Record<string, string> = {
+            const recipientItemSchema: Record<string, unknown> = {
                 request_id: "UUID (v4)",
                 user_id: "string",
                 ...recipientSchema
