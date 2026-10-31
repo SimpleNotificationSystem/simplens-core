@@ -36,7 +36,11 @@ const ATTACHMENT_SCHEMA_ITEM = {
 
 // Map field type to schema type display - show (optional) for non-required fields
 function getFieldSchemaDisplay(field: FieldDefinition, isTemplateEnabled: boolean = false): unknown {
-    if (field.type === "attachment" || field.name === "attachments") {
+    if (
+        field.type === "attachment" ||
+        field.name.toLowerCase() === "attachments" ||
+        field.name.toLowerCase().includes("attach")
+    ) {
         return [ATTACHMENT_SCHEMA_ITEM];
     }
     const suffix = (!field.required || isTemplateEnabled) ? " (optional)" : "";
@@ -134,10 +138,11 @@ export default function ApiDesignerPage() {
             if (provider?.contentFields && provider.contentFields.length > 0) {
                 const channelContent: Record<string, unknown> = {};
                 provider.contentFields.forEach(field => {
-                    const isAttachment = field.type === "attachment" || field.name === "attachments";
-                    const fieldKey = isAttachment
-                        ? (field.name.endsWith(" (optional)") ? field.name : `${field.name} (optional)`)
-                        : field.name;
+                    const isAttachment =
+                        field.type === "attachment" ||
+                        field.name.toLowerCase() === "attachments" ||
+                        field.name.toLowerCase().includes("attach");
+                    const fieldKey = isAttachment ? `${field.name} (optional)` : field.name;
                     channelContent[fieldKey] = getFieldSchemaDisplay(field, includeTemplateId);
                 });
                 contentSchema[channelKey] = channelContent;
