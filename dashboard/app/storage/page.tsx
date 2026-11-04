@@ -98,12 +98,12 @@ export default function StoragePage() {
 
                 {/* Empty State */}
                 {!isLoading && providers.length === 0 && (
-                    <Card className="border-dashed max-w-2xl">
+                    <Card className="border-dashed w-full">
                         <CardContent className="py-16 text-center">
                             <HardDrive className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
                             <h3 className="text-xl font-semibold mb-2">No Storage Providers Configured</h3>
                             <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                                Configure a storage provider (such as S3, MinIO, or Local) to enable file attachments in notifications.
+                                Configure a storage provider to enable file attachments in notifications.
                             </p>
                             <Button onClick={() => setDialogOpen(true)}>
                                 <Plus className="h-4 w-4 mr-2" />
