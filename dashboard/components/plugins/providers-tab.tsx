@@ -73,6 +73,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatBytes } from "@/lib/utils";
+import { ScrollBar } from "@/components/ui/scroll-area";
 
 const STANDARD_MIME_CATEGORIES: MimeCategory[] = [
   {
@@ -510,7 +511,8 @@ export function ProvidersTab() {
         category: "Plugin Specific",
         items: extraMimes.map((m) => ({
           mime: m,
-          label: m,
+          label: undefined,
+          ext: undefined,
         })),
       },
       ...STANDARD_MIME_CATEGORIES,
@@ -528,7 +530,7 @@ export function ProvidersTab() {
         items: cat.items.filter(
           (i) =>
             i.mime.toLowerCase().includes(q) ||
-            i.label.toLowerCase().includes(q) ||
+            (i.label && i.label.toLowerCase().includes(q)) ||
             (i.ext && i.ext.toLowerCase().includes(q))
         ),
       }))
@@ -1241,11 +1243,11 @@ export function ProvidersTab() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="B">B</SelectItem>
-                            <SelectItem value="KB">KB</SelectItem>
-                            <SelectItem value="MB">MB</SelectItem>
-                            <SelectItem value="GB">GB</SelectItem>
-                            <SelectItem value="TB">TB</SelectItem>
+                            <SelectItem value="B">B <p className="italic text-muted-foreground">(Byte)</p></SelectItem>
+                            <SelectItem value="KB">KB <p className="italic text-muted-foreground">(Kilo Byte)</p></SelectItem>
+                            <SelectItem value="MB">MB <p className="italic text-muted-foreground">(Mega Byte)</p></SelectItem>
+                            <SelectItem value="GB">GB <p className="italic text-muted-foreground">(Giga Byte)</p></SelectItem>
+                            <SelectItem value="TB">TB <p className="italic text-muted-foreground">(Terra Byte)</p></SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -1291,7 +1293,7 @@ export function ProvidersTab() {
                         )}
                     </div>
 
-                    <Popover open={mimePopoverOpen} onOpenChange={setMimePopoverOpen}>
+                    <Popover modal={false} open={mimePopoverOpen} onOpenChange={setMimePopoverOpen}>
                       <PopoverTrigger asChild>
                         <Button
                           type="button"
@@ -1349,7 +1351,7 @@ export function ProvidersTab() {
                                   size="sm"
                                   className="h-6 px-2 text-[11px]"
                                   onClick={() =>
-                                    setSelectedMimeTypes([...(selectedPlugin.manifest.fileAttachment.allowedMimeTypes || [])])
+                                    setSelectedMimeTypes([...(selectedPlugin.manifest?.fileAttachment?.allowedMimeTypes || [])])
                                   }
                                 >
                                   Use Defaults
@@ -1358,8 +1360,18 @@ export function ProvidersTab() {
                           </div>
                         </div>
 
-                        <ScrollArea className="h-64 p-2">
-                          <div className="space-y-4">
+                        <ScrollArea
+                          className="h-64"
+                          onWheelCapture={(event) => {
+                            const viewport = event.currentTarget.querySelector<HTMLElement>(
+                              '[data-slot="scroll-area-viewport"]',
+                            );
+                            if (viewport) {
+                              viewport.scrollTop += event.deltaY;
+                            }
+                          }}
+                        >
+                          <div className="space-y-4 p-2">
                             {filteredMimeCategories.map((cat) => (
                               <div key={cat.category} className="space-y-1">
                                 <div className="flex items-center justify-between px-2 py-1">
@@ -1456,27 +1468,30 @@ export function ProvidersTab() {
 
                     {/* Selected MIME badges */}
                     {selectedMimeTypes.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-1.5 bg-muted/30 rounded-md border w-full min-w-0 max-w-full">
-                        {selectedMimeTypes.map((mime) => (
-                          <Badge
-                            key={mime}
-                            variant="secondary"
-                            className="text-[11px] font-mono py-0.5 pl-2 pr-1 flex items-center gap-1 max-w-full min-w-0 shrink-0"
-                          >
-                            <span className="truncate max-w-[200px] sm:max-w-[280px]" title={mime}>
-                              {mime}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedMimeTypes(selectedMimeTypes.filter((m) => m !== mime))}
-                              className="hover:bg-muted rounded p-0.5 cursor-pointer shrink-0"
-                              aria-label={`Remove ${mime}`}
+                      <ScrollArea className="h-28 w-full bg-muted/30 rounded-md border">
+                        <div className="flex flex-wrap gap-1.5 p-1.5">
+                          {selectedMimeTypes.map((mime) => (
+                            <Badge
+                              key={mime}
+                              variant="secondary"
+                              className="text-[11px] font-mono py-0.5 pl-2 pr-1 flex items-center gap-1 max-w-full min-w-0 shrink-0"
                             >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </Badge>
-                        ))}
-                      </div>
+                              <span className="truncate max-w-[200px] sm:max-w-[280px]" title={mime}>
+                                {mime}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedMimeTypes(selectedMimeTypes.filter((m) => m !== mime))}
+                                className="hover:bg-muted rounded p-0.5 cursor-pointer shrink-0"
+                                aria-label={`Remove ${mime}`}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                        <ScrollBar orientation="vertical"/>
+                      </ScrollArea>
                     )}
                   </div>
                 </div>
