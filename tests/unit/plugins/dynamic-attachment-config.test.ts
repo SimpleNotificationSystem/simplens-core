@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { parseByteSize, resolveFileAttachmentConfig, createFileAttachmentArraySchema } from '@src/types/schemas.js';
-import { PluginRegistry } from '@src/plugins/loader/registry.js';
-import type { SimpleNSProvider, ProviderManifest, FileAttachmentConfig } from '@src/types/types.js';
+import { parseByteSize, resolveFileAttachmentConfig, createFileAttachmentArraySchema } from '../../../src/types/schemas';
+import { PluginRegistry } from '../../../src/plugins/loader/registry';
+import type {
+    SimpleNSProvider,
+    ProviderManifest,
+    FileAttachmentConfig,
+    FieldDefinition,
+} from '../../../src/types/types';
 import { z } from 'zod';
 
 describe('Dynamic File Attachment Configuration', () => {
@@ -99,6 +104,101 @@ describe('Dynamic File Attachment Configuration', () => {
         });
     });
 
+    describe('createFileAttachmentArraySchema MIME and size enforcement', () => {
+        it('should accept attachments matching exact allowed MIME types', () => {
+            const schema = createFileAttachmentArraySchema({
+                enabled: true,
+                allowedMimeTypes: ['application/pdf', 'image/png'],
+            });
+
+            const result = schema.safeParse([
+                { id: '1', filename: 'file.pdf', mime_type: 'application/pdf', size: 1024, hash: 'hash1' },
+            ]);
+            expect(result.success).toBe(true);
+        });
+
+        it('should accept attachments matching wildcard patterns like image/* and */*', () => {
+            const wildcardSchema = createFileAttachmentArraySchema({
+                enabled: true,
+                allowedMimeTypes: ['image/*'],
+            });
+
+            expect(wildcardSchema.safeParse([
+                { id: '1', filename: 'pic.png', mime_type: 'image/png', size: 1024, hash: 'h1' },
+            ]).success).toBe(true);
+
+            expect(wildcardSchema.safeParse([
+                { id: '2', filename: 'pic.jpeg', mime_type: 'image/jpeg', size: 1024, hash: 'h2' },
+            ]).success).toBe(true);
+
+            // Rejects non-image
+            expect(wildcardSchema.safeParse([
+                { id: '3', filename: 'doc.pdf', mime_type: 'application/pdf', size: 1024, hash: 'h3' },
+            ]).success).toBe(false);
+
+            const allWildcard = createFileAttachmentArraySchema({
+                enabled: true,
+                allowedMimeTypes: ['*/*'],
+            });
+            expect(allWildcard.safeParse([
+                { id: '4', filename: 'any.xyz', mime_type: 'application/x-custom', size: 1024, hash: 'h4' },
+            ]).success).toBe(true);
+        });
+
+        it('should reject attachments with disallowed MIME types', () => {
+            const schema = createFileAttachmentArraySchema({
+                enabled: true,
+                allowedMimeTypes: ['application/pdf'],
+            });
+
+            const result = schema.safeParse([
+                { id: '1', filename: 'script.exe', mime_type: 'application/x-msdownload', size: 500, hash: 'h1' },
+            ]);
+            expect(result.success).toBe(false);
+            if (!result.success) {
+                expect(result.error.issues[0].message).toContain('restrictions');
+            }
+        });
+
+        it('should reject attachments exceeding maxFileSize', () => {
+            const schema = createFileAttachmentArraySchema({
+                enabled: true,
+                maxFileSize: 1024, // 1 KB
+                allowedMimeTypes: ['application/pdf'],
+            });
+
+            const oversized = schema.safeParse([
+                { id: '1', filename: 'big.pdf', mime_type: 'application/pdf', size: 2048, hash: 'h1' },
+            ]);
+            expect(oversized.success).toBe(false);
+
+            const valid = schema.safeParse([
+                { id: '2', filename: 'small.pdf', mime_type: 'application/pdf', size: 512, hash: 'h2' },
+            ]);
+            expect(valid.success).toBe(true);
+        });
+
+        it('should reject attachments exceeding maxCount', () => {
+            const schema = createFileAttachmentArraySchema({
+                enabled: true,
+                maxCount: 2,
+            });
+
+            const valid = schema.safeParse([
+                { id: '1', filename: 'f1.pdf', mime_type: 'application/pdf', size: 100, hash: 'h1' },
+                { id: '2', filename: 'f2.pdf', mime_type: 'application/pdf', size: 100, hash: 'h2' },
+            ]);
+            expect(valid.success).toBe(true);
+
+            const exceeded = schema.safeParse([
+                { id: '1', filename: 'f1.pdf', mime_type: 'application/pdf', size: 100, hash: 'h1' },
+                { id: '2', filename: 'f2.pdf', mime_type: 'application/pdf', size: 100, hash: 'h2' },
+                { id: '3', filename: 'f3.pdf', mime_type: 'application/pdf', size: 100, hash: 'h3' },
+            ]);
+            expect(exceeded.success).toBe(false);
+        });
+    });
+
     describe('PluginRegistry effective metadata integration', () => {
         beforeEach(() => {
             PluginRegistry.clear();
@@ -142,7 +242,7 @@ describe('Dynamic File Attachment Configuration', () => {
 
             const metadata = PluginRegistry.getPluginMetadata();
             const providerMeta = metadata.channels.email.providers[0];
-            const attachmentField = providerMeta.contentFields.find(f => f.name === 'attachments');
+            const attachmentField = providerMeta.contentFields.find((f: FieldDefinition) => f.name === 'attachments');
 
             expect(attachmentField?.attachmentConfig?.maxFileSize).toBe(18 * 1024 * 1024);
             expect(attachmentField?.attachmentConfig?.maxCount).toBe(10);
@@ -160,7 +260,7 @@ describe('Dynamic File Attachment Configuration', () => {
 
             const metadata = PluginRegistry.getPluginMetadata();
             const providerMeta = metadata.channels.email.providers[0];
-            const attachmentField = providerMeta.contentFields.find(f => f.name === 'attachments');
+            const attachmentField = providerMeta.contentFields.find((f: FieldDefinition) => f.name === 'attachments');
 
             expect(attachmentField?.attachmentConfig?.maxFileSize).toBe(30 * 1024 * 1024);
             expect(attachmentField?.attachmentConfig?.maxCount).toBe(20);
@@ -176,7 +276,7 @@ describe('Dynamic File Attachment Configuration', () => {
 
             const metadata = PluginRegistry.getPluginMetadata();
             const providerMeta = metadata.channels.email.providers[0];
-            const attachmentField = providerMeta.contentFields.find(f => f.name === 'attachments');
+            const attachmentField = providerMeta.contentFields.find((f: FieldDefinition) => f.name === 'attachments');
 
             expect(attachmentField?.attachmentConfig?.maxFileSize).toBe(25 * 1024 * 1024);
             expect(attachmentField?.attachmentConfig?.maxCount).toBe(15);
