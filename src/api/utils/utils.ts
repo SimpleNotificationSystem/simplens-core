@@ -561,10 +561,30 @@ export const process_notifications = async (
  */
 export class InvalidContentSchemaError extends Error {
   public error: ZodError<Record<string, unknown>>;
-  constructor(message: string, error: ZodError<Record<string, unknown>>) {
-    super(message);
+  public issues: Array<{ path: string; message: string }>;
+
+  constructor(
+    providerIdOrMessage: string,
+    error: ZodError<Record<string, unknown>>,
+  ) {
+    const issues = error.issues.map((issue) => {
+      const path = issue.path.length > 0 ? issue.path.join(".") : "content";
+      return {
+        path,
+        message: issue.message,
+      };
+    });
+
+    const issuesSummary = issues.map((i) => i.message).join("\n");
+    const providerName = providerIdOrMessage.replace(/^Content Validation failed for given provider_id:\s*/i, "");
+    const fullMessage = issuesSummary
+      ? `Validation failed for provider '${providerName}':\n${issuesSummary}`
+      : `Content validation failed for provider '${providerName}'`;
+
+    super(fullMessage);
     this.name = "InvalidContentSchemaError";
     this.error = error;
+    this.issues = issues;
   }
 }
 
@@ -600,8 +620,13 @@ export const validateContentSchema = (
   const providerContentSchema = provider.getContentSchema();
   const validationResult = providerContentSchema.safeParse(content);
   if (!validationResult.success) {
+    const resolvedProviderId =
+      provider_id ||
+      PluginRegistry.getDefaultProviderId(channel) ||
+      provider.manifest?.displayName ||
+      "Default Provider";
     throw new InvalidContentSchemaError(
-      `Content Validation failed for given provider_id: ${provider_id ?? "Default Provider"}`,
+      resolvedProviderId,
       validationResult.error,
     );
   }

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { parseByteSize, resolveFileAttachmentConfig, createFileAttachmentArraySchema } from '../../../src/types/schemas';
 import { PluginRegistry } from '../../../src/plugins/loader/registry';
+import { InvalidContentSchemaError } from '../../../src/api/utils/utils';
 import type {
     SimpleNSProvider,
     ProviderManifest,
@@ -156,7 +157,8 @@ describe('Dynamic File Attachment Configuration', () => {
             ]);
             expect(result.success).toBe(false);
             if (!result.success) {
-                expect(result.error.issues[0].message).toContain('restrictions');
+                expect(result.error.issues[0].message).toContain("Attachment 'script.exe' has unsupported MIME type 'application/x-msdownload'");
+                expect(result.error.issues[0].message).toContain("Allowed types for this provider: application/pdf");
             }
         });
 
@@ -280,6 +282,38 @@ describe('Dynamic File Attachment Configuration', () => {
 
             expect(attachmentField?.attachmentConfig?.maxFileSize).toBe(25 * 1024 * 1024);
             expect(attachmentField?.attachmentConfig?.maxCount).toBe(15);
+        });
+
+        it('should format clear error messages with provider ID and exact MIME violation in InvalidContentSchemaError', () => {
+            const provider = createMockProvider({
+                enabled: true,
+                maxFileSize: 10 * 1024 * 1024,
+                maxCount: 5,
+                allowedMimeTypes: ['application/pdf', 'image/png'],
+            });
+            PluginRegistry.register(provider, 'email-1', 10);
+
+            let caughtError: any;
+            try {
+                const schema = provider.getContentSchema();
+                schema.parse({
+                    subject: 'Test',
+                    attachments: [
+                        { id: '1', filename: 'unsupported.rar', mime_type: 'application/vnd.rar', size: 1024, hash: 'h1' },
+                    ],
+                });
+            } catch (err: any) {
+                caughtError = err;
+            }
+
+            expect(caughtError).toBeDefined();
+            const customError = new InvalidContentSchemaError('email-1', caughtError);
+
+            expect(customError.message).toContain("Validation failed for provider 'email-1'");
+            expect(customError.message).toContain("Attachment 'unsupported.rar' has unsupported MIME type 'application/vnd.rar'");
+            expect(customError.message).toContain("Allowed types for this provider: application/pdf, image/png");
+            expect(customError.issues).toHaveLength(1);
+            expect(customError.issues[0].path).toBe('attachments.0.mime_type');
         });
     });
 });

@@ -18,7 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { pluginService, templateService, notificationService, storageService } from "@/lib/api-client";
-import { withBasePath } from "@/lib/utils";
+import { withBasePath, showErrorToast } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getMissingRequiredCsvFields, importCsvRecipients as createCsvRecipients, mapCsvHeaders, parseCsv } from "@/lib/csv-import";
 
@@ -489,7 +489,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
             setSelectedTemplatesByChannel({});
 
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to send batch notification");
+            showErrorToast(error, "Failed to send batch notification");
         } finally {
             setIsLoading(false);
         }

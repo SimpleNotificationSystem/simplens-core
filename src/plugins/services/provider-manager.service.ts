@@ -403,14 +403,25 @@ export class ProviderManagerService {
     const providerInstance = await importAndInstantiateProvider(pluginName);
     let healthy = true;
 
+    const config: ProviderConfig = {
+      id,
+      credentials,
+      options,
+    };
+
     if (initialize) {
-      const config: ProviderConfig = {
-        id,
-        credentials,
-        options,
-      };
       await providerInstance.initialize(config);
       healthy = await providerInstance.healthCheck();
+    } else {
+      // In API server / metadata-only mode, initialize provider schema & config
+      // without performing a live network healthCheck.
+      try {
+        await providerInstance.initialize(config);
+      } catch (initErr) {
+        logger.warn(`Provider '${id}' initialized without health check encountered an error:`, {
+          error: initErr instanceof Error ? initErr.message : String(initErr),
+        });
+      }
     }
 
     return { providerInstance, healthy };

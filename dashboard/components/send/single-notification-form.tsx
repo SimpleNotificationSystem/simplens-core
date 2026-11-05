@@ -18,7 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { pluginService, templateService, notificationService, storageService } from "@/lib/api-client";
-import { withBasePath } from "@/lib/utils";
+import { withBasePath, showErrorToast } from "@/lib/utils";
 
 // Generate a UUIDv4
 function generateUUID(): string {
@@ -421,7 +421,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
             setSelectedTemplatesByChannel({});
             setTemplateVariablesByChannel({});
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to send notification");
+            showErrorToast(error, "Failed to send notification");
         } finally {
             setIsLoading(false);
         }

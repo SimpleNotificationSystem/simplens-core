@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { toast } from "sonner"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -57,3 +58,20 @@ export function formatBytes(bytes: number, decimals = 1): string {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
 }
+
+/**
+ * Show error toast with proper multi-line formatting.
+ */
+export function showErrorToast(error: unknown, fallbackMessage = "An error occurred"): void {
+  const message = error instanceof Error ? error.message : String(error || fallbackMessage);
+  const [firstLine, ...rest] = message.split("\n");
+  if (rest.length > 0) {
+    toast.error(firstLine, {
+      description: rest.join("\n"),
+      style: { whiteSpace: "pre-line" },
+    });
+  } else {
+    toast.error(message);
+  }
+}
+
