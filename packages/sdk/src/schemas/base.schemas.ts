@@ -216,6 +216,22 @@ export function resolveFileAttachmentConfig(
 }
 
 /**
+ * Format bytes helper for human-readable error messages
+ */
+function formatBytesForError(bytes: number): string {
+    if (bytes >= 1024 * 1024 * 1024) {
+        return `${(bytes / (1024 * 1024 * 1024)).toFixed(1).replace(/\.0$/, '')} GB`;
+    }
+    if (bytes >= 1024 * 1024) {
+        return `${(bytes / (1024 * 1024)).toFixed(1).replace(/\.0$/, '')} MB`;
+    }
+    if (bytes >= 1024) {
+        return `${(bytes / 1024).toFixed(1).replace(/\.0$/, '')} KB`;
+    }
+    return `${bytes} B`;
+}
+
+/**
  * Helper to build an attachment array schema tailored to a provider's constraints
  */
 export function createFileAttachmentArraySchema(config?: FileAttachmentConfig): z.ZodType<FileAttachmentItem[]> {
@@ -224,15 +240,20 @@ export function createFileAttachmentArraySchema(config?: FileAttachmentConfig): 
     if (config?.maxCount && config.maxCount > 0) {
         schema = (schema as z.ZodArray<typeof fileAttachmentItemSchema>).max(
             config.maxCount,
-            `Cannot attach more than ${config.maxCount} files`
+            `Cannot attach more than ${config.maxCount} files (limit exceeded)`
         );
     }
 
     if (config?.maxFileSize || (config?.allowedMimeTypes && config.allowedMimeTypes.length > 0)) {
-        schema = schema.refine((attachments) => {
-            for (const att of attachments) {
+        schema = schema.superRefine((attachments, ctx) => {
+            for (let i = 0; i < attachments.length; i++) {
+                const att = attachments[i];
                 if (config.maxFileSize && att.size > config.maxFileSize) {
-                    return false;
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        path: [i, 'size'],
+                        message: `Attachment '${att.filename}' (${formatBytesForError(att.size)}) exceeds maximum allowed size of ${formatBytesForError(config.maxFileSize)} for this provider.`,
+                    });
                 }
                 if (config.allowedMimeTypes && config.allowedMimeTypes.length > 0) {
                     const allowed = config.allowedMimeTypes.some(pattern => {
@@ -243,12 +264,15 @@ export function createFileAttachmentArraySchema(config?: FileAttachmentConfig): 
                         }
                         return att.mime_type === pattern;
                     });
-                    if (!allowed) return false;
+                    if (!allowed) {
+                        ctx.addIssue({
+                            code: z.ZodIssueCode.custom,
+                            path: [i, 'mime_type'],
+                            message: `Attachment '${att.filename}' has unsupported MIME type '${att.mime_type}'. Allowed types for this provider: ${config.allowedMimeTypes.join(', ')}.`,
+                        });
+                    }
                 }
             }
-            return true;
-        }, {
-            message: 'One or more attachments exceed file size or MIME type restrictions',
         });
     }
 
