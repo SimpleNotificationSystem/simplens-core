@@ -3,13 +3,22 @@
 import { useState, useMemo } from "react";
 import useSWR from "swr";
 import { providerService, pluginService } from "@/lib/api-client";
-import type { ProviderDto, InstalledPlugin, ProviderRateLimitStatus, ProviderRateLimitListResponse } from "@/lib/types";
+import type {
+  ProviderDto,
+  InstalledPlugin,
+  ProviderRateLimitStatus,
+  ProviderRateLimitListResponse,
+  FileSizeUnit,
+  MimeCategory,
+} from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Popover,
   PopoverContent,
@@ -57,9 +66,148 @@ import {
   Gauge,
   RotateCcw,
   AlertTriangle,
+  Paperclip,
+  ChevronDown,
+  Search,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn, formatBytes } from "@/lib/utils";
+
+const STANDARD_MIME_CATEGORIES: MimeCategory[] = [
+  {
+    category: "Wildcards",
+    items: [
+      { mime: "*/*", label: "All File Types (Wildcard)", ext: "Any" },
+      { mime: "image/*", label: "All Images", ext: "Images" },
+      { mime: "audio/*", label: "All Audio", ext: "Audio" },
+      { mime: "video/*", label: "All Video", ext: "Video" },
+      { mime: "text/*", label: "All Text Files", ext: "Text" },
+      { mime: "application/*", label: "All Application Files", ext: "Apps" },
+    ],
+  },
+  {
+    category: "Documents",
+    items: [
+      { mime: "application/pdf", label: "PDF Document", ext: ".pdf" },
+      { mime: "text/plain", label: "Plain Text", ext: ".txt" },
+      { mime: "text/csv", label: "CSV Spreadsheet", ext: ".csv" },
+      { mime: "text/html", label: "HTML Document", ext: ".html" },
+      { mime: "text/markdown", label: "Markdown Document", ext: ".md" },
+      { mime: "application/rtf", label: "Rich Text Format", ext: ".rtf" },
+      { mime: "application/json", label: "JSON Data", ext: ".json" },
+      { mime: "application/xml", label: "XML Document", ext: ".xml" },
+      { mime: "application/msword", label: "Microsoft Word (Legacy)", ext: ".doc" },
+      {
+        mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        label: "Microsoft Word",
+        ext: ".docx",
+      },
+      { mime: "application/vnd.ms-excel", label: "Microsoft Excel (Legacy)", ext: ".xls" },
+      {
+        mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        label: "Microsoft Excel",
+        ext: ".xlsx",
+      },
+      { mime: "application/vnd.ms-powerpoint", label: "Microsoft PowerPoint (Legacy)", ext: ".ppt" },
+      {
+        mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        label: "Microsoft PowerPoint",
+        ext: ".pptx",
+      },
+      { mime: "application/vnd.oasis.opendocument.text", label: "OpenDocument Text", ext: ".odt" },
+      { mime: "application/vnd.oasis.opendocument.spreadsheet", label: "OpenDocument Spreadsheet", ext: ".ods" },
+    ],
+  },
+  {
+    category: "Images",
+    items: [
+      { mime: "image/jpeg", label: "JPEG Image", ext: ".jpg, .jpeg" },
+      { mime: "image/png", label: "PNG Image", ext: ".png" },
+      { mime: "image/gif", label: "GIF Animation", ext: ".gif" },
+      { mime: "image/webp", label: "WebP Image", ext: ".webp" },
+      { mime: "image/svg+xml", label: "SVG Vector Image", ext: ".svg" },
+      { mime: "image/bmp", label: "Bitmap Image", ext: ".bmp" },
+      { mime: "image/tiff", label: "TIFF Image", ext: ".tiff" },
+      { mime: "image/x-icon", label: "Icon File", ext: ".ico" },
+      { mime: "image/heic", label: "HEIC Image", ext: ".heic" },
+      { mime: "image/avif", label: "AVIF Image", ext: ".avif" },
+    ],
+  },
+  {
+    category: "Archives & Compressed",
+    items: [
+      { mime: "application/zip", label: "ZIP Archive", ext: ".zip" },
+      { mime: "application/gzip", label: "GZIP Archive", ext: ".gz, .gzip" },
+      { mime: "application/x-tar", label: "TAR Archive", ext: ".tar" },
+      { mime: "application/vnd.rar", label: "RAR Archive", ext: ".rar" },
+      { mime: "application/x-7z-compressed", label: "7-Zip Archive", ext: ".7z" },
+      { mime: "application/x-bzip2", label: "BZIP2 Archive", ext: ".bz2" },
+      { mime: "application/octet-stream", label: "Binary Data / Arbitrary Stream", ext: ".bin" },
+    ],
+  },
+  {
+    category: "Audio",
+    items: [
+      { mime: "audio/mpeg", label: "MP3 Audio", ext: ".mp3" },
+      { mime: "audio/wav", label: "WAV Audio", ext: ".wav" },
+      { mime: "audio/ogg", label: "OGG Audio", ext: ".ogg" },
+      { mime: "audio/aac", label: "AAC Audio", ext: ".aac" },
+      { mime: "audio/webm", label: "WebM Audio", ext: ".weba" },
+      { mime: "audio/flac", label: "FLAC Audio", ext: ".flac" },
+      { mime: "audio/mp4", label: "M4A Audio", ext: ".m4a" },
+    ],
+  },
+  {
+    category: "Video",
+    items: [
+      { mime: "video/mp4", label: "MP4 Video", ext: ".mp4" },
+      { mime: "video/webm", label: "WebM Video", ext: ".webm" },
+      { mime: "video/mpeg", label: "MPEG Video", ext: ".mpeg" },
+      { mime: "video/quicktime", label: "QuickTime MOV", ext: ".mov" },
+      { mime: "video/x-msvideo", label: "AVI Video", ext: ".avi" },
+      { mime: "video/x-matroska", label: "Matroska Video", ext: ".mkv" },
+      { mime: "video/ogg", label: "OGG Video", ext: ".ogv" },
+    ],
+  },
+];
+
+function splitFileSize(raw: string | number | undefined): { value: string; unit: FileSizeUnit } {
+  if (raw === undefined || raw === null || raw === "") {
+    return { value: "", unit: "MB" };
+  }
+  const str = String(raw).trim();
+  const match = str.match(/^(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|TB)?$/i);
+  if (!match) {
+    return { value: str, unit: "MB" };
+  }
+  const num = parseFloat(match[1]);
+  const unit = match[2] ? (match[2].toUpperCase() as FileSizeUnit) : undefined;
+
+  if (unit) {
+    return { value: match[1], unit };
+  }
+
+  if (num === 0) return { value: "0", unit: "MB" };
+  const tb = 1024 * 1024 * 1024 * 1024;
+  const gb = 1024 * 1024 * 1024;
+  const mb = 1024 * 1024;
+  const kb = 1024;
+
+  if (num >= tb && num % tb === 0) {
+    return { value: String(num / tb), unit: "TB" };
+  }
+  if (num >= gb && num % gb === 0) {
+    return { value: String(num / gb), unit: "GB" };
+  }
+  if (num >= mb && num % mb === 0) {
+    return { value: String(num / mb), unit: "MB" };
+  }
+  if (num >= kb && num % kb === 0) {
+    return { value: String(num / kb), unit: "KB" };
+  }
+  return { value: String(num), unit: "B" };
+}
 
 type AdditionalOption = {
   id: string;
@@ -317,6 +465,14 @@ export function ProvidersTab() {
     refillInterval: "second",
   });
   const [additionalOptions, setAdditionalOptions] = useState<AdditionalOption[]>([]);
+  const [optionalConfigValues, setOptionalConfigValues] = useState<Record<string, string>>({});
+  const [fileSizeValue, setFileSizeValue] = useState("");
+  const [fileSizeUnit, setFileSizeUnit] = useState<FileSizeUnit>("MB");
+  const [maxCountOverride, setMaxCountOverride] = useState("");
+  const [selectedMimeTypes, setSelectedMimeTypes] = useState<string[]>([]);
+  const [mimeSearchQuery, setMimeSearchQuery] = useState("");
+  const [customMimeInput, setCustomMimeInput] = useState("");
+  const [mimePopoverOpen, setMimePopoverOpen] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [credentials, setCredentials] = useState<Record<string, string>>({});
   const [visibleCredentials, setVisibleCredentials] = useState<Record<string, boolean>>({});
@@ -335,6 +491,66 @@ export function ProvidersTab() {
   const installedPlugins = pluginsData?.plugins || [];
   const selectedPlugin = installedPlugins.find((p) => p.name === pluginName);
 
+  const allMimeCategories = useMemo(() => {
+    const pluginMimes = selectedPlugin?.manifest?.fileAttachment?.allowedMimeTypes || [];
+    const knownMimes = new Set<string>();
+    for (const cat of STANDARD_MIME_CATEGORIES) {
+      for (const item of cat.items) {
+        knownMimes.add(item.mime.toLowerCase());
+      }
+    }
+
+    const extraMimes = pluginMimes.filter((m) => !knownMimes.has(m.toLowerCase()));
+    if (extraMimes.length === 0) {
+      return STANDARD_MIME_CATEGORIES;
+    }
+
+    return [
+      {
+        category: "Plugin Specific",
+        items: extraMimes.map((m) => ({
+          mime: m,
+          label: m,
+        })),
+      },
+      ...STANDARD_MIME_CATEGORIES,
+    ];
+  }, [selectedPlugin]);
+
+  const filteredMimeCategories = useMemo(() => {
+    if (!mimeSearchQuery.trim()) {
+      return allMimeCategories;
+    }
+    const q = mimeSearchQuery.trim().toLowerCase();
+    return allMimeCategories
+      .map((cat) => ({
+        ...cat,
+        items: cat.items.filter(
+          (i) =>
+            i.mime.toLowerCase().includes(q) ||
+            i.label.toLowerCase().includes(q) ||
+            (i.ext && i.ext.toLowerCase().includes(q))
+        ),
+      }))
+      .filter((cat) => cat.items.length > 0);
+  }, [allMimeCategories, mimeSearchQuery]);
+
+  const handleAddCustomMime = () => {
+    const trimmed = customMimeInput.trim().toLowerCase();
+    if (!trimmed) return;
+    if (!trimmed.includes("/")) {
+      toast.error("MIME type must be in the format 'type/subtype' (e.g. application/pdf)");
+      return;
+    }
+    if (selectedMimeTypes.includes(trimmed)) {
+      toast.info("MIME type is already selected");
+      setCustomMimeInput("");
+      return;
+    }
+    setSelectedMimeTypes([...selectedMimeTypes, trimmed]);
+    setCustomMimeInput("");
+  };
+
   const resetForm = () => {
     setEditingProvider(null);
     setProviderId("");
@@ -342,6 +558,14 @@ export function ProvidersTab() {
     setPriority(0);
     setRateLimit({ maxTokens: "", refillRate: "", refillInterval: "second" });
     setAdditionalOptions([]);
+    setOptionalConfigValues({});
+    setFileSizeValue("");
+    setFileSizeUnit("MB");
+    setMaxCountOverride("");
+    setSelectedMimeTypes([]);
+    setMimeSearchQuery("");
+    setCustomMimeInput("");
+    setMimePopoverOpen(false);
     setEnabled(true);
     setCredentials({});
     setVisibleCredentials({});
@@ -367,9 +591,60 @@ export function ProvidersTab() {
       refillRate: provider.options?.rateLimit?.refillRate?.toString() || "",
       refillInterval: provider.options?.rateLimit?.refillInterval || "second",
     });
+
+    const plugin = installedPlugins.find((p) => p.name === provider.plugin_name);
+    const optKeys = new Set(plugin?.manifest?.optionalConfig || []);
+    const providerOpts = (provider.options || {}) as Record<string, unknown>;
+
+    const loadedOptionalConfig: Record<string, string> = {};
+    let rawMaxFileSize: string | number | undefined;
+    let loadedMaxCount = "";
+    let loadedAllowedMimeTypes: string[] = [];
+
+    if (providerOpts.fileAttachment && typeof providerOpts.fileAttachment === "object") {
+      const fa = providerOpts.fileAttachment as Record<string, unknown>;
+      if (fa.maxFileSize !== undefined) rawMaxFileSize = fa.maxFileSize as string | number;
+      if (fa.maxCount !== undefined) loadedMaxCount = String(fa.maxCount);
+      if (fa.allowedMimeTypes) {
+        loadedAllowedMimeTypes = Array.isArray(fa.allowedMimeTypes)
+          ? (fa.allowedMimeTypes as string[])
+          : String(fa.allowedMimeTypes).split(",").map((s) => s.trim()).filter(Boolean);
+      }
+    }
+    if (providerOpts.ATTACHMENT_MAX_FILE_SIZE !== undefined) {
+      rawMaxFileSize = providerOpts.ATTACHMENT_MAX_FILE_SIZE as string | number;
+    }
+    if (providerOpts.ATTACHMENT_MAX_COUNT !== undefined) {
+      loadedMaxCount = String(providerOpts.ATTACHMENT_MAX_COUNT);
+    }
+    if (providerOpts.ATTACHMENT_ALLOWED_MIME_TYPES !== undefined) {
+      loadedAllowedMimeTypes = Array.isArray(providerOpts.ATTACHMENT_ALLOWED_MIME_TYPES)
+        ? (providerOpts.ATTACHMENT_ALLOWED_MIME_TYPES as string[])
+        : String(providerOpts.ATTACHMENT_ALLOWED_MIME_TYPES).split(",").map((s) => s.trim()).filter(Boolean);
+    }
+
+    const { value: parsedSizeVal, unit: parsedSizeUnit } = splitFileSize(rawMaxFileSize);
+
+    for (const key of optKeys) {
+      if (providerOpts[key] !== undefined) {
+        loadedOptionalConfig[key] = String(providerOpts[key]);
+      }
+    }
+
+    const reservedOptionKeys = new Set([
+      "priority",
+      "rateLimit",
+      "fileAttachment",
+      "ATTACHMENT_MAX_FILE_SIZE",
+      "ATTACHMENT_MAX_COUNT",
+      "ATTACHMENT_ALLOWED_MIME_TYPES",
+      "ATTACHMENT_ENABLED",
+      ...optKeys,
+    ]);
+
     setAdditionalOptions(
       Object.entries(provider.options || {})
-        .filter(([key]) => key !== "priority" && key !== "rateLimit")
+        .filter(([key]) => !reservedOptionKeys.has(key))
         .map(([key, value]) => ({
           ...createAdditionalOption(
             key,
@@ -377,6 +652,11 @@ export function ProvidersTab() {
           ),
         }))
     );
+    setOptionalConfigValues(loadedOptionalConfig);
+    setFileSizeValue(parsedSizeVal);
+    setFileSizeUnit(parsedSizeUnit);
+    setMaxCountOverride(loadedMaxCount);
+    setSelectedMimeTypes(loadedAllowedMimeTypes);
     setEnabled(provider.enabled);
     setCredentials({});
     setVisibleCredentials({});
@@ -400,6 +680,25 @@ export function ProvidersTab() {
     }
     if (Object.keys(configuredRateLimit).length > 0) {
       options.rateLimit = configuredRateLimit;
+    }
+
+    // Merge optional config values
+    for (const [key, value] of Object.entries(optionalConfigValues)) {
+      const trimmed = value.trim();
+      if (!trimmed) continue;
+      options[key] = /^-?\d+$/.test(trimmed) ? parseInt(trimmed, 10) : trimmed;
+    }
+
+    // Merge file attachment overrides
+    if (fileSizeValue.trim() !== "") {
+      options.ATTACHMENT_MAX_FILE_SIZE = `${fileSizeValue.trim()}${fileSizeUnit}`;
+    }
+    if (maxCountOverride.trim() !== "") {
+      const count = parseInt(maxCountOverride.trim(), 10);
+      if (!isNaN(count)) options.ATTACHMENT_MAX_COUNT = count;
+    }
+    if (selectedMimeTypes.length > 0) {
+      options.ATTACHMENT_ALLOWED_MIME_TYPES = selectedMimeTypes;
     }
 
     for (const option of additionalOptions) {
@@ -685,19 +984,20 @@ export function ProvidersTab() {
 
       {/* Add/Edit Provider Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-lg">
-          <form onSubmit={handleSave}>
-            <DialogHeader>
-              <DialogTitle>{editingProvider ? "Edit Provider" : "Configure Provider"}</DialogTitle>
-              <DialogDescription>
-                {editingProvider
-                  ? `Update settings or rotate encrypted credentials for ${editingProvider.id}.`
-                  : "Create an active provider instance backed by an installed plugin."}
-              </DialogDescription>
-            </DialogHeader>
+        <DialogContent className="sm:max-w-lg w-full p-6">
+          <DialogHeader className="pb-1">
+            <DialogTitle>{editingProvider ? "Edit Provider" : "Configure Provider"}</DialogTitle>
+            <DialogDescription>
+              {editingProvider
+                ? `Update settings or rotate encrypted credentials for ${editingProvider.id}.`
+                : "Create an active provider instance backed by an installed plugin."}
+            </DialogDescription>
+          </DialogHeader>
 
-            <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto px-1">
-              {!editingProvider ? (
+          <form onSubmit={handleSave} className="space-y-4">
+            <ScrollArea className="h-[55vh] sm:h-[60vh] pr-4">
+              <div className="space-y-4 py-2 pr-1 min-w-0">
+                {!editingProvider ? (
                 <>
                   <div className="space-y-2">
                     <Label htmlFor="plugin-select">Plugin</Label>
@@ -855,6 +1155,333 @@ export function ProvidersTab() {
                 ))}
               </div>
 
+              {/* Manifest Optional Configuration */}
+              {selectedPlugin?.manifest?.optionalConfig &&
+                selectedPlugin.manifest.optionalConfig.filter(
+                  (f) =>
+                    !f.startsWith("ATTACHMENT_") &&
+                    f !== "MAX_FILE_SIZE" &&
+                    f !== "MAX_COUNT"
+                ).length > 0 && (
+                  <div className="space-y-3 pt-2 border-t">
+                    <div>
+                      <Label className="text-sm font-semibold">Optional Configuration</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Provider-specific parameters defined by the plugin.
+                      </p>
+                    </div>
+                    {selectedPlugin.manifest.optionalConfig
+                      .filter(
+                        (f) =>
+                          !f.startsWith("ATTACHMENT_") &&
+                          f !== "MAX_FILE_SIZE" &&
+                          f !== "MAX_COUNT"
+                      )
+                      .map((field) => (
+                        <div key={field} className="space-y-1">
+                          <Label htmlFor={`opt-${field}`} className="text-xs font-mono">
+                            {field}
+                          </Label>
+                          <Input
+                            id={`opt-${field}`}
+                            placeholder={`Enter ${field} (Optional)`}
+                            value={optionalConfigValues[field] || ""}
+                            onChange={(e) =>
+                              setOptionalConfigValues({
+                                ...optionalConfigValues,
+                                [field]: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                      ))}
+                  </div>
+                )}
+
+              {/* File Attachment Limits Overrides */}
+              {selectedPlugin?.manifest?.fileAttachment?.enabled && (
+                <div className="space-y-3 pt-2 border-t">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Paperclip className="h-4 w-4 text-primary" />
+                      <Label className="text-sm font-semibold">File Attachment Limits</Label>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] font-normal">
+                      Optional Overrides
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Override default attachment limits for this provider tier. Leave empty to use plugin defaults.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="att-max-file-size" className="text-xs">
+                        Max File Size
+                      </Label>
+                      <div className="flex items-center gap-1.5">
+                        <Input
+                          id="att-max-file-size"
+                          type="number"
+                          step="any"
+                          min="0"
+                          placeholder={
+                            selectedPlugin.manifest.fileAttachment.maxFileSize
+                              ? `Default: ${formatBytes(selectedPlugin.manifest.fileAttachment.maxFileSize)}`
+                              : "e.g. 25"
+                          }
+                          value={fileSizeValue}
+                          onChange={(e) => setFileSizeValue(e.target.value)}
+                          className="flex-1"
+                        />
+                        <Select
+                          value={fileSizeUnit}
+                          onValueChange={(val: FileSizeUnit) => setFileSizeUnit(val)}
+                        >
+                          <SelectTrigger className="w-[85px] shrink-0" aria-label="File size unit">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="B">B</SelectItem>
+                            <SelectItem value="KB">KB</SelectItem>
+                            <SelectItem value="MB">MB</SelectItem>
+                            <SelectItem value="GB">GB</SelectItem>
+                            <SelectItem value="TB">TB</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {fileSizeValue.trim() !== "" && (
+                        <p className="text-[10px] text-muted-foreground">
+                          Override: {fileSizeValue.trim()} {fileSizeUnit}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="att-max-count" className="text-xs">
+                        Max Attachment Count
+                      </Label>
+                      <Input
+                        id="att-max-count"
+                        type="number"
+                        min="1"
+                        placeholder={
+                          selectedPlugin.manifest.fileAttachment.maxCount
+                            ? `Default: ${selectedPlugin.manifest.fileAttachment.maxCount}`
+                            : "e.g. 10"
+                        }
+                        value={maxCountOverride}
+                        onChange={(e) => setMaxCountOverride(e.target.value)}
+                      />
+                      {maxCountOverride.trim() !== "" && (
+                        <p className="text-[10px] text-muted-foreground">
+                          Override: {maxCountOverride.trim()} files
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Allowed MIME Types Dropdown Selector */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Allowed MIME Types</Label>
+                      {selectedPlugin.manifest.fileAttachment.allowedMimeTypes &&
+                        selectedPlugin.manifest.fileAttachment.allowedMimeTypes.length > 0 && (
+                          <span className="text-[11px] text-muted-foreground">
+                            Plugin default: {selectedPlugin.manifest.fileAttachment.allowedMimeTypes.length} types
+                          </span>
+                        )}
+                    </div>
+
+                    <Popover open={mimePopoverOpen} onOpenChange={setMimePopoverOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full justify-between font-normal text-left h-auto min-h-9 py-1.5 px-3 min-w-0 max-w-full overflow-hidden"
+                        >
+                          <span className="truncate text-xs min-w-0 flex-1">
+                            {selectedMimeTypes.length === 0
+                              ? "Using plugin default MIME types (Click to customize)"
+                              : `${selectedMimeTypes.length} MIME type${selectedMimeTypes.length === 1 ? "" : "s"} selected`}
+                          </span>
+                          <ChevronDown className="h-4 w-4 shrink-0 opacity-50 ml-2" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[calc(100vw-2rem)] sm:w-[380px] max-w-[380px] p-0" align="start">
+                        <div className="p-3 border-b space-y-2">
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                            <Input
+                              placeholder="Search MIME types or extensions..."
+                              value={mimeSearchQuery}
+                              onChange={(e) => setMimeSearchQuery(e.target.value)}
+                              className="pl-8 text-xs h-8"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-1 text-[11px]">
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-[11px]"
+                                onClick={() => {
+                                  const all = allMimeCategories.flatMap((cat) => cat.items.map((i) => i.mime));
+                                  setSelectedMimeTypes(Array.from(new Set(all)));
+                                }}
+                              >
+                                Select All
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-[11px]"
+                                onClick={() => setSelectedMimeTypes([])}
+                              >
+                                Clear
+                              </Button>
+                            </div>
+                            {selectedPlugin.manifest.fileAttachment.allowedMimeTypes &&
+                              selectedPlugin.manifest.fileAttachment.allowedMimeTypes.length > 0 && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 px-2 text-[11px]"
+                                  onClick={() =>
+                                    setSelectedMimeTypes([...(selectedPlugin.manifest.fileAttachment.allowedMimeTypes || [])])
+                                  }
+                                >
+                                  Use Defaults
+                                </Button>
+                              )}
+                          </div>
+                        </div>
+
+                        <ScrollArea className="h-64 p-2">
+                          <div className="space-y-4">
+                            {filteredMimeCategories.map((cat) => (
+                              <div key={cat.category} className="space-y-1">
+                                <div className="flex items-center justify-between px-2 py-1">
+                                  <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                    {cat.category}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const catMimes = cat.items.map((i) => i.mime);
+                                      const allSelected = catMimes.every((m) => selectedMimeTypes.includes(m));
+                                      if (allSelected) {
+                                        setSelectedMimeTypes(selectedMimeTypes.filter((m) => !catMimes.includes(m)));
+                                      } else {
+                                        setSelectedMimeTypes(Array.from(new Set([...selectedMimeTypes, ...catMimes])));
+                                      }
+                                    }}
+                                    className="text-[10px] text-primary hover:underline cursor-pointer"
+                                  >
+                                    {cat.items.every((i) => selectedMimeTypes.includes(i.mime)) ? "Deselect" : "Select"}
+                                  </button>
+                                </div>
+                                <div className="space-y-0.5">
+                                  {cat.items.map((item) => {
+                                    const isChecked = selectedMimeTypes.includes(item.mime);
+                                    return (
+                                      <label
+                                        key={item.mime}
+                                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 cursor-pointer text-xs transition-colors"
+                                      >
+                                        <Checkbox
+                                          checked={isChecked}
+                                          onCheckedChange={(checked) => {
+                                            if (checked) {
+                                              setSelectedMimeTypes([...selectedMimeTypes, item.mime]);
+                                            } else {
+                                              setSelectedMimeTypes(selectedMimeTypes.filter((m) => m !== item.mime));
+                                            }
+                                          }}
+                                        />
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center justify-between gap-1">
+                                            <span className="font-mono text-[11px] truncate max-w-[200px] block" title={item.mime}>
+                                              {item.mime}
+                                            </span>
+                                            {item.ext && (
+                                              <span className="text-[10px] text-muted-foreground shrink-0">{item.ext}</span>
+                                            )}
+                                          </div>
+                                          <p className="text-[10px] text-muted-foreground truncate">{item.label}</p>
+                                        </div>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                            {filteredMimeCategories.length === 0 && (
+                              <div className="p-4 text-center text-xs text-muted-foreground">
+                                No matching MIME types found.
+                              </div>
+                            )}
+                          </div>
+                        </ScrollArea>
+
+                        {/* Custom MIME type input */}
+                        <div className="p-2 border-t bg-muted/20">
+                          <div className="flex items-center gap-1.5">
+                            <Input
+                              placeholder="Add custom MIME (e.g. text/x-custom)"
+                              value={customMimeInput}
+                              onChange={(e) => setCustomMimeInput(e.target.value)}
+                              className="text-xs h-8"
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  handleAddCustomMime();
+                                }
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              className="h-8 text-xs shrink-0"
+                              onClick={handleAddCustomMime}
+                            >
+                              Add
+                            </Button>
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+
+                    {/* Selected MIME badges */}
+                    {selectedMimeTypes.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-1.5 bg-muted/30 rounded-md border w-full min-w-0 max-w-full">
+                        {selectedMimeTypes.map((mime) => (
+                          <Badge
+                            key={mime}
+                            variant="secondary"
+                            className="text-[11px] font-mono py-0.5 pl-2 pr-1 flex items-center gap-1 max-w-full min-w-0 shrink-0"
+                          >
+                            <span className="truncate max-w-[200px] sm:max-w-[280px]" title={mime}>
+                              {mime}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedMimeTypes(selectedMimeTypes.filter((m) => m !== mime))}
+                              className="hover:bg-muted rounded p-0.5 cursor-pointer shrink-0"
+                              aria-label={`Remove ${mime}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Dynamic Credential Fields from Plugin Manifest */}
               <div className="space-y-3 pt-2 border-t">
                 <div className="flex items-center justify-between">
@@ -950,9 +1577,10 @@ export function ProvidersTab() {
                   <span>{testResult.message}</span>
                 </div>
               )}
-            </div>
+              </div>
+            </ScrollArea>
 
-            <DialogFooter className="flex sm:justify-between items-center gap-2">
+            <DialogFooter className="shrink-0 pt-4 border-t mt-4 flex sm:justify-between items-center gap-2">
               {editingProvider && (
                 <Button
                   type="button"

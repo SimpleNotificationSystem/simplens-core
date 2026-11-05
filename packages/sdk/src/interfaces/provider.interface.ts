@@ -91,6 +91,16 @@ export interface FileAttachmentItem {
 }
 
 /**
+ * Standard optional config keys for file attachment limits
+ */
+export const STANDARD_ATTACHMENT_OPTIONAL_KEYS = [
+    'ATTACHMENT_MAX_FILE_SIZE',
+    'ATTACHMENT_MAX_COUNT',
+    'ATTACHMENT_ALLOWED_MIME_TYPES',
+    'ATTACHMENT_ENABLED',
+] as const;
+
+/**
  * Provider manifest - metadata about the provider
  */
 export interface ProviderManifest {
@@ -193,6 +203,12 @@ export interface SimpleNSProvider<TNotification extends BaseNotification = BaseN
      * SimpleNS uses this to control send rate
      */
     getRateLimitConfig(): RateLimitConfig;
+
+    /**
+     * Get effective file attachment configuration for this provider instance (optional)
+     * Returns merged configuration of manifest defaults and provider options/credentials
+     */
+    getFileAttachmentConfig?(): FileAttachmentConfig | undefined;
 
     /**
      * Initialize the provider with credentials

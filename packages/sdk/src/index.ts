@@ -37,6 +37,9 @@
 export { z } from 'zod';
 
 // Interfaces
+export {
+    STANDARD_ATTACHMENT_OPTIONAL_KEYS,
+} from './interfaces/provider.interface.js';
 export type {
     SimpleNSProvider,
     ProviderManifest,
@@ -63,6 +66,8 @@ export {
     fileAttachmentItemSchema,
     fileAttachmentArraySchema,
     createFileAttachmentArraySchema,
+    parseByteSize,
+    resolveFileAttachmentConfig,
 } from './schemas/base.schemas.js';
 
 // Utilities

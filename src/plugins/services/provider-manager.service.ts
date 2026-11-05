@@ -491,7 +491,8 @@ export class ProviderManagerService {
     PluginRegistry.registerOrReplace(
       providerInstance,
       providerDoc.id,
-      providerDoc.options?.priority ?? 0
+      providerDoc.options?.priority ?? 0,
+      providerDoc.options as ProviderOptions | undefined
     );
     logger.success(`Registered provider '${providerDoc.id}' in PluginRegistry.`);
   }

@@ -5,7 +5,8 @@
  * Handles provider lookup by ID or channel.
  */
 
-import type { SimpleNSProvider, ProviderManifest, RegisteredProvider, ChannelConfig, FieldDefinition, ProviderMetadata, ChannelMetadata, PluginMetadata, FileAttachmentConfig } from '@src/types/types.js';
+import type { SimpleNSProvider, ProviderManifest, RegisteredProvider, ChannelConfig, FieldDefinition, ProviderMetadata, ChannelMetadata, PluginMetadata, FileAttachmentConfig, ProviderOptions } from '@src/types/types.js';
+import { resolveFileAttachmentConfig } from '@src/types/schemas.js';
 import { pluginRegistryLogger as logger } from '@src/workers/utils/logger.js';
 
 export type {
@@ -96,12 +97,12 @@ class PluginRegistryClass {
     /**
      * Register a provider
      */
-    register(provider: SimpleNSProvider, id: string, priority: number = 0): void {
+    register(provider: SimpleNSProvider, id: string, priority: number = 0, options?: ProviderOptions): void {
         if (this.providers.has(id)) {
             throw new Error(`Provider '${id}' is already registered`);
         }
 
-        this.providers.set(id, { provider, id, priority });
+        this.providers.set(id, { provider, id, priority, options });
 
         // Add to channel mapping
         const channel = provider.manifest.channel;
@@ -121,7 +122,7 @@ class PluginRegistryClass {
     /**
      * Register or replace an existing provider
      */
-    registerOrReplace(provider: SimpleNSProvider, id: string, priority: number = 0): void {
+    registerOrReplace(provider: SimpleNSProvider, id: string, priority: number = 0, options?: ProviderOptions): void {
         if (this.providers.has(id)) {
             const registered = this.providers.get(id);
             const channel = registered?.provider.manifest.channel;
@@ -132,7 +133,7 @@ class PluginRegistryClass {
                 : -1;
 
             this.unregister(id);
-            this.register(provider, id, priority);
+            this.register(provider, id, priority, options);
 
             if (savedConfig) {
                 if (wasDefault) {
@@ -143,7 +144,7 @@ class PluginRegistryClass {
                 }
             }
         } else {
-            this.register(provider, id, priority);
+            this.register(provider, id, priority, options);
         }
     }
 
@@ -412,7 +413,10 @@ class PluginRegistryClass {
 
                 // Extract field definitions from schemas
                 const recipientFields = extractFieldsFromSchema(provider.getRecipientSchema());
-                const contentFields = extractFieldsFromSchema(provider.getContentSchema(), manifest.fileAttachment);
+                const effectiveAttachment = provider.getFileAttachmentConfig?.()
+                    ?? resolveFileAttachmentConfig(manifest.fileAttachment, registered.options as Record<string, unknown> | undefined)
+                    ?? manifest.fileAttachment;
+                const contentFields = extractFieldsFromSchema(provider.getContentSchema(), effectiveAttachment);
 
                 providers.push({
                     id,

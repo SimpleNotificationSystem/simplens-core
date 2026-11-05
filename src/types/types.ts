@@ -91,6 +91,7 @@ export interface SimpleNSProvider<TNotification extends BaseNotification = BaseN
     getRecipientSchema(): z.ZodObject<Record<string, z.ZodTypeAny>>;
     getContentSchema(): z.ZodObject<Record<string, z.ZodTypeAny>>;
     getRateLimitConfig(): RateLimitConfig;
+    getFileAttachmentConfig?(): FileAttachmentConfig | undefined;
 
     initialize(config: ProviderConfig): Promise<void>;
     healthCheck(): Promise<boolean>;
@@ -304,6 +305,7 @@ export interface RegisteredProvider {
     provider: SimpleNSProvider;
     id: string;
     priority: number;
+    options?: ProviderOptions;
 }
 
 export interface ChannelConfig {

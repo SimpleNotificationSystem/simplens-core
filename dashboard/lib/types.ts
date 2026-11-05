@@ -119,6 +119,19 @@ export interface FileAttachmentConfig {
   allowedMimeTypes?: string[];
 }
 
+export type FileSizeUnit = "B" | "KB" | "MB" | "GB" | "TB";
+
+export interface MimeCategoryItem {
+  mime: string;
+  label: string;
+  ext?: string;
+}
+
+export interface MimeCategory {
+  category: string;
+  items: MimeCategoryItem[];
+}
+
 export interface FileAttachmentItem {
   id: string;
   filename: string;
@@ -301,6 +314,7 @@ export interface ProviderManifest {
   homepage?: string;
   requiredCredentials: string[];
   optionalConfig?: string[];
+  fileAttachment?: FileAttachmentConfig;
 }
 
 export interface InstalledPlugin {
