@@ -764,6 +764,11 @@ export const safeValidateNotificationTemplateUpdateRequestSchema = (data: unknow
 // DYNAMIC OPERATIONAL SETTINGS & ADMIN AUTH SCHEMAS
 // ============================================================================
 
+export const attachmentSettingsSchema = z.object({
+  max_file_size: z.number().int().min(1024).max(500 * 1024 * 1024).default(100 * 1024 * 1024),
+  max_file_count: z.number().int().min(1).max(50).default(10),
+});
+
 export const operationalSettingsSchema = z.object({
   api: z.object({
     max_batch_req_limit: z.number().int().min(10).max(10000).default(1000),
@@ -803,6 +808,10 @@ export const operationalSettingsSchema = z.object({
     log_level: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     log_to_file: z.boolean().default(true),
   }),
+  attachment: attachmentSettingsSchema.default({
+    max_file_size: 100 * 1024 * 1024,
+    max_file_count: 10,
+  }),
 });
 
 export const partialOperationalSettingsSchema = z.object({
@@ -812,6 +821,7 @@ export const partialOperationalSettingsSchema = z.object({
   delayed: operationalSettingsSchema.shape.delayed.partial().optional(),
   recovery: operationalSettingsSchema.shape.recovery.partial().optional(),
   logging: operationalSettingsSchema.shape.logging.partial().optional(),
+  attachment: attachmentSettingsSchema.partial().optional(),
 });
 
 export const adminSetupSchema = z.object({

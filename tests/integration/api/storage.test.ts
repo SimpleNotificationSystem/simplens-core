@@ -1,20 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import file_router from '@src/api/routes/file.routes.js';
-import storage_router from '@src/api/routes/storage.routes.js';
-import storage_provider_model from '@src/database/models/storage-provider.models.js';
-import file_attachment_model from '@src/database/models/file-attachment.models.js';
+import file_router from '../../../src/api/routes/file.routes.js';
+import storage_router from '../../../src/api/routes/storage.routes.js';
+import storage_provider_model from '../../../src/database/models/storage-provider.models.js';
+import file_attachment_model from '../../../src/database/models/file-attachment.models.js';
 import {
     registerStorageProvider,
     clearStorageRegistry,
-} from '@src/storage/storage-registry.js';
-import { getOrCreateEncryptionKey } from '@src/admin-alerts/key-manager.js';
-import { encrypt } from '@src/utils/encryption.utils.js';
-import type { StorageProvider } from '@src/types/types.js';
+} from '../../../src/storage/storage-registry.js';
+import { StorageService } from '../../../src/storage/storage.service.js';
+import { getOrCreateEncryptionKey } from '../../../src/admin-alerts/key-manager.js';
+import { encrypt } from '../../../src/utils/encryption.utils.js';
+import type { StorageProvider } from '../../../src/types/types.js';
 
 vi.mock('@src/database/models/storage-provider.models.js');
 vi.mock('@src/database/models/file-attachment.models.js');
+vi.mock('@src/database/models/upload-lock.models.js');
 vi.mock('@src/admin-alerts/key-manager.js');
 
 describe('Storage & File Attachments API Integration', () => {
@@ -249,6 +251,30 @@ describe('Storage & File Attachments API Integration', () => {
             expect(res.body.files).toHaveLength(1);
             expect(res.body.files[0].filename).toBe('invoice.pdf');
             expect(res.body.files[0].hash).toBeDefined();
+        });
+
+        it('should return 400 when empty multipart body or content-length 0 is sent', async () => {
+            const res = await request(app)
+                .post('/api/file/upload')
+                .set('Content-Type', 'multipart/form-data; boundary=----TestBoundary')
+                .set('Content-Length', '0');
+
+            expect(res.status).toBe(400);
+            expect(res.body.error).toBe('No files provided in upload request');
+        });
+
+        it('should return 400 with descriptive error message when file size limit is exceeded', async () => {
+            vi.spyOn(StorageService, 'resolveEffectiveLimits').mockResolvedValueOnce({
+                maxFileSize: 50, // 50 bytes limit
+                maxCount: 10,
+            });
+
+            const res = await request(app)
+                .post('/api/file/upload')
+                .attach('files', Buffer.from('A'.repeat(200)), 'huge-file.txt');
+
+            expect(res.status).toBe(400);
+            expect(res.body.error).toContain('File size exceeds maximum allowed limit');
         });
     });
 

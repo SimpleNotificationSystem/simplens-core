@@ -413,9 +413,9 @@ class PluginRegistryClass {
 
                 // Extract field definitions from schemas
                 const recipientFields = extractFieldsFromSchema(provider.getRecipientSchema());
-                const effectiveAttachment = provider.getFileAttachmentConfig?.()
-                    ?? resolveFileAttachmentConfig(manifest.fileAttachment, registered.options as Record<string, unknown> | undefined)
-                    ?? manifest.fileAttachment;
+                const baselineAttachment = provider.getFileAttachmentConfig?.() ?? manifest.fileAttachment;
+                const effectiveAttachment = resolveFileAttachmentConfig(baselineAttachment, registered.options as Record<string, unknown> | undefined)
+                    ?? baselineAttachment;
                 const contentFields = extractFieldsFromSchema(provider.getContentSchema(), effectiveAttachment);
 
                 providers.push({

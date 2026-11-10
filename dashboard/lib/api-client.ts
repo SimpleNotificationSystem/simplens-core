@@ -261,8 +261,12 @@ export const apiKeyService = {
 };
 
 export const fileService = {
-  upload: (formData: FormData): Promise<{ success: boolean; files: FileAttachmentItem[] }> =>
+  upload: (
+    formData: FormData,
+    params?: { channel?: string; provider?: string }
+  ): Promise<{ success: boolean; files: FileAttachmentItem[] }> =>
     apiClient.post('/api/file/upload', formData, {
+      params,
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
   get: (id: string): Promise<{ success: boolean; file: FileAttachmentItem }> =>

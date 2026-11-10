@@ -88,7 +88,7 @@ describe('ProviderManagerService', () => {
           id: 'mock-test',
           plugin_name: '@simplens/mock',
           channel: 'mock',
-          options: { priority: 5 },
+          options: expect.objectContaining({ priority: 5 }),
         })
       );
       expect(setRoutingSpy).toHaveBeenCalledWith('mock', {
@@ -374,6 +374,76 @@ describe('ProviderManagerService', () => {
       expect(mockProviderInstance.initialize).toHaveBeenNthCalledWith(2, expect.objectContaining({
         credentials: { EMAIL_USER: 'stored-user', EMAIL_PASS: 'stored-pass' },
       }));
+    });
+  });
+
+  describe('getEffectiveFileAttachmentConfig', () => {
+    it('should return attachment config from MongoDB provider document', async () => {
+      vi.spyOn(Provider, 'findOne').mockReturnValue({
+        lean: vi.fn().mockResolvedValue({
+          id: 'resend-db',
+          channel: 'email',
+          options: {
+            fileAttachment: {
+              enabled: true,
+              maxFileSize: 30 * 1024 * 1024,
+              maxCount: 20,
+              allowedMimeTypes: ['application/pdf'],
+            },
+          },
+        }),
+      } as any);
+
+      const config = await ProviderManagerService.getEffectiveFileAttachmentConfig('resend-db');
+      expect(config?.maxFileSize).toBe(30 * 1024 * 1024);
+      expect(config?.maxCount).toBe(20);
+      expect(config?.allowedMimeTypes).toEqual(['application/pdf']);
+    });
+
+    it('should resolve provider via channel routing when providerId is omitted', async () => {
+      vi.spyOn(ChannelRouting, 'findOne').mockReturnValue({
+        lean: vi.fn().mockResolvedValue({
+          channel: 'email',
+          default_provider_id: 'default-smtp',
+        }),
+      } as any);
+
+      vi.spyOn(Provider, 'findOne').mockReturnValue({
+        lean: vi.fn().mockResolvedValue({
+          id: 'default-smtp',
+          channel: 'email',
+          options: {
+            ATTACHMENT_MAX_FILE_SIZE: '15MB',
+            ATTACHMENT_MAX_COUNT: 5,
+          },
+        }),
+      } as any);
+
+      const config = await ProviderManagerService.getEffectiveFileAttachmentConfig(undefined, 'email');
+      expect(config?.maxFileSize).toBe(15 * 1024 * 1024);
+      expect(config?.maxCount).toBe(5);
+    });
+
+    it('should fall back to PluginRegistry when provider is not in MongoDB', async () => {
+      vi.spyOn(Provider, 'findOne').mockReturnValue({
+        lean: vi.fn().mockResolvedValue(null),
+      } as any);
+
+      const mockProvider = {
+        manifest: { name: 'fallback-prov', channel: 'sms' },
+        getRecipientSchema: () => ({ shape: {} }),
+        getContentSchema: () => ({ shape: {} }),
+        getFileAttachmentConfig: () => ({
+          enabled: true,
+          maxFileSize: 10 * 1024 * 1024,
+          maxCount: 3,
+        }),
+      };
+      PluginRegistry.register(mockProvider as any, 'fallback-prov');
+
+      const config = await ProviderManagerService.getEffectiveFileAttachmentConfig('fallback-prov');
+      expect(config?.maxFileSize).toBe(10 * 1024 * 1024);
+      expect(config?.maxCount).toBe(3);
     });
   });
 });

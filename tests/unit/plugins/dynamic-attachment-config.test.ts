@@ -284,6 +284,25 @@ describe('Dynamic File Attachment Configuration', () => {
             expect(attachmentField?.attachmentConfig?.maxCount).toBe(15);
         });
 
+        it('should allow registered options to override provider.getFileAttachmentConfig defaults in metadata', () => {
+            const provider = createMockProvider({
+                enabled: true,
+                maxFileSize: 10 * 1024 * 1024,
+                maxCount: 5,
+            });
+            PluginRegistry.register(provider, 'email-override', 10, {
+                ATTACHMENT_MAX_FILE_SIZE: '50MB',
+                ATTACHMENT_MAX_COUNT: 25,
+            });
+
+            const metadata = PluginRegistry.getPluginMetadata();
+            const providerMeta = metadata.channels.email.providers[0];
+            const attachmentField = providerMeta.contentFields.find((f: FieldDefinition) => f.name === 'attachments');
+
+            expect(attachmentField?.attachmentConfig?.maxFileSize).toBe(50 * 1024 * 1024);
+            expect(attachmentField?.attachmentConfig?.maxCount).toBe(25);
+        });
+
         it('should format clear error messages with provider ID and exact MIME violation in InvalidContentSchemaError', () => {
             const provider = createMockProvider({
                 enabled: true,

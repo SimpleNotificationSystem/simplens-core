@@ -713,6 +713,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                                     return storageStatus?.hasActiveProvider ? (
                                         <FileAttachmentUpload
                                             channel={channel}
+                                            providerId={selectedProviders[channel] || provider.id}
                                             attachments={contentData[channel]?.attachments || []}
                                             onChange={(atts) => updateContentData(channel, "attachments", atts)}
                                             config={attachmentField.attachmentConfig}

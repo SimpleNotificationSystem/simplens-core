@@ -19,6 +19,7 @@ import {
     Database,
     Layers,
     Loader2,
+    Paperclip,
     RefreshCw,
     RotateCcw,
     Save,
@@ -746,27 +747,6 @@ export default function SettingsPage() {
                                         />
                                         <span className="text-[10px] text-muted-foreground">Default: 86,400,000 (24h)</span>
                                     </div>
-
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs">Delivered Attachments Retention (ms)</Label>
-                                        <Input
-                                            type="number"
-                                            min={60000}
-                                            max={2592000000}
-                                            placeholder="Disabled (leave empty to disable retention cleanup)"
-                                            value={settings.recovery.cleanup_delivered_attachments_retention_ms ?? ""}
-                                            onChange={(e) => {
-                                                const raw = e.target.value.trim();
-                                                updateGroupField(
-                                                    "recovery",
-                                                    "cleanup_delivered_attachments_retention_ms",
-                                                    raw === "" ? null : parseInt(raw) || null
-                                                );
-                                            }}
-                                            className="h-9 font-mono text-xs"
-                                        />
-                                        <span className="text-[10px] text-muted-foreground">Default: 86,400,000 (24h). Leave empty to disable retention cleanup.</span>
-                                    </div>
                                 </div>
                             </CardContent>
                         </Card>
@@ -843,6 +823,85 @@ export default function SettingsPage() {
                                                 }
                                             />
                                         </div>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* 6. File Attachment Settings */}
+                        <Card className="shadow-xs border-border/60 md:col-span-2">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                                    <Paperclip className="h-4 w-4 text-emerald-500" />
+                                    File Attachment Settings
+                                </CardTitle>
+                                <CardDescription className="text-xs">
+                                    Global limits for file attachments uploaded directly to active storage providers.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs">Delivered Attachments Retention (ms)</Label>
+                                        <Input
+                                            type="number"
+                                            min={60000}
+                                            max={2592000000}
+                                            placeholder="Disabled (leave empty to disable retention cleanup)"
+                                            value={settings.recovery.cleanup_delivered_attachments_retention_ms ?? ""}
+                                            onChange={(e) => {
+                                                const raw = e.target.value.trim();
+                                                updateGroupField(
+                                                    "recovery",
+                                                    "cleanup_delivered_attachments_retention_ms",
+                                                    raw === "" ? null : parseInt(raw) || null
+                                                );
+                                            }}
+                                            className="h-9 font-mono text-xs"
+                                        />
+                                        <span className="text-[10px] text-muted-foreground">Default: 86,400,000 (24h). Leave empty to disable retention cleanup.</span>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs">Max File Size (Bytes)</Label>
+                                        <Input
+                                            type="number"
+                                            min={1024}
+                                            max={524288000}
+                                            value={settings.attachment?.max_file_size ?? 104857600}
+                                            onChange={(e) =>
+                                                updateGroupField(
+                                                    "attachment",
+                                                    "max_file_size",
+                                                    parseInt(e.target.value) || 0
+                                                )
+                                            }
+                                            className="h-9 font-mono text-xs"
+                                        />
+                                        <span className="text-[10px] text-muted-foreground">
+                                            Default: 104,857,600 (100MB). Current: ~{Math.round(((settings.attachment?.max_file_size ?? 104857600) / (1024 * 1024)) * 10) / 10} MB
+                                        </span>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs">Max File Count per Upload</Label>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            max={50}
+                                            value={settings.attachment?.max_file_count ?? 10}
+                                            onChange={(e) =>
+                                                updateGroupField(
+                                                    "attachment",
+                                                    "max_file_count",
+                                                    parseInt(e.target.value) || 0
+                                                )
+                                            }
+                                            className="h-9 font-mono text-xs"
+                                        />
+                                        <span className="text-[10px] text-muted-foreground">
+                                            Default: 10 files. Maximum attachments allowed per upload request.
+                                        </span>
                                     </div>
                                 </div>
                             </CardContent>

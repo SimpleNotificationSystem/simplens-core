@@ -56,6 +56,10 @@ export const SYSTEM_DEFAULT_OPERATIONAL_SETTINGS: OperationalSettings = {
     log_level: 'info',
     log_to_file: true,
   },
+  attachment: {
+    max_file_size: 100 * 1024 * 1024,
+    max_file_count: 10,
+  },
 };
 
 export class DynamicConfigService extends EventEmitter {
@@ -140,6 +144,7 @@ export class DynamicConfigService extends EventEmitter {
       delayed: { ...this.settings.delayed, ...(newSettings.delayed || {}) },
       recovery: { ...this.settings.recovery, ...(newSettings.recovery || {}) },
       logging: { ...this.settings.logging, ...(newSettings.logging || {}) },
+      attachment: { ...this.settings.attachment, ...(newSettings.attachment || {}) },
     };
 
     const validated = operationalSettingsSchema.parse(merged);

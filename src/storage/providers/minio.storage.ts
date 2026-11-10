@@ -123,18 +123,28 @@ export class MinioStorageProvider implements StorageProvider {
 
             await this.ensureBucket();
 
-            const storageKey = `attachments/${file.hash}/${file.filename}`;
+            const storagePrefix = file.hash ? file.hash : file.fileId;
+            const storageKey = `attachments/${storagePrefix}/${file.filename}`;
             const metadata: Record<string, string> = {
                 'Content-Type': file.mimeType,
                 'X-Amz-Meta-Fileid': file.fileId,
                 'X-Amz-Meta-Filename': encodeURIComponent(file.filename),
-                'X-Amz-Meta-Hash': file.hash,
             };
+            if (file.hash) {
+                metadata['X-Amz-Meta-Hash'] = file.hash;
+            }
 
+            const payload = file.stream || file.buffer;
+            if (!payload) {
+                return { success: false, fileId: file.fileId, error: 'No stream or buffer provided for upload' };
+            }
+
+            // Stream directly into MinIO object storage without disk buffering
             await this.client.putObject(
                 this.config.bucket,
-                storageKey,
-                file.buffer,
+              storageKey,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                payload as unknown as any,
                 file.size,
                 metadata
             );

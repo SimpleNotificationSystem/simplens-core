@@ -358,9 +358,10 @@ export interface StorageUploadInput {
     fileId: string;
     filename: string;
     mimeType: string;
-    size: number;
-    buffer: Buffer;
-    hash: string;
+    stream: NodeJS.ReadableStream;
+    size?: number;
+    buffer?: Buffer;
+    hash?: string;
     metadata?: Record<string, unknown>;
 }
 
@@ -369,7 +370,26 @@ export interface StorageUploadResult {
     fileId: string;
     storageKey?: string;
     url?: string;
+    size?: number;
+    hash?: string;
     error?: string;
+}
+
+export interface UploadFileInput {
+    originalname: string;
+    mimetype: string;
+    stream: NodeJS.ReadableStream;
+    size?: number;
+    buffer?: Buffer;
+    hash?: string;
+    metadata?: Record<string, unknown>;
+}
+
+export interface UploadLockDoc {
+    lock_key: string;
+    locked_by: string;
+    expires_at: Date;
+    created_at?: Date;
 }
 
 export interface StorageDownloadResult {

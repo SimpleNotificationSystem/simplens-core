@@ -9,6 +9,7 @@ import type { StorageProvider } from '@src/types/types.js';
 
 vi.mock('@src/database/models/file-attachment.models.js');
 vi.mock('@src/database/models/storage-provider.models.js');
+vi.mock('@src/database/models/upload-lock.models.js');
 vi.mock('@src/admin-alerts/key-manager.js');
 
 describe('Storage Service', () => {

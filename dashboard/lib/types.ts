@@ -428,6 +428,10 @@ export interface OperationalSettings {
     log_level: 'debug' | 'info' | 'warn' | 'error';
     log_to_file: boolean;
   };
+  attachment?: {
+    max_file_size: number;
+    max_file_count: number;
+  };
 }
 
 export interface AdminAuthStatus {

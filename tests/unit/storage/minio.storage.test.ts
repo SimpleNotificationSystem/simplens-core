@@ -105,7 +105,36 @@ describe('MinIO Storage Provider', () => {
         expect(result.error).toContain('ECONNREFUSED');
     });
 
-    it('should upload file buffer to MinIO bucket', async () => {
+    it('should upload stream directly to MinIO bucket', async () => {
+        const provider = new MinioStorageProvider(validConfig);
+        const { Readable } = await import('stream');
+        const stream = Readable.from(['chunk 1', 'chunk 2']);
+
+        const result = await provider.upload({
+            fileId: 'f-123',
+            filename: 'invoice.pdf',
+            mimeType: 'application/pdf',
+            size: 512,
+            stream,
+            hash: 'hash123',
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.storageKey).toBe('attachments/hash123/invoice.pdf');
+        expect(mockClient.putObject).toHaveBeenCalledWith(
+            'test-bucket',
+            'attachments/hash123/invoice.pdf',
+            stream,
+            512,
+            expect.objectContaining({
+                'Content-Type': 'application/pdf',
+                'X-Amz-Meta-Fileid': 'f-123',
+                'X-Amz-Meta-Hash': 'hash123',
+            })
+        );
+    });
+
+    it('should upload file buffer to MinIO bucket as fallback', async () => {
         const provider = new MinioStorageProvider(validConfig);
 
         const result = await provider.upload({
@@ -113,6 +142,7 @@ describe('MinIO Storage Provider', () => {
             filename: 'invoice.pdf',
             mimeType: 'application/pdf',
             size: 512,
+            stream: null as any,
             buffer: Buffer.from('test data'),
             hash: 'hash123',
         });

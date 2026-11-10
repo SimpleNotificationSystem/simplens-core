@@ -887,6 +887,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                                 return storageStatus?.hasActiveProvider ? (
                                     <FileAttachmentUpload
                                         channel={channel}
+                                        providerId={selectedProviders[channel] || provider.id}
                                         attachments={contentData[channel]?.attachments || []}
                                         onChange={(atts) => updateContentData(channel, "attachments", atts)}
                                         config={attachmentField.attachmentConfig}

@@ -1,8 +1,9 @@
-import type { Request, Response } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import storage_provider_model from '@src/database/models/storage-provider.models.js';
 import { StorageService } from '@src/storage/storage.service.js';
+import { createStreamingStorageEngine } from '@src/storage/streaming-storage-engine.js';
 import {
     getStorageProvider,
     hasStorageProvider,
@@ -15,25 +16,168 @@ import {
     storageProviderUpdateSchema,
 } from '@src/types/schemas.js';
 import { apiLogger as logger } from '@src/workers/utils/logger.js';
+import type { FileAttachmentDoc } from '@src/types/types.js';
 
-// Multer memory storage configuration (default 10MB per file)
-const uploadMiddleware = multer({
-    storage: multer.memoryStorage(),
-    limits: {
-        fileSize: 50 * 1024 * 1024, // 50MB hard limit
-        files: 10,
-    },
-});
+/**
+ * Dynamic streaming file upload middleware.
+ * Enforces preflight active provider check, dynamic size/count limits,
+ * network interruption handling, and direct-to-storage streaming.
+ */
+export const fileUploadMiddleware = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const channel = typeof req.query.channel === 'string' ? req.query.channel : undefined;
+        const provider = typeof req.query.provider === 'string' ? req.query.provider : undefined;
+        const limits = await StorageService.resolveEffectiveLimits(channel, provider);
 
-export const fileUploadMiddleware = uploadMiddleware.any();
+        if (req.headers['content-length'] === '0') {
+            res.status(400).json({
+                success: false,
+                error: 'No files provided in upload request',
+            });
+            return;
+        }
+
+        let aborted = false;
+        const onAbort = () => {
+            aborted = true;
+            logger.warn('Client disconnected or aborted file upload request');
+        };
+        req.on('aborted', onAbort);
+        req.on('close', () => {
+            if (!req.complete) {
+                onAbort();
+            }
+        });
+
+        const upload = multer({
+            storage: createStreamingStorageEngine(),
+            limits: {
+                fileSize: limits.maxFileSize,
+                files: limits.maxCount,
+            },
+            fileFilter: (_req, file, cb) => {
+                if (limits.allowedMimeTypes && limits.allowedMimeTypes.length > 0) {
+                    const allowed = limits.allowedMimeTypes.some((pattern) => {
+                        if (pattern === '*/*' || pattern === '*') return true;
+                        if (pattern.endsWith('/*')) {
+                            return file.mimetype.startsWith(pattern.slice(0, -2));
+                        }
+                        return file.mimetype === pattern;
+                    });
+                    if (!allowed) {
+                        return cb(
+                            new Error(
+                                `File '${file.originalname}' has unsupported MIME type '${file.mimetype}'. Allowed types: ${limits.allowedMimeTypes.join(', ')}`
+                            )
+                        );
+                    }
+                }
+                cb(null, true);
+            },
+        }).any();
+
+        upload(req, res, (err: unknown) => {
+            if (aborted) {
+                res.status(400).json({
+                    success: false,
+                    error: 'Upload aborted by client or network interruption',
+                });
+                return;
+            }
+
+            if (err) {
+                // Drain any unread bytes from incoming request to avoid TCP RST
+                if (!req.complete) {
+                    req.on('data', () => {});
+                    req.resume();
+                }
+
+                // Catch unexpected form termination (e.g. empty multipart form data from client)
+                const isUnexpectedEnd = err instanceof Error && (
+                    err.message.includes('Unexpected end of form') ||
+                    err.message.includes('Unexpected end of multipart data')
+                );
+                if (isUnexpectedEnd) {
+                    res.status(400).json({
+                        success: false,
+                        error: 'No files provided in upload request',
+                    });
+                    return;
+                }
+
+                // Check for file size limit exceeded
+                const isSizeLimit = (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE')
+                    || (err as { code?: string }).code === 'LIMIT_FILE_SIZE'
+                    || (err instanceof Error && (
+                        err.message.includes('File too large') ||
+                        err.message.includes('exceeds maximum size limit') ||
+                        err.message.includes('maxFileSize exceeded')
+                    ));
+
+                if (isSizeLimit) {
+                    const maxMb = Math.floor(limits.maxFileSize / (1024 * 1024));
+                    res.status(400).json({
+                        success: false,
+                        error: `File size exceeds maximum allowed limit of ${maxMb}MB (${limits.maxFileSize} bytes)`,
+                    });
+                    return;
+                }
+
+                // Check for file count limit exceeded
+                const isCountLimit = (err instanceof multer.MulterError && (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE'))
+                    || (err as { code?: string }).code === 'LIMIT_FILE_COUNT'
+                    || (err as { code?: string }).code === 'LIMIT_UNEXPECTED_FILE';
+
+                if (isCountLimit) {
+                    res.status(400).json({
+                        success: false,
+                        error: `Cannot upload more than ${limits.maxCount} files per request`,
+                    });
+                    return;
+                }
+
+                if (err instanceof multer.MulterError) {
+                    res.status(400).json({
+                        success: false,
+                        error: err.message,
+                    });
+                    return;
+                }
+
+                const errMsg = err instanceof Error ? err.message : 'File upload failed';
+                if (!errMsg.includes('unsupported MIME type') && !errMsg.includes('No active storage provider')) {
+                    logger.error('File upload failed:', err);
+                }
+
+                res.status(400).json({
+                    success: false,
+                    error: errMsg,
+                });
+                return;
+            }
+
+            next();
+        });
+    } catch (err) {
+        logger.error('Error in file upload middleware:', err);
+        res.status(500).json({
+            success: false,
+            error: err instanceof Error ? err.message : 'Internal error initializing file upload',
+        });
+    }
+};
 
 /**
  * POST /api/file/upload
- * Accepts multipart/form-data with one or multiple files
+ * Returns metadata of files that have been directly streamed and persisted
  */
 export const uploadFiles = async (req: Request, res: Response): Promise<void> => {
     try {
-        const files = req.files as Express.Multer.File[] | undefined;
+        const files = req.files as Array<Express.Multer.File & { attachmentDoc?: FileAttachmentDoc }> | undefined;
         if (!files || files.length === 0) {
             res.status(400).json({
                 success: false,
@@ -42,41 +186,25 @@ export const uploadFiles = async (req: Request, res: Response): Promise<void> =>
             return;
         }
 
-        const hasActive = await StorageService.hasActiveProvider();
-        if (!hasActive) {
-            res.status(400).json({
-                success: false,
-                error: 'No active storage provider configured. Enable at most one active storage provider to attach files.',
-            });
-            return;
-        }
-
-        const uploadedAttachments = [];
-        for (const file of files) {
-            const saved = await StorageService.saveFile({
-                originalname: file.originalname,
-                mimetype: file.mimetype,
-                size: file.size,
-                buffer: file.buffer,
-            });
-
-            uploadedAttachments.push({
-                id: saved.file_id,
-                filename: saved.filename,
-                mime_type: saved.mime_type,
-                size: saved.size,
-                hash: saved.hash,
-                url: saved.url,
-                created_at: saved.created_at,
-            });
-        }
+        const uploadedAttachments = files.map((file) => {
+            const doc = file.attachmentDoc;
+            return {
+                id: doc?.file_id,
+                filename: doc?.filename || file.originalname,
+                mime_type: doc?.mime_type || file.mimetype,
+                size: doc?.size ?? file.size ?? 0,
+                hash: doc?.hash,
+                url: doc?.url,
+                created_at: doc?.created_at,
+            };
+        });
 
         res.status(200).json({
             success: true,
             files: uploadedAttachments,
         });
     } catch (err) {
-        logger.error('Failed to process file upload:', err);
+        logger.error('Failed to process file upload response:', err);
         res.status(500).json({
             success: false,
             error: err instanceof Error ? err.message : 'Internal server error during file upload',

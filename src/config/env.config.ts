@@ -148,6 +148,16 @@ export const env = {
     get CLEANUP_PROCESSED_STATUS_OUTBOX_RETENTION_MS(): number {
         return dynamicConfig?.get?.('recovery')?.cleanup_processed_status_outbox_retention_ms ?? 86400000;
     },
+
+    // Logging
+    get LOG_LEVEL(): string {
+        return dynamicConfig?.get?.('logging')?.log_level ?? (process.env.LOG_LEVEL || 'info');
+    },
+    get LOG_TO_FILE(): boolean {
+        return dynamicConfig?.get?.('logging')?.log_to_file ?? (process.env.LOG_TO_FILE === 'true');
+    },
+
+    // File Attachments & Upload Limits
     get CLEANUP_DELIVERED_ATTACHMENTS_RETENTION_MS(): number | null {
         const val = dynamicConfig?.get?.('recovery')?.cleanup_delivered_attachments_retention_ms;
         if (val === null || val === undefined || val === 0 || Number.isNaN(val)) {
@@ -156,11 +166,10 @@ export const env = {
         return val;
     },
 
-    // Logging
-    get LOG_LEVEL(): string {
-        return dynamicConfig?.get?.('logging')?.log_level ?? (process.env.LOG_LEVEL || 'info');
+    get SIMPLENS_MAX_FILE_SIZE(): number {
+        return dynamicConfig?.get?.('attachment')?.max_file_size ?? 100 * 1024 * 1024;
     },
-    get LOG_TO_FILE(): boolean {
-        return dynamicConfig?.get?.('logging')?.log_to_file ?? (process.env.LOG_TO_FILE === 'true');
+    get SIMPLENS_MAX_FILE_COUNT(): number {
+        return dynamicConfig?.get?.('attachment')?.max_file_count ?? 10;
     },
 };

@@ -12,6 +12,7 @@ import { formatBytes } from "@/lib/utils";
 
 interface FileAttachmentUploadProps {
     channel: string;
+    providerId?: string;
     attachments?: FileAttachmentItem[];
     onChange: (attachments: FileAttachmentItem[]) => void;
     config?: FileAttachmentConfig;
@@ -19,6 +20,8 @@ interface FileAttachmentUploadProps {
 }
 
 export function FileAttachmentUpload({
+    channel,
+    providerId,
     attachments = [],
     onChange,
     config,
@@ -29,7 +32,7 @@ export function FileAttachmentUpload({
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const maxCount = config?.maxCount || 10;
-    const maxFileSize = config?.maxFileSize || 50 * 1024 * 1024; // 50MB default
+    const maxFileSize = config?.maxFileSize || 100 * 1024 * 1024; // 100MB default
 
     const handleFiles = async (files: FileList | File[]) => {
         const fileList = Array.from(files);
@@ -54,7 +57,10 @@ export function FileAttachmentUpload({
                 formData.append("files", file);
             });
 
-            const res = await fileService.upload(formData);
+            const res = await fileService.upload(formData, {
+                channel,
+                provider: providerId,
+            });
             if (res.success && res.files) {
                 const updated = [...attachments, ...res.files];
                 onChange(updated);
