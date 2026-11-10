@@ -154,7 +154,7 @@ export class StorageService {
     }
 
     /**
-     * Get a storage provider instance by MongoDB _id (checks active provider first, then inactive providers)
+     * Get a storage provider instance by MongoDB _id (checks active provider first, then enabled inactive providers)
      */
     static async getProviderById(providerId: string): Promise<{
         provider: StorageProvider;
@@ -167,7 +167,8 @@ export class StorageService {
             }
 
             const doc = await storage_provider_model.findById(providerId);
-            if (!doc) {
+            if (!doc || !doc.enabled) {
+                logger.warn(`Storage provider with ID '${providerId}' not found or is disabled`);
                 return null;
             }
 
@@ -189,7 +190,7 @@ export class StorageService {
     }
 
     /**
-     * Get a storage provider instance by type (checks active provider first, then configured inactive providers)
+     * Get a storage provider instance by type (checks active provider first, then configured enabled inactive providers)
      */
     static async getProviderByType(providerType: string): Promise<{
         provider: StorageProvider;
@@ -204,8 +205,6 @@ export class StorageService {
             const doc = await storage_provider_model.findOne({
                 provider_type: providerType,
                 enabled: true,
-            }) || await storage_provider_model.findOne({
-                provider_type: providerType,
             });
 
             if (!doc) {
@@ -249,7 +248,7 @@ export class StorageService {
             if (byType) return byType;
         }
 
-        return StorageService.getActiveProvider();
+        return null;
     }
 
     /**
@@ -278,19 +277,19 @@ export class StorageService {
             file.hash = StorageService.computeHash(file.buffer);
         }
 
-        // Fast-path deduplication check if hash is already known
-        if (file.hash) {
+        // Fast-path deduplication check if hash is already known for this active provider instance
+        if (file.hash && active.doc._id) {
             const query = file_attachment_model.findOne({
                 hash: file.hash,
                 filename: file.originalname,
-                storage_provider: active.doc.provider_type,
+                storage_provider_id: String(active.doc._id),
             });
             const existing = typeof (query as unknown as { lean?: () => Promise<FileAttachmentDoc | null> })?.lean === 'function'
                 ? await (query as unknown as { lean: () => Promise<FileAttachmentDoc | null> }).lean()
                 : await (query as unknown as Promise<FileAttachmentDoc | null>);
 
             if (existing) {
-                logger.info(`Deduplicated file upload by SHA-256 hash (${file.hash}), returning existing attachment: ${existing.file_id}`);
+                logger.info(`Deduplicated file upload by SHA-256 hash (${file.hash}) in active provider ${active.doc._id}, returning existing attachment: ${existing.file_id}`);
                 return existing;
             }
         }
@@ -356,23 +355,23 @@ export class StorageService {
         const computedHash = file.hash || meteringStream.calculatedHash;
         const computedSize = meteringStream.bytesCount || file.size || uploadResult.size || 0;
 
-        // Acquire distributed upload lock to serialize concurrent uploads with identical hash
-        const lockKey = `upload_lock:${active.doc.provider_type}:${computedHash}:${file.originalname}`;
+        // Acquire distributed upload lock to serialize concurrent uploads with identical hash for the active provider
+        const lockKey = `upload_lock:${active.doc._id}:${computedHash}:${file.originalname}`;
         const lockAcquired = await UploadLockService.acquireWithWait(lockKey, fileId, 10000, 100);
 
         try {
-            // Check if another client concurrently completed saving this exact file
+            // Check if another client concurrently completed saving this exact file to this active provider
             const duplicateQuery = file_attachment_model.findOne({
                 hash: computedHash,
                 filename: file.originalname,
-                storage_provider: active.doc.provider_type,
+                storage_provider_id: String(active.doc._id),
             });
             const existingAfterUpload = typeof (duplicateQuery as unknown as { lean?: () => Promise<FileAttachmentDoc | null> })?.lean === 'function'
                 ? await (duplicateQuery as unknown as { lean: () => Promise<FileAttachmentDoc | null> }).lean()
                 : await (duplicateQuery as unknown as Promise<FileAttachmentDoc | null>);
 
             if (existingAfterUpload) {
-                logger.info(`Deduplicated concurrent file upload by SHA-256 hash (${computedHash}), returning existing attachment: ${existingAfterUpload.file_id}`);
+                logger.info(`Deduplicated concurrent file upload by SHA-256 hash (${computedHash}) in active provider ${active.doc._id}, returning existing attachment: ${existingAfterUpload.file_id}`);
 
                 // Best-effort cleanup of newly uploaded duplicate blob from storage provider
                 try {
@@ -425,6 +424,7 @@ export class StorageService {
     static async downloadFile(fileId: string): Promise<{
         attachment: FileAttachmentDoc;
         download: StorageDownloadResult;
+        provider: StorageProvider;
     }> {
         const attachment = await file_attachment_model.findOne({ file_id: fileId }).lean<FileAttachmentDoc | null>();
         if (!attachment) {
@@ -433,7 +433,7 @@ export class StorageService {
 
         const providerInstance = await StorageService.getProviderForAttachment(attachment);
         if (!providerInstance) {
-            throw new Error(`No storage provider available to retrieve file '${fileId}'`);
+            throw new Error(`No storage provider available to retrieve file '${fileId}' (provider may be disabled or not configured)`);
         }
 
         const download = await providerInstance.provider.download(fileId, attachment.storage_key);
@@ -441,7 +441,7 @@ export class StorageService {
             throw new Error(download.error || 'Failed to download file from storage provider');
         }
 
-        return { attachment, download };
+        return { attachment, download, provider: providerInstance.provider };
     }
 
     /**
@@ -461,8 +461,8 @@ export class StorageService {
             const providerInstance = await StorageService.getProviderForAttachment(attachment);
             if (!providerInstance) {
                 const targetRef = attachment.storage_provider_id || providerType;
-                logger.warn(`Storage provider '${targetRef}' for file '${fileId}' is not configured in database. Deferring deletion.`);
-                throw new Error(`Storage provider '${targetRef}' not configured in database. Cannot delete physical file.`);
+                logger.warn(`Storage provider '${targetRef}' for file '${fileId}' is not configured or is disabled. Deferring deletion.`);
+                throw new Error(`Storage provider '${targetRef}' not configured or is disabled. Cannot delete physical file.`);
             }
 
             const deleteResult = await providerInstance.provider.delete(fileId, attachment.storage_key);

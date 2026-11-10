@@ -521,34 +521,10 @@ describe('File Attachments Resolution & Sanitization in Unified Consumer', () =>
         expect(result.success).toBe(true);
     });
 
-    it('should fail with NO_ACTIVE_STORAGE_PROVIDER if attachments exist but no active storage provider is available', async () => {
-        const { resolveNotificationAttachments } = await import('../../../src/processors/unified/unified.consumer.js');
-        getActiveProviderMock.mockResolvedValueOnce(null);
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = await resolveNotificationAttachments({
-            content: {
-                attachments: [{ id: 'file-123', filename: 'invoice.pdf' }],
-            },
-        } as any);
-
-        expect(result.success).toBe(false);
-        expect(result.error?.code).toBe('NO_ACTIVE_STORAGE_PROVIDER');
-        expect(result.error?.retryable).toBe(false);
-    });
-
-    it('should resolve and enrich attachments using active storage provider', async () => {
+    it('should resolve attachments even when no storage provider is currently active', async () => {
         const { resolveNotificationAttachments } = await import('../../../src/processors/unified/unified.consumer.js');
         const mockBuffer = Buffer.from('pdf-content');
         const mockStream = { readable: true };
-
-        getActiveProviderMock.mockResolvedValueOnce({
-            provider: {
-                providerType: 'minio',
-                getUrl: vi.fn().mockResolvedValue('https://storage.local/presigned-url'),
-            },
-            doc: { provider_type: 'minio' },
-        });
 
         downloadFileMock.mockResolvedValueOnce({
             attachment: {
@@ -563,6 +539,46 @@ describe('File Attachments Resolution & Sanitization in Unified Consumer', () =>
                 success: true,
                 buffer: mockBuffer,
                 stream: mockStream,
+            },
+            provider: {
+                providerType: 'minio',
+                getUrl: vi.fn().mockResolvedValue('https://storage.local/presigned-url'),
+            },
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result = await resolveNotificationAttachments({
+            content: {
+                attachments: [{ id: 'file-123', filename: 'invoice.pdf' }],
+            },
+        } as any);
+
+        expect(result.success).toBe(true);
+    });
+
+    it('should resolve and enrich attachments using the attachment specific provider', async () => {
+        const { resolveNotificationAttachments } = await import('../../../src/processors/unified/unified.consumer.js');
+        const mockBuffer = Buffer.from('pdf-content');
+        const mockStream = { readable: true };
+        const mockGetUrl = vi.fn().mockResolvedValue('https://storage.local/presigned-url');
+
+        downloadFileMock.mockResolvedValueOnce({
+            attachment: {
+                file_id: 'file-123',
+                filename: 'invoice.pdf',
+                mime_type: 'application/pdf',
+                size: 11,
+                hash: 'sha256-dummy',
+                storage_key: 'file-123',
+            },
+            download: {
+                success: true,
+                buffer: mockBuffer,
+                stream: mockStream,
+            },
+            provider: {
+                providerType: 'minio',
+                getUrl: mockGetUrl,
             },
         });
 
@@ -589,16 +605,13 @@ describe('File Attachments Resolution & Sanitization in Unified Consumer', () =>
         expect(resolved.size).toBe(11);
         expect(resolved.hash).toBe('sha256-dummy');
         expect(resolved.url).toBe('https://storage.local/presigned-url');
+        expect(mockGetUrl).toHaveBeenCalledWith('file-123', { expiresInSeconds: 86400 }, 'file-123');
     });
 
-    it('should identify ATTACHMENT_NOT_FOUND as non-retryable error', async () => {
+    it('should identify attachment read failure as retryable error so notification is retried', async () => {
         const { resolveNotificationAttachments } = await import('../../../src/processors/unified/unified.consumer.js');
-        getActiveProviderMock.mockResolvedValueOnce({
-            provider: { providerType: 'minio' },
-            doc: { provider_type: 'minio' },
-        });
 
-        downloadFileMock.mockRejectedValueOnce(new Error('File not found: file-unknown'));
+        downloadFileMock.mockRejectedValueOnce(new Error('File not found or provider disabled: file-unknown'));
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const result = await resolveNotificationAttachments({
@@ -608,16 +621,12 @@ describe('File Attachments Resolution & Sanitization in Unified Consumer', () =>
         } as any);
 
         expect(result.success).toBe(false);
-        expect(result.error?.code).toBe('ATTACHMENT_NOT_FOUND');
-        expect(result.error?.retryable).toBe(false);
+        expect(result.error?.code).toBe('ATTACHMENT_DOWNLOAD_FAILED');
+        expect(result.error?.retryable).toBe(true);
     });
 
-    it('should identify download failure as retryable error on network/storage outage', async () => {
+    it('should identify storage connection outage as retryable error', async () => {
         const { resolveNotificationAttachments } = await import('../../../src/processors/unified/unified.consumer.js');
-        getActiveProviderMock.mockResolvedValueOnce({
-            provider: { providerType: 'minio' },
-            doc: { provider_type: 'minio' },
-        });
 
         downloadFileMock.mockRejectedValueOnce(new Error('MinIO connection refused'));
 

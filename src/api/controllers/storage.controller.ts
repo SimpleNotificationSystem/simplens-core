@@ -442,7 +442,8 @@ export const createStorageProvider = async (req: Request, res: Response): Promis
         const encryptionKey = await getOrCreateEncryptionKey();
         const encryptedConfig = encrypt(JSON.stringify(config), encryptionKey);
 
-        // Enforce single active provider: if this one is active, demote all others
+        // Enforce single active provider: if this one is active, demote all others and ensure enabled
+        const effectiveEnabled = is_active ? true : (enabled !== undefined ? enabled : true);
         if (is_active) {
             await storage_provider_model.updateMany({}, { is_active: false });
         }
@@ -450,7 +451,7 @@ export const createStorageProvider = async (req: Request, res: Response): Promis
         const newProvider = await storage_provider_model.create({
             name,
             provider_type,
-            enabled,
+            enabled: effectiveEnabled,
             is_active,
             config: encryptedConfig,
         });

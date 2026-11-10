@@ -153,18 +153,6 @@ export const resolveNotificationAttachments = async (
         return { success: true };
     }
 
-    const activeStorage = await StorageService.getActiveProvider();
-    if (!activeStorage) {
-        return {
-            success: false,
-            error: {
-                code: 'NO_ACTIVE_STORAGE_PROVIDER',
-                message: 'Notification contains file attachments, but no storage provider is currently active',
-                retryable: false,
-            },
-        };
-    }
-
     for (const item of rawAttachments as FileAttachmentItem[]) {
         if (!item || typeof item !== 'object' || !item.id) {
             continue;
@@ -176,7 +164,7 @@ export const resolveNotificationAttachments = async (
         }
 
         try {
-            const { attachment: doc, download } = await StorageService.downloadFile(item.id);
+            const { attachment: doc, download, provider } = await StorageService.downloadFile(item.id);
 
             item.buffer = download.buffer;
             item.stream = download.stream;
@@ -188,9 +176,9 @@ export const resolveNotificationAttachments = async (
             if (!item.url) {
                 if (doc.url) {
                     item.url = doc.url;
-                } else if (typeof activeStorage.provider.getUrl === 'function') {
+                } else if (typeof provider.getUrl === 'function') {
                     try {
-                        item.url = await activeStorage.provider.getUrl(
+                        item.url = await provider.getUrl(
                             item.id,
                             { expiresInSeconds: 86400 },
                             doc.storage_key
@@ -202,13 +190,12 @@ export const resolveNotificationAttachments = async (
             }
         } catch (err: unknown) {
             const errMsg = err instanceof Error ? err.message : String(err);
-            const isNotFound = errMsg.toLowerCase().includes('not found');
             return {
                 success: false,
                 error: {
-                    code: isNotFound ? 'ATTACHMENT_NOT_FOUND' : 'ATTACHMENT_DOWNLOAD_FAILED',
+                    code: 'ATTACHMENT_DOWNLOAD_FAILED',
                     message: `Failed to resolve file attachment '${item.filename || item.id}': ${errMsg}`,
-                    retryable: !isNotFound,
+                    retryable: true,
                 },
             };
         }

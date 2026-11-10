@@ -222,6 +222,85 @@ describe('Storage Service', () => {
             expect(result.file_id).toBe('existing-uuid-123');
         });
 
+        it('should not deduplicate across different storage providers (scopes deduplication to active provider ID)', async () => {
+            vi.mocked(getOrCreateEncryptionKey).mockResolvedValue(mockKey);
+
+            const rawConfig = { bucket: 'attachments-bucket-2' };
+            const encryptedConfig = encrypt(JSON.stringify(rawConfig), mockKey);
+
+            // Active provider is provider-2
+            vi.mocked(storage_provider_model.findOne).mockResolvedValue({
+                _id: 'provider-2',
+                name: 'Secondary MinIO',
+                provider_type: 'minio',
+                is_active: true,
+                enabled: true,
+                config: encryptedConfig,
+            } as never);
+
+            const mockUpload = vi.fn().mockResolvedValue({
+                success: true,
+                storageKey: 'attachments/prov2-file-uuid',
+                size: 1024,
+            });
+            const mockProvider: StorageProvider = {
+                providerType: 'minio',
+                displayName: 'MinIO Provider',
+                upload: mockUpload,
+                download: vi.fn(),
+                delete: vi.fn(),
+                exists: vi.fn(),
+                testConnection: vi.fn(),
+                getCredentialSchema: vi.fn().mockReturnValue([]),
+            };
+
+            registerStorageProvider('minio', () => mockProvider);
+
+            // Mock findOne to check that duplicate query strictly looks for storage_provider_id: 'provider-2'
+            // If the query is for 'provider-2', it returns null (not yet uploaded to provider-2)
+            vi.mocked(file_attachment_model.findOne).mockImplementation(((query: any) => {
+                if (query?.storage_provider_id === 'provider-2') {
+                    return { lean: vi.fn().mockResolvedValue(null) };
+                }
+                // Pretend provider-1 already had this file
+                if (query?.storage_provider_id === 'provider-1') {
+                    return {
+                        lean: vi.fn().mockResolvedValue({
+                            file_id: 'existing-prov1-doc',
+                            storage_provider_id: 'provider-1',
+                        }),
+                    };
+                }
+                return { lean: vi.fn().mockResolvedValue(null) };
+            }) as never);
+
+            const mockCreatedDoc = {
+                toObject: () => ({
+                    file_id: 'new-prov2-uuid',
+                    filename: 'report.pdf',
+                    mime_type: 'application/pdf',
+                    size: 1024,
+                    hash: StorageService.computeHash(Buffer.from('PDF Content Data')),
+                    storage_provider: 'minio',
+                    storage_provider_id: 'provider-2',
+                    storage_key: 'attachments/prov2-file-uuid',
+                }),
+            };
+            vi.mocked(file_attachment_model.create).mockResolvedValue(mockCreatedDoc as never);
+
+            const result = await StorageService.saveFile({
+                originalname: 'report.pdf',
+                mimetype: 'application/pdf',
+                size: 1024,
+                buffer: Buffer.from('PDF Content Data'),
+            });
+
+            // Must upload to provider-2 because duplicate was on provider-1, not provider-2
+            expect(mockUpload).toHaveBeenCalledOnce();
+            expect(result.file_id).toBe('new-prov2-uuid');
+            expect(result.storage_provider_id).toBe('provider-2');
+        });
+
         it('should clean up newly streamed file from storage when post-upload duplicate is detected', async () => {
             const { Readable } = await import('stream');
 
@@ -596,7 +675,40 @@ describe('Storage Service', () => {
 
             const result = await StorageService.downloadFile('gcs-file-id');
             expect(result.download.success).toBe(true);
+            expect(result.provider).toBe(mockGcsProvider);
             expect(mockGcsDownload).toHaveBeenCalledWith('gcs-file-id', 'attachments/photo.png');
+        });
+
+        it('should fail download if the attachment provider is disabled (enabled: false)', async () => {
+            vi.mocked(getOrCreateEncryptionKey).mockResolvedValue(mockKey);
+
+            const rawConfig = { bucket: 'disabled-bucket' };
+            const encryptedConfig = encrypt(JSON.stringify(rawConfig), mockKey);
+
+            const disabledProviderDoc = {
+                _id: 'provider-disabled-id',
+                name: 'Disabled S3',
+                provider_type: 's3',
+                is_active: false,
+                enabled: false, // Disabled!
+                config: encryptedConfig,
+            };
+
+            vi.mocked(storage_provider_model.findById).mockResolvedValue(disabledProviderDoc as never);
+
+            vi.mocked(file_attachment_model.findOne).mockReturnValue({
+                lean: vi.fn().mockResolvedValue({
+                    file_id: 'disabled-file-id',
+                    filename: 'doc.pdf',
+                    storage_provider: 's3',
+                    storage_provider_id: 'provider-disabled-id',
+                    storage_key: 'attachments/doc.pdf',
+                }),
+            } as never);
+
+            await expect(StorageService.downloadFile('disabled-file-id')).rejects.toThrow(
+                /No storage provider available to retrieve file 'disabled-file-id'/
+            );
         });
     });
 });

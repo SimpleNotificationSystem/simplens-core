@@ -65,9 +65,9 @@ const file_attachment_schema = new mongoose.Schema<FileAttachmentDoc>(
     }
 );
 
-// Compound unique index to guarantee no duplicate attachments per hash, filename, and provider
+// Compound unique index to guarantee no duplicate attachments per hash, filename, and provider instance
 file_attachment_schema.index(
-    { hash: 1, filename: 1, storage_provider: 1 },
+    { hash: 1, filename: 1, storage_provider_id: 1 },
     { unique: true, sparse: true }
 );
 
