@@ -188,7 +188,7 @@ export default function SettingsPage() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <span className="text-xs text-muted-foreground">Dashboard Version</span>
+                            <span className="text-xs text-muted-foreground">SimpleNS Version</span>
                             <Badge variant="secondary">{packageJson.version}</Badge>
                         </div>
                         <Separator />
@@ -198,13 +198,6 @@ export default function SettingsPage() {
                                 {process.env.NODE_ENV === "production" ? "Production" : "Development"}
                             </Badge>
                         </div>
-                        <Separator />
-                        <div className="flex items-center justify-between">
-                            <span className="text-xs text-muted-foreground">Configuration Store</span>
-                            <span className="text-xs font-mono text-foreground font-medium">
-                                MongoDB (system_configs) & Redis Pub/Sub
-                            </span>
-                        </div>
                     </CardContent>
                 </Card>
 
@@ -213,83 +206,41 @@ export default function SettingsPage() {
                     <button
                         type="button"
                         onClick={() => setShowAdvanced(!showAdvanced)}
-                        className="w-full flex items-center justify-between p-5 text-left hover:bg-muted/40 transition-colors cursor-pointer"
+                        className="w-full flex-row items-center justify-between p-5 text-left hover:bg-muted/40 transition-colors cursor-pointer"
                     >
-                        <div className="flex items-center gap-3.5">
-                            <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                                <Sliders className="h-5 w-5" />
-                            </div>
-                            <div>
+                        <div className="w-full flex items-center justify-between">
+                            <div className="flex items-center gap-3.5">
+                                <Sliders className="h-4 w-4 text-blue-500" />
+
                                 <div className="flex items-center gap-2.5">
-                                    <h3 className="text-base font-bold text-foreground">Advanced Settings</h3>
-                                    <Badge variant="outline" className="text-[10px] uppercase font-mono tracking-wider">
-                                        Operational Config
-                                    </Badge>
+                                    <h3 className="text-base font-bold text-foreground">Advanced Settings
+                                    {hasChanges && (
+                                        <Badge variant="secondary" className="text-[10px] text-amber-500 bg-amber-500/10 border-amber-500/20 font-medium ml-2">
+                                            Unsaved Changes
+                                        </Badge>
+                                    )}
+                                    </h3>
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                    Fine-tune live engine parameters for workers, retries, delayed pollers, and telemetry with zero downtime.
-                                </p>
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                                <span className="text-xs font-medium text-muted-foreground hidden sm:inline">
+                                    {showAdvanced ? "Hide settings" : "Show settings"}
+                                </span>
+                                <ChevronDown
+                                    className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${
+                                        showAdvanced ? "rotate-180 text-primary" : ""
+                                    }`}
+                                />
                             </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                            <span className="text-xs font-medium text-muted-foreground hidden sm:inline">
-                                {showAdvanced ? "Hide settings" : "Show settings"}
-                            </span>
-                            <ChevronDown
-                                className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${
-                                    showAdvanced ? "rotate-180 text-primary" : ""
-                                }`}
-                            />
-                        </div>
+                        <p className="text-xs text-muted-foreground mt-1.5">
+                            Fine-tune live engine parameters for workers, retries, delayed pollers, and telemetry with zero downtime
+                        </p>
                     </button>
 
                     {showAdvanced && (
-                        <div className="p-6 pt-3 border-t border-border/60 space-y-6">
-                            {/* Action Bar inside Advanced Settings */}
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border/60 pb-5">
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <h4 className="text-sm font-semibold text-foreground">Live Engine Tuning</h4>
-                                        {hasChanges && (
-                                            <Badge variant="secondary" className="text-[10px] text-amber-500 bg-amber-500/10 border-amber-500/20 font-medium">
-                                                Unsaved Changes
-                                            </Badge>
-                                        )}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground mt-0.5">
-                                        Changes synchronize immediately across all running containers without service restarts.
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-2.5">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={handleReset}
-                                        disabled={isLoading || isSaving || isResetting}
-                                        className="gap-1.5 text-xs h-9"
-                                    >
-                                        {isResetting ? (
-                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                        ) : (
-                                            <RotateCcw className="h-3.5 w-3.5" />
-                                        )}
-                                        Reset Defaults
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        onClick={handleSave}
-                                        disabled={isLoading || isSaving || isResetting || !hasChanges}
-                                        className="gap-1.5 text-xs h-9 font-semibold"
-                                    >
-                                        {isSaving ? (
-                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                        ) : (
-                                            <Save className="h-3.5 w-3.5" />
-                                        )}
-                                        Save Changes
-                                    </Button>
-                                </div>
-                            </div>
+                        <div className="p-6 pt-3 border-border/60 space-y-6">
 
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center py-20 gap-3">
@@ -907,7 +858,41 @@ export default function SettingsPage() {
                             </CardContent>
                         </Card>
                     </div>
-                )}
+                            )}
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-5">
+                                <div>
+
+                                </div>
+                                <div className="flex items-center gap-2.5">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleReset}
+                                        disabled={isLoading || isSaving || isResetting}
+                                        className="gap-1.5 text-xs h-9"
+                                    >
+                                        {isResetting ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        ) : (
+                                            <RotateCcw className="h-3.5 w-3.5" />
+                                        )}
+                                        Reset Defaults
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        onClick={handleSave}
+                                        disabled={isLoading || isSaving || isResetting || !hasChanges}
+                                        className="gap-1.5 text-xs h-9 font-semibold"
+                                    >
+                                        {isSaving ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        ) : (
+                                            <Save className="h-3.5 w-3.5" />
+                                        )}
+                                        Save Changes
+                                    </Button>
+                                </div>
+                            </div>
                         </div>
                     )}
                 </div>

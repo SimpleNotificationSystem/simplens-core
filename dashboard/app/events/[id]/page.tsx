@@ -362,7 +362,9 @@ export default function EventDetailPage({ params }: PageProps) {
                                                 const fileId = att.fileId || att.id;
                                                 const filename = att.filename || att.name || (fileId ? `file-${fileId.slice(0, 8)}` : `attachment-${idx + 1}`);
                                                 const mimeType = att.contentType || att.mime_type;
-                                                const downloadUrl = fileId ? withBasePath(`/api/file/${fileId}/download`) : undefined;
+                                                const downloadUrl = fileId
+                                                    ? withBasePath(`/api/file/${fileId}/download?filename=${encodeURIComponent(filename)}`)
+                                                    : undefined;
 
                                                 return (
                                                     <div
@@ -400,7 +402,6 @@ export default function EventDetailPage({ params }: PageProps) {
                                                                     href={downloadUrl}
                                                                     target="_blank"
                                                                     rel="noreferrer"
-                                                                    download={filename}
                                                                 >
                                                                     <Download className="h-3.5 w-3.5 mr-1" />
                                                                     Download

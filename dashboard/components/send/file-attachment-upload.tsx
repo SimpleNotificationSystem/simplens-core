@@ -32,7 +32,7 @@ export function FileAttachmentUpload({
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const maxCount = config?.maxCount || 10;
-    const maxFileSize = config?.maxFileSize || 100 * 1024 * 1024; // 100MB default
+    const maxFileSize = 10 * 1024 * 1024; // 10MB default for next.js proxy
 
     const handleFiles = async (files: FileList | File[]) => {
         const fileList = Array.from(files);
@@ -45,7 +45,7 @@ export function FileAttachmentUpload({
 
         for (const file of fileList) {
             if (file.size > maxFileSize) {
-                toast.error(`File '${file.name}' exceeds the maximum size limit of ${formatBytes(maxFileSize)}`);
+                toast.error(`File '${file.name}' exceeds the maximum dashboard file size limit of ${formatBytes(maxFileSize)}`);
                 return;
             }
         }
