@@ -39,6 +39,11 @@ const file_attachment_schema = new mongoose.Schema<FileAttachmentDoc>(
             required: false,
             index: true,
         },
+        storage_provider_id: {
+            type: String,
+            required: false,
+            index: true,
+        },
         storage_key: {
             type: String,
             required: false,

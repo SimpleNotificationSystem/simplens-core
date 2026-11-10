@@ -378,7 +378,7 @@ export interface StorageUploadResult {
 export interface UploadFileInput {
     originalname: string;
     mimetype: string;
-    stream: NodeJS.ReadableStream;
+    stream?: NodeJS.ReadableStream;
     size?: number;
     buffer?: Buffer;
     hash?: string;
@@ -440,6 +440,7 @@ export interface FileAttachmentDoc {
     size: number;
     hash: string;
     storage_provider?: string;
+    storage_provider_id?: string;
     storage_key?: string;
     url?: string;
     metadata?: Record<string, unknown>;

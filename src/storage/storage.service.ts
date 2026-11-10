@@ -154,6 +154,105 @@ export class StorageService {
     }
 
     /**
+     * Get a storage provider instance by MongoDB _id (checks active provider first, then inactive providers)
+     */
+    static async getProviderById(providerId: string): Promise<{
+        provider: StorageProvider;
+        doc: StorageProviderDoc;
+    } | null> {
+        try {
+            const active = await StorageService.getActiveProvider();
+            if (active && String(active.doc._id) === String(providerId)) {
+                return active;
+            }
+
+            const doc = await storage_provider_model.findById(providerId);
+            if (!doc) {
+                return null;
+            }
+
+            if (!hasStorageProvider(doc.provider_type)) {
+                logger.warn(`Storage provider type '${doc.provider_type}' is not registered`);
+                return null;
+            }
+
+            const encryptionKey = await getOrCreateEncryptionKey();
+            const decryptedConfig = decrypt(doc.config, encryptionKey);
+            const parsedConfig = JSON.parse(decryptedConfig);
+
+            const provider = getStorageProvider(doc.provider_type, parsedConfig);
+            return { provider, doc };
+        } catch (err) {
+            logger.error(`Failed to load storage provider by ID '${providerId}':`, err);
+            return null;
+        }
+    }
+
+    /**
+     * Get a storage provider instance by type (checks active provider first, then configured inactive providers)
+     */
+    static async getProviderByType(providerType: string): Promise<{
+        provider: StorageProvider;
+        doc: StorageProviderDoc;
+    } | null> {
+        try {
+            const active = await StorageService.getActiveProvider();
+            if (active && active.doc.provider_type === providerType) {
+                return active;
+            }
+
+            const doc = await storage_provider_model.findOne({
+                provider_type: providerType,
+                enabled: true,
+            }) || await storage_provider_model.findOne({
+                provider_type: providerType,
+            });
+
+            if (!doc) {
+                return null;
+            }
+
+            if (!hasStorageProvider(doc.provider_type)) {
+                logger.warn(`Storage provider type '${doc.provider_type}' is not registered`);
+                return null;
+            }
+
+            const encryptionKey = await getOrCreateEncryptionKey();
+            const decryptedConfig = decrypt(doc.config, encryptionKey);
+            const parsedConfig = JSON.parse(decryptedConfig);
+
+            const provider = getStorageProvider(doc.provider_type, parsedConfig);
+            return { provider, doc };
+        } catch (err) {
+            logger.error(`Failed to load storage provider for type '${providerType}':`, err);
+            return null;
+        }
+    }
+
+    /**
+     * Resolve a storage provider instance for a file attachment (using storage_provider_id first, falling back to storage_provider type)
+     */
+    static async getProviderForAttachment(attachment: {
+        storage_provider_id?: string;
+        storage_provider?: string;
+    }): Promise<{
+        provider: StorageProvider;
+        doc: StorageProviderDoc;
+    } | null> {
+        if (attachment.storage_provider_id) {
+            const byId = await StorageService.getProviderById(attachment.storage_provider_id);
+            if (byId) return byId;
+        }
+
+        if (attachment.storage_provider) {
+            const byType = await StorageService.getProviderByType(attachment.storage_provider);
+            if (byType) return byType;
+        }
+
+        return StorageService.getActiveProvider();
+    }
+
+    /**
      * Check if an active storage provider is available and ready
      */
     static async hasActiveProvider(): Promise<boolean> {
@@ -274,6 +373,21 @@ export class StorageService {
 
             if (existingAfterUpload) {
                 logger.info(`Deduplicated concurrent file upload by SHA-256 hash (${computedHash}), returning existing attachment: ${existingAfterUpload.file_id}`);
+
+                // Best-effort cleanup of newly uploaded duplicate blob from storage provider
+                try {
+                    const deleteResult = await active.provider.delete(fileId, uploadResult.storageKey);
+                    if (deleteResult.success) {
+                        logger.debug(`Cleaned up redundant uploaded duplicate file '${fileId}' (${uploadResult.storageKey || fileId}) from storage`);
+                    } else {
+                        logger.warn(`Storage provider could not clean up redundant duplicate file '${fileId}': ${deleteResult.error}`);
+                    }
+                } catch (cleanupErr) {
+                    logger.warn(`Failed to clean up redundant uploaded duplicate file '${fileId}' from storage:`, {
+                        error: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
+                    });
+                }
+
                 return existingAfterUpload;
             }
 
@@ -284,6 +398,7 @@ export class StorageService {
                 size: computedSize,
                 hash: computedHash,
                 storage_provider: active.doc.provider_type,
+                storage_provider_id: active.doc._id ? String(active.doc._id) : undefined,
                 storage_key: uploadResult.storageKey,
                 url: uploadResult.url,
                 metadata,
@@ -305,7 +420,7 @@ export class StorageService {
     }
 
     /**
-     * Download file data by file_id
+     * Download file data by file_id across active or inactive configured storage providers
      */
     static async downloadFile(fileId: string): Promise<{
         attachment: FileAttachmentDoc;
@@ -316,12 +431,12 @@ export class StorageService {
             throw new Error(`File not found: ${fileId}`);
         }
 
-        const active = await StorageService.getActiveProvider();
-        if (!active) {
-            throw new Error('No active storage provider configured to retrieve file');
+        const providerInstance = await StorageService.getProviderForAttachment(attachment);
+        if (!providerInstance) {
+            throw new Error(`No storage provider available to retrieve file '${fileId}'`);
         }
 
-        const download = await active.provider.download(fileId, attachment.storage_key);
+        const download = await providerInstance.provider.download(fileId, attachment.storage_key);
         if (!download.success) {
             throw new Error(download.error || 'Failed to download file from storage provider');
         }
@@ -330,7 +445,9 @@ export class StorageService {
     }
 
     /**
-     * Delete file from storage and database
+     * Delete file from storage and database.
+     * Enforces two-phase safe deletion: deletes from storage first, and only removes the MongoDB
+     * record if storage provider deletion succeeded, allowing recovery cron to self-heal and retry on failures.
      */
     static async deleteFile(fileId: string): Promise<boolean> {
         const attachment = await file_attachment_model.findOne({ file_id: fileId }).lean<FileAttachmentDoc | null>();
@@ -338,9 +455,23 @@ export class StorageService {
             return false;
         }
 
-        const active = await StorageService.getActiveProvider();
-        if (active) {
-            await active.provider.delete(fileId, attachment.storage_key);
+        const providerType = attachment.storage_provider;
+
+        if (attachment.storage_provider_id || (providerType && hasStorageProvider(providerType))) {
+            const providerInstance = await StorageService.getProviderForAttachment(attachment);
+            if (!providerInstance) {
+                const targetRef = attachment.storage_provider_id || providerType;
+                logger.warn(`Storage provider '${targetRef}' for file '${fileId}' is not configured in database. Deferring deletion.`);
+                throw new Error(`Storage provider '${targetRef}' not configured in database. Cannot delete physical file.`);
+            }
+
+            const deleteResult = await providerInstance.provider.delete(fileId, attachment.storage_key);
+            if (!deleteResult.success) {
+                logger.error(`Storage provider '${providerInstance.doc.name}' (${providerInstance.doc.provider_type}) failed to delete file '${fileId}': ${deleteResult.error}`);
+                throw new Error(`Failed to delete file '${fileId}' from storage provider '${providerInstance.doc.name}': ${deleteResult.error || 'Unknown storage error'}`);
+            }
+        } else if (providerType) {
+            logger.warn(`Storage provider type '${providerType}' for file '${fileId}' is not found in registry. Deleting DB record.`);
         }
 
         await file_attachment_model.deleteOne({ file_id: fileId });
