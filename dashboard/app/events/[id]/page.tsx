@@ -449,7 +449,7 @@ export default function EventDetailPage({ params }: PageProps) {
                                             const value = channelContent[field.name];
                                             if (value === undefined || value === null || value === '') return null;
 
-                                            const isAttachmentField = field.name === 'attachments' || field.type === 'attachment' || (Array.isArray(value) && field.name.toLowerCase().includes('attach'));
+                                            const isAttachmentField = field.name === 'attachments' || field.type === 'attachment';
 
                                             if (isAttachmentField) {
                                                 const attachmentList = Array.isArray(value) ? value : [];
@@ -466,7 +466,11 @@ export default function EventDetailPage({ params }: PageProps) {
                                                 );
                                             }
 
-                                            const stringValue = String(value);
+                                            const stringValue = Array.isArray(value)
+                                                ? value.map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v))).join(", ")
+                                                : typeof value === "object"
+                                                    ? JSON.stringify(value, null, 2)
+                                                    : String(value);
 
                                             return (
                                                 <div key={field.name}>

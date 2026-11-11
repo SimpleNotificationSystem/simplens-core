@@ -20,7 +20,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { pluginService, templateService, notificationService, storageService } from "@/lib/api-client";
 import { withBasePath, showErrorToast } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { getMissingRequiredCsvFields, importCsvRecipients as createCsvRecipients, mapCsvHeaders, parseCsv } from "@/lib/csv-import";
+import { getMissingRequiredCsvFields, importCsvRecipients as createCsvRecipients, mapCsvHeaders, parseCsv, flattenRecipientFieldsForCsv } from "@/lib/csv-import";
 
 // Generate a UUIDv4
 function generateUUID(): string {
@@ -401,7 +401,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                     const provider = getActiveProvider(channel);
                     if (provider) {
                         provider.recipientFields.forEach(field => {
-                            if (field.name !== 'user_id' && r[field.name]) {
+                            if (field.name !== 'user_id' && r[field.name] !== undefined && r[field.name] !== "") {
                                 recipientObj[field.name] = r[field.name];
                             }
                         });
@@ -530,12 +530,8 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
     ).sort((left, right) => left.localeCompare(right));
 
     const csvRecipientFields: CsvRecipientField[] = [
-        { key: "user_id", label: "User ID", required: true },
-        ...uniqueRecipientFields.map((field) => ({
-            key: field.name,
-            label: field.name,
-            required: field.required,
-        })),
+        { key: "user_id", label: "User ID", required: true, type: "string" },
+        ...flattenRecipientFieldsForCsv(uniqueRecipientFields),
         ...activeTemplateVariableNames.map((name) => ({
             key: `variables.${name}`,
             label: `{{${name}}}`,
@@ -676,15 +672,13 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                             />
 
                             {/* Dynamic Fields */}
-                            <div className="grid gap-3 md:grid-cols-2">
+                            <div className="space-y-4">
                                 {uniqueRecipientFields.map(field => (
-                                    <Input
+                                    <DynamicField
                                         key={field.name}
-                                        type={field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : 'text'}
-                                        placeholder={`${field.name}${field.required ? ' *' : ''} (${field.description || field.type})`}
-                                        value={recipient[field.name] || ''}
-                                        onChange={(e) => updateRecipient(recipient.id, field.name, e.target.value)}
-                                        required={field.required}
+                                        field={field}
+                                        value={recipient[field.name]}
+                                        onChange={(val) => updateRecipient(recipient.id, field.name, val)}
                                     />
                                 ))}
                             </div>

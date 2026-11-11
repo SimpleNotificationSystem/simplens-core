@@ -36,21 +36,63 @@ const ATTACHMENT_SCHEMA_ITEM = {
 
 // Map field type to schema type display - show (optional) for non-required fields
 function getFieldSchemaDisplay(field: FieldDefinition, isTemplateEnabled: boolean = false): unknown {
-    if (
-        field.type === "attachment" ||
-        field.name.toLowerCase() === "attachments" ||
-        field.name.toLowerCase().includes("attach")
-    ) {
+    if (field.type === "attachment") {
         return [ATTACHMENT_SCHEMA_ITEM];
     }
-    const suffix = (!field.required || isTemplateEnabled) ? " (optional)" : "";
+
+    const isOptional = !field.required || isTemplateEnabled;
+    const suffix = isOptional ? " (optional)" : "";
+
     switch (field.type) {
-        case "email": return `string (email)${suffix}`;
-        case "phone": return `string (phone)${suffix}`;
-        case "text": return `string${suffix}`;
-        case "number": return `number${suffix}`;
-        case "boolean": return `boolean${suffix}`;
-        default: return `string${suffix}`;
+        case "email":
+            return `string (email)${suffix}`;
+        case "phone":
+            return `string (phone)${suffix}`;
+        case "url":
+            return `string (URL)${suffix}`;
+        case "text":
+            return `string${suffix}`;
+        case "number":
+            return `number${suffix}`;
+        case "boolean":
+            return `boolean${suffix}`;
+        case "enum": {
+            const options = field.enumValues && field.enumValues.length > 0
+                ? field.enumValues.join(" | ")
+                : "enum";
+            return `string (${options})${suffix}`;
+        }
+        case "object": {
+            if (field.fields && field.fields.length > 0) {
+                const nestedObj: Record<string, unknown> = {};
+                field.fields.forEach((child) => {
+                    const isChildContainer = child.type === "object" || child.type === "attachment";
+                    const childKey = (isChildContainer && (!child.required || isTemplateEnabled))
+                        ? `${child.name} (optional)`
+                        : child.name;
+                    nestedObj[childKey] = getFieldSchemaDisplay(child, isTemplateEnabled);
+                });
+                return nestedObj;
+            }
+            return `Record<string, unknown>${suffix}`;
+        }
+        case "array": {
+            if (field.itemType === "object" && field.itemFields && field.itemFields.length > 0) {
+                const itemObj: Record<string, unknown> = {};
+                field.itemFields.forEach((child) => {
+                    const isChildContainer = child.type === "object" || child.type === "attachment";
+                    const childKey = (isChildContainer && (!child.required || isTemplateEnabled))
+                        ? `${child.name} (optional)`
+                        : child.name;
+                    itemObj[childKey] = getFieldSchemaDisplay(child, isTemplateEnabled);
+                });
+                return [itemObj];
+            }
+            const itemTypeLabel = field.itemType || "string";
+            return `${itemTypeLabel}[]${suffix}`;
+        }
+        default:
+            return `string${suffix}`;
     }
 }
 
@@ -117,7 +159,9 @@ export default function ApiDesignerPage() {
             );
             if (provider?.recipientFields) {
                 provider.recipientFields.forEach(field => {
-                    recipientSchema[field.name] = getFieldSchemaDisplay(field);
+                    const isContainer = field.type === "object" || field.type === "attachment";
+                    const fieldKey = (isContainer && !field.required) ? `${field.name} (optional)` : field.name;
+                    recipientSchema[fieldKey] = getFieldSchemaDisplay(field);
                 });
             }
         });
@@ -138,11 +182,9 @@ export default function ApiDesignerPage() {
             if (provider?.contentFields && provider.contentFields.length > 0) {
                 const channelContent: Record<string, unknown> = {};
                 provider.contentFields.forEach(field => {
-                    const isAttachment =
-                        field.type === "attachment" ||
-                        field.name.toLowerCase() === "attachments" ||
-                        field.name.toLowerCase().includes("attach");
-                    const fieldKey = isAttachment ? `${field.name} (optional)` : field.name;
+                    const isContainer = field.type === "object" || field.type === "attachment";
+                    const isOptional = !field.required || includeTemplateId;
+                    const fieldKey = (isContainer && isOptional) ? `${field.name} (optional)` : field.name;
                     channelContent[fieldKey] = getFieldSchemaDisplay(field, includeTemplateId);
                 });
                 contentSchema[channelKey] = channelContent;

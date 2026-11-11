@@ -6,7 +6,7 @@
  */
 
 import type { SimpleNSProvider, ProviderManifest, RegisteredProvider, ChannelConfig, FieldDefinition, ProviderMetadata, ChannelMetadata, PluginMetadata, FileAttachmentConfig, ProviderOptions } from '@src/types/types.js';
-import { resolveFileAttachmentConfig } from '@src/types/schemas.js';
+import { resolveFileAttachmentConfig, extractFieldDefinitionsFromZod } from '@src/types/schemas.js';
 import { pluginRegistryLogger as logger } from '@src/workers/utils/logger.js';
 
 export type {
@@ -25,67 +25,10 @@ export type {
  * Extract field definitions from a Zod object schema
  */
 function extractFieldsFromSchema(
-    schema: { shape?: Record<string, unknown> },
+    schema: { shape?: Record<string, unknown> } | unknown,
     attachmentConfig?: FileAttachmentConfig
 ): FieldDefinition[] {
-    const fields: FieldDefinition[] = [];
-
-    if (!schema.shape) {
-        return fields;
-    }
-
-    for (const [name, fieldSchema] of Object.entries(schema.shape)) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const zodSchema = fieldSchema as any;
-
-        let type: FieldDefinition['type'] = 'string';
-        let required = true;
-
-        // Check if optional
-        if (zodSchema._def?.typeName === 'ZodOptional') {
-            required = false;
-        }
-
-        // Get the inner type (unwrap optional/nullable)
-        let innerSchema = zodSchema;
-        while (innerSchema._def?.innerType) {
-            innerSchema = innerSchema._def.innerType;
-        }
-
-        // Detect type from Zod schema
-        const typeName = innerSchema._def?.typeName;
-        const checks = innerSchema._def?.checks || [];
-
-        if (name === 'attachments' || typeName === 'ZodArray') {
-            type = 'attachment';
-        } else if (typeName === 'ZodNumber') {
-            type = 'number';
-        } else if (typeName === 'ZodBoolean') {
-            type = 'boolean';
-        } else if (typeName === 'ZodString') {
-            // Check for email validation
-            const hasEmail = checks.some((c: { kind: string }) => c.kind === 'email');
-            if (hasEmail) {
-                type = 'email';
-            } else if (name.toLowerCase().includes('phone')) {
-                type = 'phone';
-            } else if (name.toLowerCase().includes('message') || name.toLowerCase().includes('body')) {
-                type = 'text';
-            } else {
-                type = 'string';
-            }
-        }
-
-        fields.push({
-            name,
-            type,
-            required,
-            description: zodSchema.description,
-            ...(type === 'attachment' && attachmentConfig ? { attachmentConfig } : {}),
-        });
-    }
-
-    return fields;
+    return extractFieldDefinitionsFromZod(schema, attachmentConfig);
 }
 
 class PluginRegistryClass {

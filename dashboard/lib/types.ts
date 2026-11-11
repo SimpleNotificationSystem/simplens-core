@@ -142,11 +142,29 @@ export interface FileAttachmentItem {
   created_at?: string;
 }
 
+export type FieldType =
+  | "string"
+  | "email"
+  | "phone"
+  | "url"
+  | "text"
+  | "number"
+  | "boolean"
+  | "enum"
+  | "array"
+  | "object"
+  | "attachment";
+
 export interface FieldDefinition {
   name: string;
-  type: "string" | "email" | "phone" | "text" | "number" | "boolean" | "attachment";
+  type: FieldType;
   required: boolean;
   description?: string;
+  defaultValue?: unknown;
+  enumValues?: string[];
+  itemType?: FieldType;
+  itemFields?: FieldDefinition[];
+  fields?: FieldDefinition[];
   attachmentConfig?: FileAttachmentConfig;
 }
 
@@ -155,6 +173,7 @@ export interface CsvRecipientField {
   label: string;
   required: boolean;
   variableName?: string;
+  type?: FieldType;
 }
 
 export interface CsvImportData {

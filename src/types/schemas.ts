@@ -12,6 +12,9 @@ import {
   OUTBOX_STATUS,
   NOTIFICATION_STATUS_SF,
   ALERT_TYPE,
+  type FieldDefinition,
+  type FieldType,
+  type FileAttachmentConfig,
 } from "./types.js";
 import type { UUID } from "crypto";
 import { validate, version } from "uuid";
@@ -549,6 +552,276 @@ export function resolveFileAttachmentConfig(
     }
 
     return base;
+}
+
+type ZodDefNode = {
+    typeName?: string;
+    type?: string;
+    innerType?: unknown;
+    schema?: unknown;
+    in?: unknown;
+    element?: unknown;
+    shape?: Record<string, unknown>;
+    values?: unknown;
+    options?: unknown;
+    checks?: Array<{ kind?: string; format?: string; def?: { format?: string }; constructor?: { name?: string } }>;
+    description?: string;
+    defaultValue?: unknown;
+};
+
+type ZodInternalNode = {
+    isOptional?: () => boolean;
+    isNullable?: () => boolean;
+    description?: string;
+    type?: string;
+    _def?: ZodDefNode;
+    def?: ZodDefNode;
+    element?: unknown;
+    shape?: Record<string, unknown>;
+    options?: unknown;
+    constructor?: { name?: string };
+};
+
+/**
+ * Unwraps Zod schema modifiers (optional, nullable, default, effects/superRefine, pipe, etc.)
+ * across both Zod 3 and Zod 4.
+ */
+export function unwrapZodSchema(schema: unknown): { inner: unknown; isOptional: boolean; description?: string; defaultValue?: unknown } {
+    let current: ZodInternalNode | null = (schema && typeof schema === 'object') ? (schema as ZodInternalNode) : null;
+    let isOptional = false;
+    let description = current?.description || current?._def?.description || current?.def?.description;
+    let defaultValue: unknown = undefined;
+
+    while (current) {
+        if (typeof current.isOptional === 'function' && current.isOptional()) {
+            isOptional = true;
+        }
+        if (typeof current.isNullable === 'function' && current.isNullable()) {
+            isOptional = true;
+        }
+        const typeName = current._def?.typeName || current.def?.typeName;
+        const type = current.type || current._def?.type || current.def?.type;
+
+        if (typeName === 'ZodOptional' || typeName === 'ZodNullable' || type === 'optional' || type === 'nullable') {
+            isOptional = true;
+        }
+        if (typeName === 'ZodDefault' || type === 'default') {
+            isOptional = true;
+            defaultValue = current._def?.defaultValue ?? current.def?.defaultValue;
+            if (typeof defaultValue === 'function') {
+                try { defaultValue = defaultValue(); } catch { /* ignore */ }
+            }
+        }
+
+        if (current.description) description = current.description;
+
+        const nextInner = current.def?.innerType
+            || current._def?.innerType
+            || current.def?.schema
+            || current._def?.schema
+            || current.def?.in
+            || current._def?.in;
+
+        if (nextInner && typeof nextInner === 'object') {
+            current = nextInner as ZodInternalNode;
+        } else {
+            break;
+        }
+    }
+
+    return { inner: current, isOptional, description, defaultValue };
+}
+
+/**
+ * Checks whether an object shape represents a FileAttachment item
+ * (e.g. matching fileAttachmentItemSchema).
+ */
+export function isAttachmentItemShape(shape: unknown): boolean {
+    if (!shape || typeof shape !== 'object') return false;
+    const s = shape as Record<string, unknown>;
+    const hasId = 'id' in s || 'fileId' in s || 'file_id' in s;
+    const hasFilename = 'filename' in s || 'name' in s;
+    const hasMime = 'mime_type' in s || 'contentType' in s || 'mime' in s;
+    const hasSize = 'size' in s;
+    const hasHash = 'hash' in s;
+    return Boolean(hasId && (hasFilename || hasMime || hasSize || hasHash));
+}
+
+/**
+ * Checks if a schema structurally matches an attachment array or attachment item.
+ */
+export function isAttachmentZodSchema(schema: unknown, fieldName?: string, attachmentConfig?: FileAttachmentConfig): boolean {
+    const { inner } = unwrapZodSchema(schema);
+    const node = inner as ZodInternalNode | null;
+    const typeStr = node?.type || node?._def?.type || node?.def?.type || '';
+    const typeName = node?._def?.typeName || node?.def?.typeName || '';
+    const constructorName = node?.constructor?.name || '';
+    const isArr = typeStr === 'array' || typeName === 'ZodArray' || constructorName === 'ZodArray';
+
+    if (isArr) {
+        const rawElem = node?.element || node?.def?.element || node?._def?.element;
+        const { inner: elemInner } = unwrapZodSchema(rawElem);
+        const elemNode = elemInner as ZodInternalNode | null;
+        const elemShape = elemNode?.shape || elemNode?.def?.shape || elemNode?._def?.shape;
+        if (isAttachmentItemShape(elemShape)) {
+            return true;
+        }
+        if (fieldName === 'attachments' && attachmentConfig && attachmentConfig.enabled !== false) {
+            return true;
+        }
+    } else {
+        const shape = node?.shape || node?.def?.shape || node?._def?.shape;
+        if (isAttachmentItemShape(shape)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Recursively extracts rich FieldDefinition array from any arbitrary Zod schema.
+ */
+export function extractFieldDefinitionsFromZod(
+    schema: unknown,
+    attachmentConfig?: FileAttachmentConfig
+): FieldDefinition[] {
+    if (!schema || typeof schema !== 'object') {
+        return [];
+    }
+
+    const { inner } = unwrapZodSchema(schema);
+    const node = inner as ZodInternalNode | null;
+    const shape = node?.shape ?? node?.def?.shape ?? node?._def?.shape;
+    if (!shape || typeof shape !== 'object') {
+        return [];
+    }
+
+    const fields: FieldDefinition[] = [];
+
+    for (const [name, rawField] of Object.entries(shape)) {
+        const { inner: fieldSchema, isOptional, description, defaultValue } = unwrapZodSchema(rawField);
+        const fieldNode = fieldSchema as ZodInternalNode | null;
+        const typeName = fieldNode?._def?.typeName || fieldNode?.def?.typeName || '';
+        const typeStr = fieldNode?.type || fieldNode?._def?.type || fieldNode?.def?.type || '';
+        const constructorName = fieldNode?.constructor?.name || '';
+        const checks = fieldNode?._def?.checks || fieldNode?.def?.checks || [];
+
+        const isArr = typeStr === 'array' || typeName === 'ZodArray' || constructorName === 'ZodArray';
+        const isObj = typeStr === 'object' || typeName === 'ZodObject' || constructorName === 'ZodObject';
+        const isNum = typeStr === 'number' || typeName === 'ZodNumber' || constructorName === 'ZodNumber';
+        const isBool = typeStr === 'boolean' || typeName === 'ZodBoolean' || constructorName === 'ZodBoolean';
+        const isStr = typeStr === 'string' || typeName === 'ZodString' || constructorName === 'ZodString';
+        const isEnm = typeStr === 'enum' || typeName === 'ZodEnum' || constructorName === 'ZodEnum';
+
+        if (isArr) {
+            const rawElem = fieldNode?.element || fieldNode?.def?.element || fieldNode?._def?.element;
+            const { inner: elemInner } = unwrapZodSchema(rawElem);
+            const elemNode = elemInner as ZodInternalNode | null;
+            const elemShape = elemNode?.shape || elemNode?.def?.shape || elemNode?._def?.shape;
+
+            if (isAttachmentItemShape(elemShape) || (name === 'attachments' && attachmentConfig && attachmentConfig.enabled !== false)) {
+                fields.push({
+                    name,
+                    type: 'attachment',
+                    required: !isOptional,
+                    description,
+                    defaultValue,
+                    ...(attachmentConfig ? { attachmentConfig } : {}),
+                });
+            } else {
+                const elemTypeStr = elemNode?.type || elemNode?._def?.type || elemNode?._def?.typeName || elemNode?.constructor?.name || '';
+                let itemType: FieldType = 'string';
+                let itemFields: FieldDefinition[] | undefined;
+
+                if (elemTypeStr === 'number' || elemTypeStr === 'ZodNumber') {
+                    itemType = 'number';
+                } else if (elemTypeStr === 'boolean' || elemTypeStr === 'ZodBoolean') {
+                    itemType = 'boolean';
+                } else if (elemShape && typeof elemShape === 'object') {
+                    itemType = 'object';
+                    itemFields = extractFieldDefinitionsFromZod(elemInner, attachmentConfig);
+                }
+
+                fields.push({
+                    name,
+                    type: 'array',
+                    itemType,
+                    itemFields,
+                    required: !isOptional,
+                    description,
+                    defaultValue,
+                });
+            }
+        } else if (isObj) {
+            const childFields = extractFieldDefinitionsFromZod(fieldSchema, attachmentConfig);
+            fields.push({
+                name,
+                type: 'object',
+                required: !isOptional,
+                description,
+                defaultValue,
+                fields: childFields,
+            });
+        } else if (isEnm) {
+            const rawValues = fieldNode?._def?.values || fieldNode?.def?.values || fieldNode?.options || [];
+            const values = Array.isArray(rawValues)
+                ? rawValues.map(v => String(v))
+                : typeof rawValues === 'object' && rawValues !== null
+                    ? Object.keys(rawValues)
+                    : [];
+            fields.push({
+                name,
+                type: 'enum',
+                enumValues: values,
+                required: !isOptional,
+                description,
+                defaultValue,
+            });
+        } else if (isNum) {
+            fields.push({
+                name,
+                type: 'number',
+                required: !isOptional,
+                description,
+                defaultValue,
+            });
+        } else if (isBool) {
+            fields.push({
+                name,
+                type: 'boolean',
+                required: !isOptional,
+                description,
+                defaultValue,
+            });
+        } else if (isStr) {
+            const hasEmail = checks.some((c) => c.kind === 'email' || c.format === 'email' || c.def?.format === 'email' || c.constructor?.name === 'ZodEmail');
+            const hasUrl = checks.some((c) => c.kind === 'url' || c.format === 'url' || c.def?.format === 'url' || c.constructor?.name === 'ZodUrl');
+            let detectedType: FieldType = 'string';
+            if (hasEmail) detectedType = 'email';
+            else if (hasUrl) detectedType = 'url';
+            else if (name.toLowerCase().includes('phone')) detectedType = 'phone';
+            else if (name.toLowerCase().includes('message') || name.toLowerCase().includes('body') || name.toLowerCase().includes('html')) detectedType = 'text';
+
+            fields.push({
+                name,
+                type: detectedType,
+                required: !isOptional,
+                description,
+                defaultValue,
+            });
+        } else {
+            fields.push({
+                name,
+                type: 'string',
+                required: !isOptional,
+                description,
+                defaultValue,
+            });
+        }
+    }
+
+    return fields;
 }
 
   /** Options supplied by a YAML/JSON provider configuration entry. */

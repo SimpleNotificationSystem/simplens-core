@@ -4,6 +4,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
+import { createFileAttachmentArraySchema } from '@src/types/schemas.js';
 
 // Create a mock provider factory
 function createMockProvider(options: {
@@ -416,6 +417,94 @@ describe('Plugin Registry', () => {
             recipientFields.forEach(field => {
                 expect(typeof field.required).toBe('boolean');
             });
+        });
+
+        it('should recursively extract complex Zod schemas including arrays, nested objects, enums, and attachments', () => {
+            const complexRecipientSchema = z.object({
+                user_id: z.string(),
+                email: z.string().email(),
+                address: z.object({
+                    city: z.string(),
+                    zip: z.string(),
+                }).optional(),
+            });
+
+            const complexContentSchema = z.object({
+                subject: z.string().optional(),
+                message: z.string(),
+                names: z.array(z.string()).optional(),
+                role: z.enum(['admin', 'editor', 'viewer']).optional(),
+                actions: z.array(z.object({
+                    label: z.string(),
+                    url: z.string().url(),
+                })).optional(),
+                author: z.object({
+                    name: z.string(),
+                    email: z.string().email(),
+                }),
+                attachments: createFileAttachmentArraySchema({ maxCount: 3 }).optional(),
+            });
+
+            const provider = {
+                manifest: {
+                    name: 'complex-provider',
+                    displayName: 'Complex Provider',
+                    channel: 'complex',
+                    version: '1.0.0',
+                    fileAttachment: { enabled: true, maxCount: 3 },
+                },
+                send: vi.fn().mockResolvedValue({ success: true }),
+                getNotificationSchema: vi.fn().mockReturnValue(z.object({})),
+                getRecipientSchema: vi.fn().mockReturnValue(complexRecipientSchema),
+                getContentSchema: vi.fn().mockReturnValue(complexContentSchema),
+                getFileAttachmentConfig: vi.fn().mockReturnValue({ enabled: true, maxCount: 3 }),
+                getRateLimitConfig: vi.fn().mockReturnValue({ maxTokens: 100, refillRate: 10 }),
+                shutdown: vi.fn().mockResolvedValue(undefined),
+            };
+
+            PluginRegistry.register(provider as any, 'complex-provider', 1);
+
+            const metadata = PluginRegistry.getPluginMetadata();
+            const complexChannel = metadata.channels.complex.providers[0];
+
+            // 1. Recipient fields
+            const addressField = complexChannel.recipientFields.find(f => f.name === 'address');
+            expect(addressField).toBeDefined();
+            expect(addressField?.type).toBe('object');
+            expect(addressField?.required).toBe(false);
+            expect(addressField?.fields).toHaveLength(2);
+            expect(addressField?.fields?.map(f => f.name)).toEqual(['city', 'zip']);
+
+            // 2. Content fields
+            const namesField = complexChannel.contentFields.find(f => f.name === 'names');
+            expect(namesField).toBeDefined();
+            expect(namesField?.type).toBe('array');
+            expect(namesField?.itemType).toBe('string');
+            expect(namesField?.required).toBe(false);
+
+            const roleField = complexChannel.contentFields.find(f => f.name === 'role');
+            expect(roleField).toBeDefined();
+            expect(roleField?.type).toBe('enum');
+            expect(roleField?.enumValues).toEqual(['admin', 'editor', 'viewer']);
+            expect(roleField?.required).toBe(false);
+
+            const actionsField = complexChannel.contentFields.find(f => f.name === 'actions');
+            expect(actionsField).toBeDefined();
+            expect(actionsField?.type).toBe('array');
+            expect(actionsField?.itemType).toBe('object');
+            expect(actionsField?.itemFields).toHaveLength(2);
+            expect(actionsField?.itemFields?.find(f => f.name === 'url')?.type).toBe('url');
+
+            const authorField = complexChannel.contentFields.find(f => f.name === 'author');
+            expect(authorField).toBeDefined();
+            expect(authorField?.type).toBe('object');
+            expect(authorField?.required).toBe(true);
+            expect(authorField?.fields).toHaveLength(2);
+
+            const attachmentField = complexChannel.contentFields.find(f => f.name === 'attachments');
+            expect(attachmentField).toBeDefined();
+            expect(attachmentField?.type).toBe('attachment');
+            expect(attachmentField?.attachmentConfig?.maxCount).toBe(3);
         });
 
         it('should handle schema without shape property', () => {

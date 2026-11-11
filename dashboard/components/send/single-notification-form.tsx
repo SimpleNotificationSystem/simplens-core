@@ -543,7 +543,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                         </div>
 
                         {/* Dynamic Recipient Fields */}
-                        <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-4">
                             {selectedChannels.flatMap(channel => {
                                 const provider = getActiveProvider(channel);
                                 if (!provider) return [];
