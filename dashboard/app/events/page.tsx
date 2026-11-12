@@ -80,12 +80,6 @@ export default function EventsPage() {
         setPage(1);
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === "Enter") {
-            handleSearch();
-        }
-    };
-
     const handleStatusChange = (value: string) => {
         setStatus(value);
         setPage(1);
@@ -107,6 +101,11 @@ export default function EventsPage() {
         setPage(1);
     };
 
+    const searchEvents = (value: string)=>{
+      setSearchInput(value);
+      handleSearch();
+    }
+
     return (
         <DashboardLayout
             title="Events"
@@ -116,16 +115,18 @@ export default function EventsPage() {
                 {/* Toolbar */}
                 <PageToolbar className="flex-col sm:flex-row gap-3">
                     <PageToolbarSection className="w-full sm:w-auto sm:flex-1 sm:max-w-md">
-                        <Input
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 rounded-md border bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
+                          <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+
+                          <Input
                             placeholder="Search by notification ID, request ID, client ID/name..."
                             value={searchInput}
-                            onChange={(e) => setSearchInput(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            className="flex-1"
-                        />
-                        <Button onClick={handleSearch} size="icon" variant="outline">
-                            <Search className="h-4 w-4" />
-                        </Button>
+                            onChange={(e) => searchEvents(e.target.value)}
+                            className="border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                          />
+                        </div>
+                      </div>
                     </PageToolbarSection>
 
                     <PageToolbarSection className="w-full sm:w-auto flex-wrap">
@@ -249,10 +250,10 @@ export default function EventsPage() {
 
                                                 // Get first meaningful value from schema fields (excluding user_id for display preference)
                                                 if (providerMeta?.recipientFields) {
-                                                    const displayField = providerMeta.recipientFields.find(f => 
+                                                    const displayField = providerMeta.recipientFields.find(f =>
                                                         f.name !== 'user_id' && notification.recipient[f.name]
                                                     ) || providerMeta.recipientFields[0];
-                                                    
+
                                                     if (displayField) {
                                                         const value = notification.recipient[displayField.name];
                                                         if (value !== undefined && value !== null && value !== '') {

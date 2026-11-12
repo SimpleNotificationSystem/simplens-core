@@ -29,7 +29,7 @@ export function getBasePath(): string {
   if (typeof window !== 'undefined' && window.__RUNTIME_CONFIG__) {
     return window.__RUNTIME_CONFIG__.basePath || "";
   }
-  
+
   // Server/Build: Fall back to env var (available at actual runtime in container)
   return process.env.BASE_PATH || "";
 }
@@ -75,3 +75,26 @@ export function showErrorToast(error: unknown, fallbackMessage = "An error occur
   }
 }
 
+// Command string function to format lowercase or uppoercase to make the first letter of every word alone into upper case
+export function toCamelCase(str: string) {
+  const words = str.split(' ');
+  const compiled: string[] = [];
+  for (let word of words) {
+    word = word.toLowerCase();
+    const firstLetter = word.slice(0, 1).toUpperCase();
+    const remaining = word.slice(1);
+    compiled.push(firstLetter+remaining)
+  }
+  let final = "";
+  for (const word of compiled) {
+    final += word+" "
+  }
+  return final.trimStart().trimEnd();
+}
+
+export function truncateLongDescriptions(str: string, maxLength: number) {
+  if (str.length > maxLength) {
+    return str.slice(0, maxLength) + "...";
+  }
+  return str;
+}
