@@ -68,6 +68,8 @@ vi.mock('../../../src/plugins/index.js', () => ({
     PluginRegistry: {
         get: pluginRegistryGetMock,
         getDefaultProviderId: pluginRegistryGetDefaultProviderIdMock,
+        has: vi.fn(),
+        getRegistered: vi.fn(),
     },
     sendWithFallback: sendWithFallbackMock,
     getProviderCascade: getProviderCascadeMock,
@@ -640,5 +642,29 @@ describe('File Attachments Resolution & Sanitization in Unified Consumer', () =>
         expect(result.success).toBe(false);
         expect(result.error?.code).toBe('ATTACHMENT_DOWNLOAD_FAILED');
         expect(result.error?.retryable).toBe(true);
+    });
+
+    it('should reject attachment resolution when destination provider has attachments disabled', async () => {
+        const { resolveNotificationAttachments } = await import('../../../src/processors/unified/unified.consumer.js');
+
+        pluginRegistryGetMock.mockReturnValueOnce({
+            manifest: { fileAttachment: { enabled: false } },
+            getFileAttachmentConfig: () => ({ enabled: false }),
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result = await resolveNotificationAttachments({
+            channel: 'email',
+            provider: 'email-disabled',
+            content: {
+                attachments: [{ id: 'file-123', filename: 'test.pdf' }],
+            },
+        } as any);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.code).toBe('ATTACHMENTS_DISABLED');
+        expect(result.error?.retryable).toBe(false);
+        expect(result.error?.message).toContain("File attachments are disabled for provider 'email-disabled'");
+        expect(downloadFileMock).not.toHaveBeenCalled();
     });
 });

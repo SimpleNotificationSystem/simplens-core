@@ -45,6 +45,7 @@ import { publishDelayed, buildDelayedPayloadGeneric } from '@src/processors/shar
 import { handleSchemaValidationFailure } from '../shared/schema-failure-handler.js';
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 import status_outbox_model from '@src/database/models/status-outbox.models.js';
+import { resolveFileAttachmentConfig } from '@src/types/schemas.js';
 
 // Re-export consumer health types
 export type { ConsumerHealthState, ConsumerHealthCheckResult, ConsumerHealthDetails };
@@ -151,6 +152,29 @@ export const resolveNotificationAttachments = async (
 
     if (!Array.isArray(rawAttachments) || rawAttachments.length === 0) {
         return { success: true };
+    }
+
+    // Check if the destination provider explicitly disables file attachments
+    const targetProviderId = notification.provider || PluginRegistry.getDefaultProviderId?.(notification.channel);
+    if (targetProviderId) {
+        const provider = PluginRegistry.get?.(targetProviderId);
+        const registered = PluginRegistry.getRegistered?.(targetProviderId);
+        const baselineAttachment = provider?.getFileAttachmentConfig?.() ?? provider?.manifest?.fileAttachment;
+        const effectiveAttachment = resolveFileAttachmentConfig(
+            baselineAttachment,
+            registered?.options as Record<string, unknown> | undefined
+        ) ?? baselineAttachment;
+
+        if (effectiveAttachment && effectiveAttachment.enabled === false) {
+            return {
+                success: false,
+                error: {
+                    message: `File attachments are disabled for provider '${targetProviderId}'`,
+                    retryable: false,
+                    code: 'ATTACHMENTS_DISABLED',
+                },
+            };
+        }
     }
 
     for (const item of rawAttachments as FileAttachmentItem[]) {

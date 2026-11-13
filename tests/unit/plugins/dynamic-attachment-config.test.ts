@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { parseByteSize, resolveFileAttachmentConfig, createFileAttachmentArraySchema } from '../../../src/types/schemas';
 import { PluginRegistry } from '../../../src/plugins/loader/registry';
-import { InvalidContentSchemaError } from '../../../src/api/utils/utils';
+import { InvalidContentSchemaError, validateContentSchema } from '../../../src/api/utils/utils';
 import type {
     SimpleNSProvider,
     ProviderManifest,
@@ -199,6 +199,43 @@ describe('Dynamic File Attachment Configuration', () => {
             ]);
             expect(exceeded.success).toBe(false);
         });
+
+        it('should reject attachments when enabled is false', () => {
+            const schema = createFileAttachmentArraySchema({
+                enabled: false,
+            });
+
+            const result = schema.safeParse([
+                { id: '1', filename: 'doc.pdf', mime_type: 'application/pdf', size: 100, hash: 'h1' },
+            ]);
+            expect(result.success).toBe(false);
+            if (!result.success) {
+                expect(result.error.issues[0].message).toBe('File attachments are disabled for this provider');
+            }
+        });
+
+        it('should accept empty array when enabled is false', () => {
+            const schema = createFileAttachmentArraySchema({
+                enabled: false,
+            });
+
+            expect(schema.safeParse([]).success).toBe(true);
+        });
+
+        it('should reject attachments when maxCount is 0', () => {
+            const schema = createFileAttachmentArraySchema({
+                enabled: true,
+                maxCount: 0,
+            });
+
+            const result = schema.safeParse([
+                { id: '1', filename: 'doc.pdf', mime_type: 'application/pdf', size: 100, hash: 'h1' },
+            ]);
+            expect(result.success).toBe(false);
+            if (!result.success) {
+                expect(result.error.issues[0].message).toBe('File attachments are disabled for this provider');
+            }
+        });
     });
 
     describe('PluginRegistry effective metadata integration', () => {
@@ -333,6 +370,132 @@ describe('Dynamic File Attachment Configuration', () => {
             expect(customError.message).toContain("Allowed types for this provider: application/pdf, image/png");
             expect(customError.issues).toHaveLength(1);
             expect(customError.issues[0].path).toBe('attachments.0.mime_type');
+        });
+    });
+
+    describe('validateContentSchema attachment rejection when disabled', () => {
+        beforeEach(() => {
+            PluginRegistry.clear();
+        });
+
+        const manifest: ProviderManifest = {
+            name: 'test-email-plugin',
+            version: '1.0.0',
+            channel: 'email',
+            displayName: 'Test Email Provider',
+            description: 'Test provider description',
+            requiredCredentials: ['API_KEY'],
+            optionalConfig: ['ATTACHMENT_ENABLED'],
+            fileAttachment: {
+                enabled: true,
+                maxFileSize: 10 * 1024 * 1024,
+                maxCount: 5,
+                allowedMimeTypes: ['application/pdf'],
+            },
+        };
+
+        const createMockProvider = (): SimpleNSProvider => ({
+            manifest,
+            getNotificationSchema: () => z.object({}) as any,
+            getRecipientSchema: () => z.object({ email: z.string().email() }),
+            getContentSchema: () => z.object({
+                subject: z.string(),
+                attachments: z.array(z.any()).optional(),
+            }),
+            getRateLimitConfig: () => ({ maxTokens: 100, refillRate: 10 }),
+            getFileAttachmentConfig: () => manifest.fileAttachment,
+            initialize: async () => {},
+            healthCheck: async () => true,
+            send: async () => ({ success: true }),
+            shutdown: async () => {},
+        });
+
+        it('should reject content.attachments when provider has ATTACHMENT_ENABLED: "false" in options', () => {
+            const provider = createMockProvider();
+            PluginRegistry.register(provider, 'email-disabled', 10, {
+                ATTACHMENT_ENABLED: 'false',
+            });
+
+            expect(() => {
+                validateContentSchema('email', {
+                    subject: 'Hello',
+                    attachments: [
+                        { id: '1', filename: 'test.pdf', mime_type: 'application/pdf', size: 100, hash: 'h1' },
+                    ],
+                }, 'email-disabled');
+            }).toThrowError(InvalidContentSchemaError);
+
+            try {
+                validateContentSchema('email', {
+                    subject: 'Hello',
+                    attachments: [
+                        { id: '1', filename: 'test.pdf', mime_type: 'application/pdf', size: 100, hash: 'h1' },
+                    ],
+                }, 'email-disabled');
+            } catch (err: any) {
+                expect(err).toBeInstanceOf(InvalidContentSchemaError);
+                expect(err.message).toContain('File attachments are disabled for this provider');
+                expect(err.issues[0].path).toBe('attachments');
+            }
+        });
+
+        it('should allow empty attachments array when ATTACHMENT_ENABLED is "false"', () => {
+            const provider = createMockProvider();
+            PluginRegistry.register(provider, 'email-disabled', 10, {
+                ATTACHMENT_ENABLED: 'false',
+            });
+
+            expect(() => {
+                validateContentSchema('email', {
+                    subject: 'Hello',
+                    attachments: [],
+                }, 'email-disabled');
+            }).not.toThrow();
+        });
+
+        it('should allow content without attachments when ATTACHMENT_ENABLED is "false"', () => {
+            const provider = createMockProvider();
+            PluginRegistry.register(provider, 'email-disabled', 10, {
+                ATTACHMENT_ENABLED: 'false',
+            });
+
+            expect(() => {
+                validateContentSchema('email', {
+                    subject: 'Hello',
+                }, 'email-disabled');
+            }).not.toThrow();
+        });
+
+        it('should accept content.attachments when ATTACHMENT_ENABLED is "true"', () => {
+            const provider = createMockProvider();
+            PluginRegistry.register(provider, 'email-enabled', 10, {
+                ATTACHMENT_ENABLED: 'true',
+            });
+
+            expect(() => {
+                validateContentSchema('email', {
+                    subject: 'Hello',
+                    attachments: [
+                        { id: '1', filename: 'test.pdf', mime_type: 'application/pdf', size: 100, hash: 'h1' },
+                    ],
+                }, 'email-enabled');
+            }).not.toThrow();
+        });
+
+        it('should reject content.attachments when default provider for channel has attachments disabled', () => {
+            const provider = createMockProvider();
+            PluginRegistry.register(provider, 'email-default-disabled', 10, {
+                ATTACHMENT_ENABLED: 'false',
+            });
+
+            expect(() => {
+                validateContentSchema('email', {
+                    subject: 'Hello',
+                    attachments: [
+                        { id: '1', filename: 'test.pdf', mime_type: 'application/pdf', size: 100, hash: 'h1' },
+                    ],
+                }); // without provider_id -> uses default
+            }).toThrowError(InvalidContentSchemaError);
         });
     });
 });

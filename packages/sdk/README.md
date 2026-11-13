@@ -197,6 +197,7 @@ export function buildContentSchema(config?: FileAttachmentConfig) {
 ```
 
 When an attachment violates constraints, `createFileAttachmentArraySchema` emits precise error messages:
+- **Attachments disabled**: `"File attachments are disabled for this provider"`
 - **Unsupported MIME**: `"Attachment 'archive.xyz' has unsupported MIME type 'application/x-xyz'. Allowed types for this provider: application/pdf, image/*."`
 - **File size exceeded**: `"Attachment 'report.pdf' (25 MB) exceeds maximum allowed size of 10 MB for this provider."`
 - **Count exceeded**: `"Cannot attach more than 5 files (limit exceeded)"`

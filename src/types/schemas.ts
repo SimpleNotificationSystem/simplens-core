@@ -349,10 +349,19 @@ export function createFileAttachmentArraySchema(config?: {
 }): z.ZodType<Array<z.infer<typeof fileAttachmentItemSchema>>> {
     let schema: z.ZodType<Array<z.infer<typeof fileAttachmentItemSchema>>> = z.array(fileAttachmentItemSchema);
 
-    if (config?.maxCount && config.maxCount > 0) {
+    if (config?.enabled === false) {
+        return (schema as z.ZodArray<typeof fileAttachmentItemSchema>).max(
+            0,
+            'File attachments are disabled for this provider'
+        );
+    }
+
+    if (config?.maxCount !== undefined && config.maxCount >= 0) {
         schema = (schema as z.ZodArray<typeof fileAttachmentItemSchema>).max(
             config.maxCount,
-            `Cannot attach more than ${config.maxCount} files (limit exceeded)`
+            config.maxCount === 0
+                ? 'File attachments are disabled for this provider'
+                : `Cannot attach more than ${config.maxCount} files (limit exceeded)`
         );
     }
 
