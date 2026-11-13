@@ -875,8 +875,19 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
                                 const attachmentField = provider.contentFields.find(
                                     (f) => f.name === "attachments" || f.type === "attachment"
                                 );
-                                if (!attachmentField || attachmentField.attachmentConfig?.enabled === false) {
+                                if (!attachmentField) {
                                     return null;
+                                }
+                                if (attachmentField.attachmentConfig?.enabled === false) {
+                                    return (
+                                        <Alert className="mt-3 border-amber-500/50 bg-amber-500/10 text-amber-500">
+                                            <AlertCircle className="h-4 w-4" />
+                                            <AlertTitle>File Attachments Disabled</AlertTitle>
+                                            <AlertDescription className="text-xs">
+                                                File attachments are disabled for provider &apos;{selectedProviders[channel] || provider.id}&apos;.
+                                            </AlertDescription>
+                                        </Alert>
+                                    );
                                 }
                                 return storageStatus?.hasActiveProvider ? (
                                     <FileAttachmentUpload

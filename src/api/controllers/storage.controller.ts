@@ -33,6 +33,14 @@ export const fileUploadMiddleware = async (
         const provider = typeof req.query.provider === 'string' ? req.query.provider : undefined;
         const limits = await StorageService.resolveEffectiveLimits(channel, provider);
 
+        if (limits.enabled === false) {
+            res.status(400).json({
+                success: false,
+                error: `File attachments are disabled for provider '${provider || channel || 'default'}'.`,
+            });
+            return;
+        }
+
         if (req.headers['content-length'] === '0') {
             res.status(400).json({
                 success: false,

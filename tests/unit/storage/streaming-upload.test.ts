@@ -3,6 +3,7 @@ import { Readable } from 'stream';
 import { HashingAndMeteringStream, StorageService } from '@src/storage/storage.service.js';
 import { StreamingStorageEngine } from '@src/storage/streaming-storage-engine.js';
 import { env } from '@src/config/env.config.js';
+import { ProviderManagerService } from '@src/plugins/services/provider-manager.service.js';
 
 describe('HashingAndMeteringStream', () => {
     it('should calculate accurate byte count and sha-256 hash', async () => {
@@ -40,8 +41,18 @@ describe('HashingAndMeteringStream', () => {
 describe('StorageService.resolveEffectiveLimits', () => {
     it('should return global limits when no provider limit is set', async () => {
         const limits = await StorageService.resolveEffectiveLimits();
+        expect(limits.enabled).toBe(true);
         expect(limits.maxFileSize).toBe(env.SIMPLENS_MAX_FILE_SIZE);
         expect(limits.maxCount).toBe(env.SIMPLENS_MAX_FILE_COUNT);
+    });
+
+    it('should return enabled false when provider disables attachments', async () => {
+        const spy = vi.spyOn(ProviderManagerService, 'getEffectiveFileAttachmentConfig').mockResolvedValueOnce({
+            enabled: false,
+        });
+        const limits = await StorageService.resolveEffectiveLimits('email', 'p-disabled');
+        expect(limits.enabled).toBe(false);
+        spy.mockRestore();
     });
 });
 

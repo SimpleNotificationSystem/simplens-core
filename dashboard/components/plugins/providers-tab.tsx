@@ -475,6 +475,7 @@ export function ProvidersTab() {
   const [customMimeInput, setCustomMimeInput] = useState("");
   const [mimePopoverOpen, setMimePopoverOpen] = useState(false);
   const [enabled, setEnabled] = useState(true);
+  const [attachmentEnabled, setAttachmentEnabled] = useState(true);
   const [credentials, setCredentials] = useState<Record<string, string>>({});
   const [visibleCredentials, setVisibleCredentials] = useState<Record<string, boolean>>({});
   const [loadingCredentialVisibility, setLoadingCredentialVisibility] = useState<Record<string, boolean>>({});
@@ -569,6 +570,7 @@ export function ProvidersTab() {
     setCustomMimeInput("");
     setMimePopoverOpen(false);
     setEnabled(true);
+    setAttachmentEnabled(true);
     setCredentials({});
     setVisibleCredentials({});
     setLoadingCredentialVisibility({});
@@ -602,9 +604,13 @@ export function ProvidersTab() {
     let rawMaxFileSize: string | number | undefined;
     let loadedMaxCount = "";
     let loadedAllowedMimeTypes: string[] = [];
+    let loadedAttachmentEnabled = true;
 
     if (providerOpts.fileAttachment && typeof providerOpts.fileAttachment === "object") {
       const fa = providerOpts.fileAttachment as Record<string, unknown>;
+      if (fa.enabled !== undefined) {
+        loadedAttachmentEnabled = fa.enabled !== false && fa.enabled !== "false";
+      }
       if (fa.maxFileSize !== undefined) rawMaxFileSize = fa.maxFileSize as string | number;
       if (fa.maxCount !== undefined) loadedMaxCount = String(fa.maxCount);
       if (fa.allowedMimeTypes) {
@@ -612,6 +618,10 @@ export function ProvidersTab() {
           ? (fa.allowedMimeTypes as string[])
           : String(fa.allowedMimeTypes).split(",").map((s) => s.trim()).filter(Boolean);
       }
+    }
+    if (providerOpts.ATTACHMENT_ENABLED !== undefined) {
+      loadedAttachmentEnabled =
+        providerOpts.ATTACHMENT_ENABLED !== false && providerOpts.ATTACHMENT_ENABLED !== "false";
     }
     if (providerOpts.ATTACHMENT_MAX_FILE_SIZE !== undefined) {
       rawMaxFileSize = providerOpts.ATTACHMENT_MAX_FILE_SIZE as string | number;
@@ -660,6 +670,7 @@ export function ProvidersTab() {
     setMaxCountOverride(loadedMaxCount);
     setSelectedMimeTypes(loadedAllowedMimeTypes);
     setEnabled(provider.enabled);
+    setAttachmentEnabled(loadedAttachmentEnabled);
     setCredentials({});
     setVisibleCredentials({});
     setLoadingCredentialVisibility({});
@@ -691,16 +702,21 @@ export function ProvidersTab() {
       options[key] = /^-?\d+$/.test(trimmed) ? parseInt(trimmed, 10) : trimmed;
     }
 
-    // Merge file attachment overrides
-    if (fileSizeValue.trim() !== "") {
-      options.ATTACHMENT_MAX_FILE_SIZE = `${fileSizeValue.trim()}${fileSizeUnit}`;
-    }
-    if (maxCountOverride.trim() !== "") {
-      const count = parseInt(maxCountOverride.trim(), 10);
-      if (!isNaN(count)) options.ATTACHMENT_MAX_COUNT = count;
-    }
-    if (selectedMimeTypes.length > 0) {
-      options.ATTACHMENT_ALLOWED_MIME_TYPES = selectedMimeTypes;
+    // Merge file attachment settings & overrides
+    if (selectedPlugin?.manifest?.fileAttachment?.enabled) {
+      options.ATTACHMENT_ENABLED = attachmentEnabled;
+      if (attachmentEnabled) {
+        if (fileSizeValue.trim() !== "") {
+          options.ATTACHMENT_MAX_FILE_SIZE = `${fileSizeValue.trim()}${fileSizeUnit}`;
+        }
+        if (maxCountOverride.trim() !== "") {
+          const count = parseInt(maxCountOverride.trim(), 10);
+          if (!isNaN(count)) options.ATTACHMENT_MAX_COUNT = count;
+        }
+        if (selectedMimeTypes.length > 0) {
+          options.ATTACHMENT_ALLOWED_MIME_TYPES = selectedMimeTypes;
+        }
+      }
     }
 
     for (const option of additionalOptions) {
@@ -940,6 +956,30 @@ export function ProvidersTab() {
                 <div className="flex items-center gap-2 flex-wrap text-xs">
                   <Badge variant="outline">Channel: {p.channel}</Badge>
                   <Badge variant="outline">Priority: {p.options?.priority || 0}</Badge>
+                  {(() => {
+                    const plugin = installedPlugins.find((pl) => pl.name === p.plugin_name);
+                    if (!plugin?.manifest?.fileAttachment?.enabled) return null;
+                    const pOpts = (p.options || {}) as Record<string, unknown>;
+                    const fa = pOpts.fileAttachment as { enabled?: boolean } | undefined;
+                    const isAttEnabled =
+                      fa?.enabled !== undefined
+                        ? fa.enabled !== false
+                        : pOpts.ATTACHMENT_ENABLED !== undefined
+                          ? pOpts.ATTACHMENT_ENABLED !== false && pOpts.ATTACHMENT_ENABLED !== "false"
+                          : true;
+
+                    return isAttEnabled ? (
+                      <Badge variant="outline" className="text-emerald-500 border-emerald-500/30 gap-1">
+                        <Paperclip className="h-3 w-3" />
+                        Attachments Enabled
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-amber-500 border-amber-500/30 gap-1">
+                        <Paperclip className="h-3 w-3" />
+                        Attachments Disabled
+                      </Badge>
+                    );
+                  })()}
                   <div className="flex items-center gap-1 text-muted-foreground">
                     <KeyRound className="h-3.5 w-3.5 text-emerald-500" />
                     <span>Encrypted (RSA-OAEP)</span>
@@ -1200,21 +1240,41 @@ export function ProvidersTab() {
                   </div>
                 )}
 
-              {/* File Attachment Limits Overrides */}
+              {/* File Attachment Settings & Limits */}
               {selectedPlugin?.manifest?.fileAttachment?.enabled && (
                 <div className="space-y-3 pt-2 border-t">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <Paperclip className="h-4 w-4 text-primary" />
-                      <Label className="text-sm font-semibold">File Attachment Limits</Label>
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <Paperclip className="h-4 w-4 text-primary" />
+                        <Label htmlFor="provider-attachment-toggle" className="text-sm font-semibold cursor-pointer">
+                          Allow File Attachments
+                        </Label>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Enable or disable file attachments for this provider instance.
+                      </p>
                     </div>
-                    <Badge variant="outline" className="text-[10px] font-normal">
-                      Optional Overrides
-                    </Badge>
+                    <Switch
+                      id="provider-attachment-toggle"
+                      checked={attachmentEnabled}
+                      onCheckedChange={setAttachmentEnabled}
+                    />
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Override default attachment limits for this provider tier. Leave empty to use plugin defaults.
-                  </p>
+
+                  {attachmentEnabled ? (
+                    <div className="space-y-3 pt-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">
+                          Attachment Limits Overrides
+                        </Label>
+                        <Badge variant="outline" className="text-[10px] font-normal">
+                          Optional Overrides
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Override default attachment limits for this provider tier. Leave empty to use plugin defaults.
+                      </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <Label htmlFor="att-max-file-size" className="text-xs">
@@ -1494,6 +1554,15 @@ export function ProvidersTab() {
                       </ScrollArea>
                     )}
                   </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      <span>
+                        File attachments are disabled for this provider. Any uploads or send requests specifying attachments will be rejected.
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 

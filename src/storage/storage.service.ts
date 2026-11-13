@@ -76,6 +76,7 @@ export class StorageService {
      * Secondary fallback: provider.getFileAttachmentConfig() / PluginRegistry.
      */
     static async resolveEffectiveLimits(channel?: string, providerId?: string): Promise<{
+        enabled: boolean;
         maxFileSize: number;
         maxCount: number;
         allowedMimeTypes?: string[];
@@ -112,7 +113,10 @@ export class StorageService {
                 : globalMaxCount
         );
 
+        const isEnabled = providerLimits ? providerLimits.enabled !== false : true;
+
         return {
+            enabled: isEnabled,
             maxFileSize: effectiveMaxSize,
             maxCount: effectiveMaxCount,
             allowedMimeTypes: providerLimits?.allowedMimeTypes,

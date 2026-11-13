@@ -185,8 +185,17 @@ export class ProviderManagerService {
       providerDoc.enabled = updates.enabled;
     }
     if (updates.options !== undefined) {
-      const currentFa = (providerDoc.options as { fileAttachment?: FileAttachmentConfig } | undefined)?.fileAttachment;
-      const updatedFa = resolveFileAttachmentConfig(currentFa, updates.options as Record<string, unknown> | undefined);
+      let baselineFa: FileAttachmentConfig | undefined;
+      try {
+        const plugin = await Plugin.findOne({ name: providerDoc.plugin_name }).lean();
+        baselineFa = plugin?.manifest?.fileAttachment;
+      } catch {
+        // Fallback to existing options if DB query fails
+      }
+      if (!baselineFa) {
+        baselineFa = (providerDoc.options as { fileAttachment?: FileAttachmentConfig } | undefined)?.fileAttachment;
+      }
+      const updatedFa = resolveFileAttachmentConfig(baselineFa, updates.options as Record<string, unknown> | undefined);
       providerDoc.options = {
         ...updates.options,
         ...(updatedFa ? { fileAttachment: updatedFa } : {}),

@@ -201,6 +201,52 @@ describe('ProviderManagerService', () => {
         channel: 'email',
       });
     });
+
+    it('should update options.fileAttachment using plugin manifest baseline limits', async () => {
+      const mockDoc: any = {
+        _id: '507f1f77bcf86cd799439011',
+        id: 'email-p1',
+        plugin_name: 'test-email-plugin',
+        channel: 'email',
+        enabled: true,
+        options: {
+          fileAttachment: {
+            enabled: false,
+          },
+        },
+        save: vi.fn().mockResolvedValue(undefined),
+        toObject: () => mockDoc,
+      };
+
+      vi.spyOn(Provider, 'findOne').mockResolvedValue(mockDoc as any);
+      vi.spyOn(Plugin, 'findOne').mockReturnValue({
+        lean: vi.fn().mockResolvedValue({
+          name: 'test-email-plugin',
+          manifest: {
+            channel: 'email',
+            fileAttachment: {
+              enabled: true,
+              maxFileSize: 10 * 1024 * 1024,
+              maxCount: 5,
+              allowedMimeTypes: ['application/pdf'],
+            },
+          },
+        }),
+      } as any);
+      vi.spyOn(ProviderManagerService, 'loadAndRegisterProvider').mockResolvedValue(undefined);
+
+      await ProviderManagerService.updateProvider('email-p1', {
+        options: {
+          fileAttachment: {
+            enabled: true,
+          },
+        },
+      });
+
+      expect(mockDoc.options.fileAttachment.enabled).toBe(true);
+      expect(mockDoc.options.fileAttachment.maxFileSize).toBe(10 * 1024 * 1024);
+      expect(mockDoc.options.fileAttachment.maxCount).toBe(5);
+    });
   });
 
   describe('deleteProvider', () => {
