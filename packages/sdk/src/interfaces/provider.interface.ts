@@ -53,6 +53,54 @@ export interface RateLimitConfig {
 }
 
 /**
+ * Configuration options for file attachments supported by a provider
+ */
+export interface FileAttachmentConfig {
+    /** Whether file attachments are enabled for this provider */
+    enabled?: boolean;
+    /** Maximum file size in bytes */
+    maxFileSize?: number;
+    /** Maximum number of file attachments allowed in a single notification */
+    maxCount?: number;
+    /** Allowed MIME types (e.g. ['application/pdf', 'image/*']) */
+    allowedMimeTypes?: string[];
+}
+
+/**
+ * Standard file attachment item structure in notification content
+ */
+export interface FileAttachmentItem {
+    /** Unique file identifier (from SimpleNS storage / upload) */
+    id: string;
+    /** Original file name (e.g. invoice.pdf) */
+    filename: string;
+    /** MIME type (e.g. application/pdf) */
+    mime_type: string;
+    /** File size in bytes */
+    size: number;
+    /** SHA-256 hash of the file content for deduplication and integrity */
+    hash: string;
+    /** Optional public or signed URL to access the file */
+    url?: string;
+    /** Optional provider-specific metadata */
+    metadata?: Record<string, unknown>;
+    /** Optional binary Buffer of the file content resolved by SimpleNS before delivery */
+    buffer?: Buffer;
+    /** Optional Readable stream of the file content resolved by SimpleNS before delivery */
+    stream?: NodeJS.ReadableStream | Buffer;
+}
+
+/**
+ * Standard optional config keys for file attachment limits
+ */
+export const STANDARD_ATTACHMENT_OPTIONAL_KEYS = [
+    'ATTACHMENT_MAX_FILE_SIZE',
+    'ATTACHMENT_MAX_COUNT',
+    'ATTACHMENT_ALLOWED_MIME_TYPES',
+    'ATTACHMENT_ENABLED',
+] as const;
+
+/**
  * Provider manifest - metadata about the provider
  */
 export interface ProviderManifest {
@@ -74,6 +122,8 @@ export interface ProviderManifest {
     requiredCredentials: string[];
     /** Optional configuration field names */
     optionalConfig?: string[];
+    /** Optional file attachment support configuration */
+    fileAttachment?: FileAttachmentConfig;
 }
 
 /**
@@ -153,6 +203,12 @@ export interface SimpleNSProvider<TNotification extends BaseNotification = BaseN
      * SimpleNS uses this to control send rate
      */
     getRateLimitConfig(): RateLimitConfig;
+
+    /**
+     * Get effective file attachment configuration for this provider instance (optional)
+     * Returns merged configuration of manifest defaults and provider options/credentials
+     */
+    getFileAttachmentConfig?(): FileAttachmentConfig | undefined;
 
     /**
      * Initialize the provider with credentials

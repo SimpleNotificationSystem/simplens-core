@@ -67,7 +67,7 @@ function isStaticFile(pathname: string): boolean {
     return staticPatterns.some((pattern) => pathname.includes(pattern));
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
     let pathname = request.nextUrl.pathname;
 
     // STEP 0: Handle root path when base path is configured
@@ -106,6 +106,21 @@ export async function middleware(request: NextRequest) {
     // STEP 4: Check if authenticated user is trying to access login page
     if (pathname === "/login" && session.isValid) {
         return NextResponse.redirect(new URL(`${basePath}/dashboard`, request.url));
+    }
+
+    // STEP 4.5: Allow file download route to be handled by Next.js route handler (for streaming & 404 redirect)
+    if (pathname.match(/^\/api\/file\/[^/]+\/download$/)) {
+        if (!session.isValid) {
+            const loginUrl = new URL(`${basePath}/login`, request.url);
+            loginUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);
+            return NextResponse.redirect(loginUrl);
+        }
+        if (basePath && request.nextUrl.pathname.startsWith(basePath)) {
+          const url = request.nextUrl.clone();
+          url.pathname = pathname;
+          return NextResponse.rewrite(url);
+        }
+        return NextResponse.next();
     }
 
     // STEP 5: Proxy API requests directly to backend when accessed on standalone dashboard port

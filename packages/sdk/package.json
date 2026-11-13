@@ -1,6 +1,6 @@
 {
     "name": "@simplens/sdk",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "description": "SDK for building SimpleNS notification provider plugins",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -36,7 +36,7 @@
         "zod": "^3.22.0"
     },
     "devDependencies": {
-        "@types/node": "^20.0.0",
+        "@types/node": "^20.19.43",
         "typescript": "^5.0.0"
     },
     "files": [

@@ -156,4 +156,20 @@ export const env = {
     get LOG_TO_FILE(): boolean {
         return dynamicConfig?.get?.('logging')?.log_to_file ?? (process.env.LOG_TO_FILE === 'true');
     },
+
+    // File Attachments & Upload Limits
+    get CLEANUP_DELIVERED_ATTACHMENTS_RETENTION_MS(): number | null {
+        const val = dynamicConfig?.get?.('recovery')?.cleanup_delivered_attachments_retention_ms;
+        if (val === null || val === undefined || val === 0 || Number.isNaN(val)) {
+            return null;
+        }
+        return val;
+    },
+
+    get SIMPLENS_MAX_FILE_SIZE(): number {
+        return dynamicConfig?.get?.('attachment')?.max_file_size ?? 100 * 1024 * 1024;
+    },
+    get SIMPLENS_MAX_FILE_COUNT(): number {
+        return dynamicConfig?.get?.('attachment')?.max_file_count ?? 10;
+    },
 };

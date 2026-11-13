@@ -378,6 +378,67 @@ describe("API Utility Functions", () => {
       });
     });
 
+    it("should merge request attachments into template content when template_id is used", async () => {
+      const notification_template_model = (
+        await import("../../../src/database/models/notification-template.models.js")
+      ).default;
+      (
+        notification_template_model.find as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([
+        {
+          template_id: "email-template-1",
+          content: {
+            subject: "Monthly Statement",
+            message: "Please find your statement attached.",
+          },
+        },
+      ]);
+
+      const { convert_notification_request_to_notification_schema } =
+        await import("../../../src/api/utils/utils.js");
+
+      const request: notification_request = {
+        request_id:
+          randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+        client_id:
+          randomUUID() as `${string}-${string}-${string}-${string}-${string}`,
+        channel: ["email"],
+        template_id: ["email-template-1"],
+        content: {
+          email: {
+            attachments: [
+              {
+                fileId: "f-12345",
+                filename: "statement.pdf",
+                contentType: "application/pdf",
+              },
+            ],
+          },
+        },
+        recipient: {
+          user_id: "user-123",
+          email: "test@example.com",
+        },
+        webhook_url: "https://webhook.example.com/callback",
+      };
+
+      const notifications =
+        await convert_notification_request_to_notification_schema(request);
+
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0].content).toEqual({
+        subject: "Monthly Statement",
+        message: "Please find your statement attached.",
+        attachments: [
+          {
+            fileId: "f-12345",
+            filename: "statement.pdf",
+            contentType: "application/pdf",
+          },
+        ],
+      });
+    });
+
     it("should fallback to content when template_id is not provided for channel", async () => {
       const notification_template_model = (
         await import("../../../src/database/models/notification-template.models.js")

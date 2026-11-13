@@ -25,6 +25,7 @@ import { apiLogger as logger } from "@src/workers/utils/logger.js";
 import { PluginRegistry } from "@src/plugins/index.js";
 import notification_template_model from "@src/database/models/notification-template.models.js";
 import { ZodError } from "zod";
+import { resolveFileAttachmentConfig } from "@src/types/schemas.js";
 
 const preloadTemplatesByIds = async (
   templateIds?: (string | null | undefined)[],
@@ -99,8 +100,14 @@ export const convert_notification_request_to_notification_schema = async (
                     `Template not found for the given template_id: ${data.template_id![index]}`,
                 );
             }
-    
-            content = templateContent;
+
+            content = { ...templateContent };
+
+            const reqAttachments = (data.content?.[channel] as Record<string, unknown> | undefined)?.attachments;
+            if (Array.isArray(reqAttachments) && reqAttachments.length > 0) {
+                const existingAttachments = Array.isArray(content.attachments) ? (content.attachments as unknown[]) : [];
+                content.attachments = [...existingAttachments, ...reqAttachments];
+            }
         }
         else{
             content = data.content![channel];
@@ -108,7 +115,7 @@ export const convert_notification_request_to_notification_schema = async (
                 throw new Error(`${channel} record not found in content field`);
             }
         }
-        
+
     } else {
         content = data.content![channel];
         if (!content) {
@@ -184,8 +191,14 @@ export const convert_batch_notification_schema_to_notification_schema = async (
                         `Template not found for the given template_id: ${data.template_id![index]}`,
                     );
                 }
-        
-                content = templateContent;
+
+                content = { ...templateContent };
+
+                const reqAttachments = (data.content?.[channel] as Record<string, unknown> | undefined)?.attachments;
+                if (Array.isArray(reqAttachments) && reqAttachments.length > 0) {
+                    const existingAttachments = Array.isArray(content.attachments) ? (content.attachments as unknown[]) : [];
+                    content.attachments = [...existingAttachments, ...reqAttachments];
+                }
             }
             else{
                 content = data.content![channel];
@@ -193,7 +206,7 @@ export const convert_batch_notification_schema_to_notification_schema = async (
                     throw new Error(`${channel} record not found in content field`);
                 }
             }
-            
+
         } else {
             content = data.content![channel];
             if (!content) {
@@ -549,10 +562,30 @@ export const process_notifications = async (
  */
 export class InvalidContentSchemaError extends Error {
   public error: ZodError<Record<string, unknown>>;
-  constructor(message: string, error: ZodError<Record<string, unknown>>) {
-    super(message);
+  public issues: Array<{ path: string; message: string }>;
+
+  constructor(
+    providerIdOrMessage: string,
+    error: ZodError<Record<string, unknown>>,
+  ) {
+    const issues = error.issues.map((issue) => {
+      const path = issue.path.length > 0 ? issue.path.join(".") : "content";
+      return {
+        path,
+        message: issue.message,
+      };
+    });
+
+    const issuesSummary = issues.map((i) => i.message).join("\n");
+    const providerName = providerIdOrMessage.replace(/^Content Validation failed for given provider_id:\s*/i, "");
+    const fullMessage = issuesSummary
+      ? `Validation failed for provider '${providerName}':\n${issuesSummary}`
+      : `Content validation failed for provider '${providerName}'`;
+
+    super(fullMessage);
     this.name = "InvalidContentSchemaError";
     this.error = error;
+    this.issues = issues;
   }
 }
 
@@ -585,11 +618,44 @@ export const validateContentSchema = (
       `Provider not found with the given provider_id: ${provider_id ?? "Default Provider"}`,
     );
   }
+
+  const resolvedProviderId =
+    provider_id ||
+    PluginRegistry.getDefaultProviderId?.(channel) ||
+    provider.manifest?.displayName ||
+    "Default Provider";
+
+  // Check if file attachments are explicitly disabled for this provider instance
+  const targetProviderId = provider_id || PluginRegistry.getDefaultProviderId?.(channel);
+  const registered = targetProviderId ? PluginRegistry.getRegistered?.(targetProviderId) : undefined;
+  const baselineAttachment = provider.getFileAttachmentConfig?.() ?? provider.manifest?.fileAttachment;
+  const effectiveAttachment = resolveFileAttachmentConfig(
+    baselineAttachment,
+    registered?.options as Record<string, unknown> | undefined
+  ) ?? baselineAttachment;
+
+  if (effectiveAttachment && effectiveAttachment.enabled === false) {
+    const rawAttachments = content.attachments;
+    if (Array.isArray(rawAttachments) && rawAttachments.length > 0) {
+      const error = new ZodError([
+          {
+              code: "custom",
+              path: ["attachments"],
+              message: "File attachments are disabled for this provider",
+          },
+      ]) as ZodError<Record<string, unknown>>;
+      throw new InvalidContentSchemaError(
+        resolvedProviderId,
+        error
+      );
+    }
+  }
+
   const providerContentSchema = provider.getContentSchema();
   const validationResult = providerContentSchema.safeParse(content);
   if (!validationResult.success) {
     throw new InvalidContentSchemaError(
-      `Content Validation failed for given provider_id: ${provider_id ?? "Default Provider"}`,
+      resolvedProviderId,
       validationResult.error,
     );
   }

@@ -1,0 +1,1 @@
+# Reserved directory for concrete storage providers (e.g. s3.storage.ts, minio.storage.ts, local.storage.ts)

@@ -112,11 +112,60 @@ export interface Alert {
   updated_at: Date;
 }
 
+export interface FileAttachmentConfig {
+  enabled?: boolean;
+  maxFileSize?: number;
+  maxCount?: number;
+  allowedMimeTypes?: string[];
+}
+
+export type FileSizeUnit = "B" | "KB" | "MB" | "GB" | "TB";
+
+export interface MimeCategoryItem {
+  mime: string;
+  label: string;
+  ext?: string;
+}
+
+export interface MimeCategory {
+  category: string;
+  items: MimeCategoryItem[];
+}
+
+export interface FileAttachmentItem {
+  id: string;
+  filename: string;
+  mime_type: string;
+  size: number;
+  hash: string;
+  url?: string;
+  created_at?: string;
+}
+
+export type FieldType =
+  | "string"
+  | "email"
+  | "phone"
+  | "url"
+  | "text"
+  | "number"
+  | "boolean"
+  | "enum"
+  | "array"
+  | "object"
+  | "attachment";
+
 export interface FieldDefinition {
   name: string;
-  type: "string" | "email" | "phone" | "text" | "number" | "boolean";
+  type: FieldType;
   required: boolean;
   description?: string;
+  defaultValue?: unknown;
+  enumValues?: string[];
+  itemType?: FieldType;
+  itemFields?: FieldDefinition[];
+  fields?: FieldDefinition[];
+  attachmentConfig?: FileAttachmentConfig;
 }
 
 export interface CsvRecipientField {
@@ -124,6 +173,7 @@ export interface CsvRecipientField {
   label: string;
   required: boolean;
   variableName?: string;
+  type?: FieldType;
 }
 
 export interface CsvImportData {
@@ -140,6 +190,41 @@ export interface ProviderMetadata {
   priority: number;
   recipientFields: FieldDefinition[];
   contentFields: FieldDefinition[];
+}
+
+export interface StorageProviderConfig {
+  _id: string;
+  name: string;
+  provider_type: string;
+  enabled: boolean;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CredentialField {
+  name: string;
+  type: 'string' | 'url' | 'secret';
+  label: string;
+  placeholder?: string;
+  description?: string;
+  required: boolean;
+  pattern?: string;
+}
+
+export interface StorageProviderMeta {
+  providerType: string;
+  displayName: string;
+  credentialFields: CredentialField[];
+}
+
+export interface StorageStatus {
+  hasActiveProvider: boolean;
+  activeProvider?: {
+    id?: string;
+    name: string;
+    provider_type: string;
+  };
 }
 
 export interface ChannelMetadata {
@@ -226,15 +311,7 @@ export interface AdminChannelFormData {
   enabled?: boolean;
 }
 
-export interface AdminChannelProviderField {
-  name: string;
-  type: 'string' | 'url' | 'secret';
-  label: string;
-  placeholder?: string;
-  description?: string;
-  required: boolean;
-  pattern?: string;
-}
+export type AdminChannelProviderField = CredentialField;
 
 export interface AdminChannelProviderMeta {
   channelType: string;
@@ -256,6 +333,7 @@ export interface ProviderManifest {
   homepage?: string;
   requiredCredentials: string[];
   optionalConfig?: string[];
+  fileAttachment?: FileAttachmentConfig;
 }
 
 export interface InstalledPlugin {
@@ -363,10 +441,15 @@ export interface OperationalSettings {
     recovery_claim_timeout_ms: number;
     cleanup_resolved_alerts_retention_ms: number;
     cleanup_processed_status_outbox_retention_ms: number;
+    cleanup_delivered_attachments_retention_ms: number | null;
   };
   logging: {
     log_level: 'debug' | 'info' | 'warn' | 'error';
     log_to_file: boolean;
+  };
+  attachment?: {
+    max_file_size: number;
+    max_file_count: number;
   };
 }
 

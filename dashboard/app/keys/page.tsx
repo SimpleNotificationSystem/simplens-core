@@ -566,7 +566,7 @@ export default function ApiKeysPage() {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleRevoke} className="bg-amber-600 hover:bg-amber-700">
+                            <AlertDialogAction onClick={handleRevoke} className="bg-amber-600 hover:bg-amber-700 dark:bg-amber-600 dark:hover:bg-amber-700">
                                 Revoke Key
                             </AlertDialogAction>
                         </AlertDialogFooter>
@@ -584,7 +584,7 @@ export default function ApiKeysPage() {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+                            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700">
                                 Delete Permanently
                             </AlertDialogAction>
                         </AlertDialogFooter>

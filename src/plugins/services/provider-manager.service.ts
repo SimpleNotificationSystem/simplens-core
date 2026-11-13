@@ -23,7 +23,9 @@ import type {
   ProviderResponseDto,
   SimpleNSProvider,
   encrypted_credentials,
+  FileAttachmentConfig,
 } from '@src/types/types.js';
+import { resolveFileAttachmentConfig } from '@src/types/schemas.js';
 import { pluginLoaderLogger as logger } from '@src/workers/utils/logger.js';
 import { resetRateLimiter } from '@src/processors/shared/rate-limiter.js';
 
@@ -86,13 +88,32 @@ export class ProviderManagerService {
 
     const encryptedCredentials = await encryptCredentials(data.credentials);
 
+    // Resolve baseline file attachment configuration from plugin/providerInstance and merge with options
+    let initialFaConfig: FileAttachmentConfig | undefined;
+    try {
+      const providerInstance = await importAndInstantiateProvider(data.plugin_name);
+      initialFaConfig = providerInstance.getFileAttachmentConfig?.();
+    } catch {
+      // Fall back to manifest if instantiation fails
+      initialFaConfig = plugin.manifest.fileAttachment;
+    }
+    if (!initialFaConfig) {
+      initialFaConfig = plugin.manifest.fileAttachment;
+    }
+
+    const resolvedFa = resolveFileAttachmentConfig(initialFaConfig, data.options as Record<string, unknown> | undefined);
+    const finalOptions: ProviderOptions = {
+      ...(data.options || {}),
+      ...(resolvedFa ? { fileAttachment: resolvedFa } : {}),
+    };
+
     const providerDoc = await Provider.create({
       id: data.id,
       plugin_name: data.plugin_name,
       channel: plugin.manifest.channel,
       enabled: data.enabled !== false,
       credentials: encryptedCredentials,
-      options: data.options || {},
+      options: finalOptions,
     });
 
     // If enabled, load into current process registry
@@ -164,7 +185,21 @@ export class ProviderManagerService {
       providerDoc.enabled = updates.enabled;
     }
     if (updates.options !== undefined) {
-      providerDoc.options = updates.options;
+      let baselineFa: FileAttachmentConfig | undefined;
+      try {
+        const plugin = await Plugin.findOne({ name: providerDoc.plugin_name }).lean();
+        baselineFa = plugin?.manifest?.fileAttachment;
+      } catch {
+        // Fallback to existing options if DB query fails
+      }
+      if (!baselineFa) {
+        baselineFa = (providerDoc.options as { fileAttachment?: FileAttachmentConfig } | undefined)?.fileAttachment;
+      }
+      const updatedFa = resolveFileAttachmentConfig(baselineFa, updates.options as Record<string, unknown> | undefined);
+      providerDoc.options = {
+        ...updates.options,
+        ...(updatedFa ? { fileAttachment: updatedFa } : {}),
+      };
     }
     if (updates.credentials && Object.keys(updates.credentials).length > 0) {
       providerDoc.credentials = await encryptCredentials(updates.credentials);
@@ -376,6 +411,74 @@ export class ProviderManagerService {
   }
 
   /**
+   * Get effective file attachment configuration for a provider or channel.
+   * Primary lookup: MongoDB (Provider collection).
+   * Secondary fallback: provider.getFileAttachmentConfig() / PluginRegistry / manifest.
+   */
+  public static async getEffectiveFileAttachmentConfig(
+    providerId?: string,
+    channel?: string
+  ): Promise<FileAttachmentConfig | undefined> {
+    try {
+      let targetProviderId = providerId;
+
+      // If providerId not given but channel is given, find default provider from ChannelRouting
+      if (!targetProviderId && channel) {
+        const routing = await ChannelRouting.findOne({ channel }).lean();
+        if (routing?.default_provider_id) {
+          targetProviderId = routing.default_provider_id;
+        } else {
+          // If no routing, try finding first enabled provider for that channel
+          const firstProvider = await Provider.findOne({ channel, enabled: true }).lean();
+          if (firstProvider) {
+            targetProviderId = firstProvider.id;
+          }
+        }
+      }
+
+      if (targetProviderId) {
+        const providerDoc = await Provider.findOne({ id: targetProviderId }).lean();
+        if (providerDoc && providerDoc.options) {
+          let fallbackConfig: FileAttachmentConfig | undefined;
+          try {
+            if (PluginRegistry.has(targetProviderId)) {
+              fallbackConfig = PluginRegistry.get(targetProviderId)?.getFileAttachmentConfig?.();
+            }
+          } catch {
+            // Ignore if PluginRegistry is not yet initialized
+          }
+
+          const resolved = resolveFileAttachmentConfig(
+            fallbackConfig,
+            providerDoc.options as Record<string, unknown>
+          );
+          if (resolved) {
+            return resolved;
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn(`Failed to fetch file attachment config from MongoDB for provider '${providerId}' / channel '${channel}':`, {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    // Secondary fallback: PluginRegistry / provider.getFileAttachmentConfig()
+    try {
+      if (providerId && PluginRegistry.has(providerId)) {
+        return PluginRegistry.get(providerId)?.getFileAttachmentConfig?.();
+      }
+      if (channel && PluginRegistry.hasChannel(channel)) {
+        return PluginRegistry.getDefaultProvider(channel)?.getFileAttachmentConfig?.();
+      }
+    } catch {
+      // Ignore if registry is uninitialized
+    }
+
+    return undefined;
+  }
+
+  /**
    * Helper to retrieve cached credentials or decrypt and cache them
    */
   private static async getOrDecryptCredentials(
@@ -403,14 +506,25 @@ export class ProviderManagerService {
     const providerInstance = await importAndInstantiateProvider(pluginName);
     let healthy = true;
 
+    const config: ProviderConfig = {
+      id,
+      credentials,
+      options,
+    };
+
     if (initialize) {
-      const config: ProviderConfig = {
-        id,
-        credentials,
-        options,
-      };
       await providerInstance.initialize(config);
       healthy = await providerInstance.healthCheck();
+    } else {
+      // In API server / metadata-only mode, initialize provider schema & config
+      // without performing a live network healthCheck.
+      try {
+        await providerInstance.initialize(config);
+      } catch (initErr) {
+        logger.warn(`Provider '${id}' initialized without health check encountered an error:`, {
+          error: initErr instanceof Error ? initErr.message : String(initErr),
+        });
+      }
     }
 
     return { providerInstance, healthy };
@@ -491,7 +605,8 @@ export class ProviderManagerService {
     PluginRegistry.registerOrReplace(
       providerInstance,
       providerDoc.id,
-      providerDoc.options?.priority ?? 0
+      providerDoc.options?.priority ?? 0,
+      providerDoc.options as ProviderOptions | undefined
     );
     logger.success(`Registered provider '${providerDoc.id}' in PluginRegistry.`);
   }

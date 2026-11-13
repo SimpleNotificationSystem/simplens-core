@@ -91,6 +91,7 @@ export interface SimpleNSProvider<TNotification extends BaseNotification = BaseN
     getRecipientSchema(): z.ZodObject<Record<string, z.ZodTypeAny>>;
     getContentSchema(): z.ZodObject<Record<string, z.ZodTypeAny>>;
     getRateLimitConfig(): RateLimitConfig;
+    getFileAttachmentConfig?(): FileAttachmentConfig | undefined;
 
     initialize(config: ProviderConfig): Promise<void>;
     healthCheck(): Promise<boolean>;
@@ -156,6 +157,12 @@ import {
     createApiKeySchema,
     apiKeyResponseSchema,
     createApiKeyResponseSchema,
+    fileAttachmentConfigSchema,
+    fileAttachmentItemSchema,
+    fileAttachmentArraySchema,
+    storageProviderCreateSchema,
+    storageProviderUpdateSchema,
+    minioStorageConfigSchema,
 } from "./schemas.js";
 
 // ============================================================================
@@ -220,6 +227,9 @@ export type notification_template = z.infer<typeof notificationTemplateSchema>;
 // ============================================================================
 
 export type encrypted_credentials = z.infer<typeof encryptedCredentialsSchema>;
+export type file_attachment_config = z.infer<typeof fileAttachmentConfigSchema>;
+export type file_attachment_item = z.infer<typeof fileAttachmentItemSchema>;
+export type file_attachment_array = z.infer<typeof fileAttachmentArraySchema>;
 export type provider_manifest = z.infer<typeof providerManifestSchema>;
 export type plugin_document = z.infer<typeof pluginSchema>;
 export type provider_document = z.infer<typeof providerSchema>;
@@ -295,6 +305,7 @@ export interface RegisteredProvider {
     provider: SimpleNSProvider;
     id: string;
     priority: number;
+    options?: ProviderOptions;
 }
 
 export interface ChannelConfig {
@@ -302,11 +313,49 @@ export interface ChannelConfig {
     fallback?: string | string[];
 }
 
+export interface FileAttachmentConfig {
+    enabled?: boolean;
+    maxFileSize?: number;
+    maxCount?: number;
+    allowedMimeTypes?: string[];
+}
+
+export interface FileAttachmentItem {
+    id: string;
+    filename: string;
+    mime_type: string;
+    size: number;
+    hash: string;
+    url?: string;
+    metadata?: Record<string, unknown>;
+    buffer?: Buffer;
+    stream?: NodeJS.ReadableStream | Buffer;
+}
+
+export type FieldType =
+    | 'string'
+    | 'email'
+    | 'phone'
+    | 'url'
+    | 'text'
+    | 'number'
+    | 'boolean'
+    | 'enum'
+    | 'array'
+    | 'object'
+    | 'attachment';
+
 export interface FieldDefinition {
     name: string;
-    type: 'string' | 'email' | 'phone' | 'text' | 'number' | 'boolean';
+    type: FieldType;
     required: boolean;
     description?: string;
+    defaultValue?: unknown;
+    enumValues?: string[];
+    itemType?: FieldType;
+    itemFields?: FieldDefinition[];
+    fields?: FieldDefinition[];
+    attachmentConfig?: FileAttachmentConfig;
 }
 
 export interface ProviderMetadata {
@@ -318,6 +367,120 @@ export interface ProviderMetadata {
     recipientFields: FieldDefinition[];
     contentFields: FieldDefinition[];
 }
+
+// ============================================================================
+// STORAGE PROVIDER CONTRACT & TYPES
+// ============================================================================
+
+export interface StorageUploadInput {
+    fileId: string;
+    filename: string;
+    mimeType: string;
+    stream: NodeJS.ReadableStream;
+    size?: number;
+    buffer?: Buffer;
+    hash?: string;
+    metadata?: Record<string, unknown>;
+}
+
+export interface StorageUploadResult {
+    success: boolean;
+    fileId: string;
+    storageKey?: string;
+    url?: string;
+    size?: number;
+    hash?: string;
+    error?: string;
+}
+
+export interface UploadFileInput {
+    originalname: string;
+    mimetype: string;
+    stream?: NodeJS.ReadableStream;
+    size?: number;
+    buffer?: Buffer;
+    hash?: string;
+    metadata?: Record<string, unknown>;
+}
+
+export interface UploadLockDoc {
+    lock_key: string;
+    locked_by: string;
+    expires_at: Date;
+    created_at?: Date;
+}
+
+export interface StorageDownloadResult {
+    success: boolean;
+    stream?: NodeJS.ReadableStream | Buffer;
+    buffer?: Buffer;
+    contentType?: string;
+    filename?: string;
+    error?: string;
+}
+
+export interface StorageDeleteResult {
+    success: boolean;
+    error?: string;
+}
+
+export interface StorageResult {
+    success: boolean;
+    error?: string;
+}
+
+export interface StorageUrlOptions {
+    expiresInSeconds?: number;
+}
+
+export interface StorageProvider {
+    readonly providerType: string;
+    readonly displayName: string;
+    upload(file: StorageUploadInput): Promise<StorageUploadResult>;
+    download(fileId: string, storageKey?: string): Promise<StorageDownloadResult>;
+    delete(fileId: string, storageKey?: string): Promise<StorageDeleteResult>;
+    getUrl?(fileId: string, options?: StorageUrlOptions, storageKey?: string): Promise<string>;
+    exists(fileId: string, storageKey?: string): Promise<boolean>;
+    testConnection(): Promise<StorageResult>;
+    getCredentialSchema(): CredentialField[];
+}
+
+export interface StorageProviderMeta {
+    providerType: string;
+    displayName: string;
+    credentialFields: CredentialField[];
+}
+
+export interface FileAttachmentDoc {
+    file_id: string;
+    filename: string;
+    mime_type: string;
+    size: number;
+    hash: string;
+    storage_provider?: string;
+    storage_provider_id?: string;
+    storage_key?: string;
+    url?: string;
+    metadata?: Record<string, unknown>;
+    created_at?: Date;
+    updated_at?: Date;
+}
+
+export interface StorageProviderDoc {
+    _id?: string;
+    name: string;
+    provider_type: string;
+    enabled: boolean;
+    is_active: boolean;
+    config: encrypted_config;
+    created_at?: Date;
+    updated_at?: Date;
+}
+
+export type StorageProviderCreatePayload = z.infer<typeof storageProviderCreateSchema>;
+export type StorageProviderUpdatePayload = z.infer<typeof storageProviderUpdateSchema>;
+export type minio_storage_config = z.infer<typeof minioStorageConfigSchema>;
+export type MinioStorageConfig = minio_storage_config;
 
 export interface ChannelMetadata {
     providers: ProviderMetadata[];

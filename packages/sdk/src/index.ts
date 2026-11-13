@@ -37,6 +37,9 @@
 export { z } from 'zod';
 
 // Interfaces
+export {
+    STANDARD_ATTACHMENT_OPTIONAL_KEYS,
+} from './interfaces/provider.interface.js';
 export type {
     SimpleNSProvider,
     ProviderManifest,
@@ -44,6 +47,8 @@ export type {
     RateLimitConfig,
     DeliveryResult,
     BaseNotification,
+    FileAttachmentConfig,
+    FileAttachmentItem,
 } from './interfaces/provider.interface.js';
 
 // Schemas
@@ -58,6 +63,11 @@ export {
     smsContentSchema,
     whatsappContentSchema,
     createNotificationSchema,
+    fileAttachmentItemSchema,
+    fileAttachmentArraySchema,
+    createFileAttachmentArraySchema,
+    parseByteSize,
+    resolveFileAttachmentConfig,
 } from './schemas/base.schemas.js';
 
 // Utilities

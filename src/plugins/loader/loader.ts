@@ -130,7 +130,7 @@ async function loadProvider(entry: ProviderEntry, options: { initialize?: boolea
 
         // Register
         const priority = entry.options?.priority || 0;
-        PluginRegistry.register(provider, entry.id, priority);
+        PluginRegistry.register(provider, entry.id, priority, config.options);
 
         logger.success(`Loaded provider: ${entry.id}`);
     } catch (err) {
@@ -217,7 +217,7 @@ export async function registerProvider(
     });
 
     const priority = options?.priority ?? 0;
-    PluginRegistry.register(provider, id, priority);
+    PluginRegistry.register(provider, id, priority, options);
 }
 
 /**

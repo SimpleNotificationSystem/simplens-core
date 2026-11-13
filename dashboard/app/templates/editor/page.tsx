@@ -18,7 +18,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -40,6 +39,7 @@ import type {
   NotificationTemplateUpdatePayload,
 } from "@/lib/types";
 import { Switch } from "@/components/ui/switch";
+import { DynamicField } from "@/components/send/dynamic-field";
 
 import { StableMonacoEditor } from "@/components/ui/monaco-wrapper";
 
@@ -100,6 +100,14 @@ function TemplateEditorContent() {
         const existing =
           map.get(provider.name) ?? new Map<string, FieldDefinition>();
         provider.contentFields.forEach((field) => {
+          if (
+            field.name === "attachments" ||
+            field.type === "attachment" ||
+            field.name === "fileAttachment" ||
+            field.name === "fileAttachments"
+          ) {
+            return;
+          }
           const current = existing.get(field.name);
           if (!current) {
             existing.set(field.name, { ...field });
@@ -151,8 +159,11 @@ function TemplateEditorContent() {
 
       schema.forEach((field) => {
         if (next[field.name] !== undefined) return;
-        next[field.name] = field.type === "boolean" ? false : "";
+        next[field.name] = field.type === "boolean" ? false : field.type === "array" ? [] : field.type === "object" ? {} : "";
       });
+      delete next.attachments;
+      delete next.fileAttachment;
+      delete next.fileAttachments;
       return next;
     },
     [packageSchemas],
@@ -166,6 +177,12 @@ function TemplateEditorContent() {
     }
     const extras = Object.keys(form.content)
       .filter((key) => !schema.some((f) => f.name === key))
+      .filter(
+        (key) =>
+          key !== "attachments" &&
+          key !== "fileAttachment" &&
+          key !== "fileAttachments",
+      )
       .map<FieldDefinition>((key) => ({
         name: key,
         type: "text",
@@ -282,6 +299,11 @@ function TemplateEditorContent() {
     setIsSaving(true);
 
     try {
+      const cleanedContent = { ...form.content };
+      delete cleanedContent.attachments;
+      delete cleanedContent.fileAttachment;
+      delete cleanedContent.fileAttachments;
+
       const body =
         mode === "create"
           ? {
@@ -291,13 +313,13 @@ function TemplateEditorContent() {
                 : {}),
               description: form.description.trim() || undefined,
               package: form.package,
-              content: form.content,
+              content: cleanedContent,
             }
           : {
               name: form.name.trim(),
               description: form.description.trim(),
               package: form.package,
-              content: form.content,
+              content: cleanedContent,
             };
 
       if (mode === "create") {
@@ -354,68 +376,38 @@ function TemplateEditorContent() {
           <div className="space-y-4">
             {fields.map((field) => {
               const value = form.content[field.name];
-              const id = `editor-field-${field.name}`;
-
-              if (field.type === "boolean") {
-                return (
-                  <div
-                    key={field.name}
-                    className="flex items-center gap-2"
-                  >
-                    <input
-                      id={id}
-                      type="checkbox"
-                      checked={!!value}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          content: {
-                            ...prev.content,
-                            [field.name]: e.target.checked,
-                          },
-                        }))
-                      }
-                      className="h-4 w-4 rounded border"
-                    />
-                    <Label htmlFor={id} className="text-sm">
-                      {field.name}
-                      {field.required && " *"}
-                    </Label>
-                  </div>
-                );
-              }
-
               const isLargeField =
-                field.type === "text" || field.type === "string";
+                field.type === "text" ||
+                field.name === "message" ||
+                field.name === "body" ||
+                field.name === "html" ||
+                field.name === "content";
               const isMonacoActive = monacoFields.has(field.name);
 
-              return (
-                <div key={field.name} className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor={id} className="text-xs">
-                      {field.name}
-                      {field.required && (
-                        <span className="text-destructive"> *</span>
-                      )}
-                    </Label>
-                    {isLargeField && (
+              if (isLargeField && isMonacoActive) {
+                return (
+                  <div key={field.name} className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor={`monaco-${field.name}`} className="text-sm font-medium">
+                        {field.name}
+                        {field.required && (
+                          <span className="text-destructive"> *</span>
+                        )}
+                      </Label>
                       <div className="flex items-center gap-2">
                         <Label
-                          htmlFor={`monaco-${field.name}`}
+                          htmlFor={`monaco-switch-${field.name}`}
                           className="text-xs text-muted-foreground cursor-pointer"
                         >
                           Code editor
                         </Label>
                         <Switch
-                          id={`monaco-${field.name}`}
+                          id={`monaco-switch-${field.name}`}
                           checked={isMonacoActive}
                           onCheckedChange={() => toggleMonaco(field.name)}
                         />
                       </div>
-                    )}
-                  </div>
-
-                  {isLargeField && isMonacoActive ? (
+                    </div>
                     <div className="overflow-hidden rounded-md border">
                       <StableMonacoEditor
                         height="350px"
@@ -445,57 +437,42 @@ function TemplateEditorContent() {
                         }}
                       />
                     </div>
-                  ) : isLargeField ? (
-                    <Textarea
-                      id={id}
-                      value={String(value ?? "")}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          content: {
-                            ...prev.content,
-                            [field.name]: e.target.value,
-                          },
-                        }))
-                      }
-                      placeholder={field.description}
-                      rows={14}
-                      className="font-mono text-sm"
-                    />
-                  ) : (
-                    <Input
-                      id={id}
-                      type={
-                        field.type === "email"
-                          ? "email"
-                          : field.type === "phone"
-                            ? "tel"
-                            : field.type === "number"
-                              ? "number"
-                              : "text"
-                      }
-                      value={String(value ?? "")}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          content: {
-                            ...prev.content,
-                            [field.name]:
-                              field.type === "number"
-                                ? Number(e.target.value)
-                                : e.target.value,
-                          },
-                        }))
-                      }
-                      placeholder={field.description}
-                    />
-                  )}
-                  {field.description && isLargeField && (
-                    <p className="text-xs text-muted-foreground">
-                      {field.description}
-                    </p>
-                  )}
+                  </div>
+                );
+              }
+
+              const monacoToggle = isLargeField ? (
+                <div className="flex items-center gap-2">
+                  <Label
+                    htmlFor={`monaco-switch-${field.name}`}
+                    className="text-xs text-muted-foreground cursor-pointer"
+                  >
+                    Code editor
+                  </Label>
+                  <Switch
+                    id={`monaco-switch-${field.name}`}
+                    checked={isMonacoActive}
+                    onCheckedChange={() => toggleMonaco(field.name)}
+                  />
                 </div>
+              ) : undefined;
+
+              return (
+                <DynamicField
+                  key={field.name}
+                  field={field}
+                  value={value}
+                  onChange={(val) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      content: {
+                        ...prev.content,
+                        [field.name]: val,
+                      },
+                    }))
+                  }
+                  headerAction={monacoToggle}
+                />
               );
             })}
           </div>
@@ -588,7 +565,19 @@ function TemplateEditorContent() {
                     <p className="text-xs font-medium capitalize text-muted-foreground">
                       {field.name}
                     </p>
-                    {isHtml ? (
+                    {Array.isArray(value) ? (
+                      <div className="flex flex-wrap gap-1">
+                        {value.map((item, idx) => (
+                          <Badge key={idx} variant="secondary">
+                            {String(item)}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : typeof value === "object" && value !== null ? (
+                      <pre className="rounded-md border bg-muted/30 p-2.5 font-mono text-xs whitespace-pre-wrap">
+                        {JSON.stringify(value, null, 2)}
+                      </pre>
+                    ) : isHtml ? (
                       <HtmlPreview html={strValue} />
                     ) : field.type === "boolean" ? (
                       <Badge variant="secondary">
@@ -677,7 +666,19 @@ function TemplateEditorContent() {
                     <p className="text-xs font-medium capitalize text-muted-foreground">
                       {field.name}
                     </p>
-                    {isHtml ? (
+                    {Array.isArray(value) ? (
+                      <div className="flex flex-wrap gap-1">
+                        {value.map((item, idx) => (
+                          <Badge key={idx} variant="secondary">
+                            {String(item)}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : typeof value === "object" && value !== null ? (
+                      <pre className="rounded-md border bg-muted/30 p-2.5 font-mono text-xs whitespace-pre-wrap">
+                        {JSON.stringify(value, null, 2)}
+                      </pre>
+                    ) : isHtml ? (
                       <div className="rounded-lg border bg-white dark:bg-zinc-900">
                         <iframe
                           srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:16px;margin:0;color:#333;background:white}*{box-sizing:border-box}</style></head><body>${strValue}</body></html>`}
