@@ -45,11 +45,11 @@ export function registerSendBatchNotification(server: McpServer, getCredentials:
                     ),
                 provider: z.union([z.string(), z.array(z.string())]).optional().describe('Optional provider override'),
                 content: z
-                    .record(z.string(), z.record(z.string(), z.string()))
+                    .record(z.string(), z.record(z.string(), z.unknown()))
                     .optional()
                     .describe(
                         'Shared notification content for all recipients, keyed by channel name. Required if template_id is not provided. ' +
-                        'For email: { "email": { "subject": "Hello {{name}}", "message": "<p>Welcome!</p>" } }. ' +
+                        'For email: { "email": { "subject": "Hello {{name}}", "message": "<p>Welcome!</p>", "attachments": [...] } }. ' +
                         'Use {{variable}} syntax for per-recipient personalization.'
                     ),
                 recipients: z

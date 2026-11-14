@@ -1,11 +1,13 @@
 /**
  * SimpleNS API Client
- * 
+ *
  * Ephemeral per-request HTTP client for calling user's SimpleNS APIs.
  * Instantiated with user credentials, discarded after the response.
  */
 
 import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
 import type { UserCredentials } from './auth.js';
 
 export interface ApiResponse<T = unknown> {
@@ -22,6 +24,7 @@ async function request<T = unknown>(
         headers?: Record<string, string>;
         body?: unknown;
         params?: Record<string, string>;
+        responseType?: 'json' | 'arraybuffer' | 'text';
     } = {}
 ): Promise<ApiResponse<T>> {
     let cleanBaseUrl = baseUrl;
@@ -43,16 +46,24 @@ async function request<T = unknown>(
         }
     }
 
+    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+    const defaultHeaders: Record<string, string> = {
+        'Accept': 'application/json',
+    };
+    if (!isFormData) {
+        defaultHeaders['Content-Type'] = 'application/json';
+    }
+
     const response = await axios({
         url: url.toString(),
         method: options.method || 'GET',
         headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
+            ...defaultHeaders,
             ...options.headers,
         },
         data: options.body,
         params,
+        responseType: options.responseType || 'json',
         validateStatus: () => true,
     });
 
@@ -595,12 +606,216 @@ export class ApiClient {
     // ADMIN AUTH STATUS
     // ============================================================================
 
-    /** GET /api/admin/auth/status - Check if admin credentials are configured */
+    /** GET /api/admin/status - Check if admin credentials are configured */
     async getAdminAuthStatus(): Promise<ApiResponse> {
-        return request(this.baseUrl, 'api/admin/auth/status', {
+        return request(this.baseUrl, 'api/auth/status', {
+            headers: this.authHeader,
+        });
+    }
+
+    // ============================================================================
+    // STORAGE PROVIDERS
+    // ============================================================================
+
+    /** GET /api/storage/status - Get active storage provider status */
+    async getActiveStorageProviderStatus(): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/storage/status', {
+            headers: this.authHeader,
+        });
+    }
+
+    /** GET /api/storage/providers - List available storage provider types and schemas */
+    async getAvailableStorageProviders(): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/storage/providers', {
+            headers: this.authHeader,
+        });
+    }
+
+    /** POST /api/storage/test - Test storage connection */
+    async testStorageConnection(payload: {
+        provider_type: string;
+        config: Record<string, unknown>;
+    }): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/storage/test', {
+            method: 'POST',
+            headers: this.authHeader,
+            body: payload,
+        });
+    }
+
+    /** GET /api/storage - List all configured storage providers */
+    async listStorageProviders(): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/storage', {
+            headers: this.authHeader,
+        });
+    }
+
+    /** POST /api/storage - Create a new storage provider */
+    async createStorageProvider(payload: {
+        name: string;
+        provider_type: string;
+        config: Record<string, unknown>;
+        enabled?: boolean;
+        is_active?: boolean;
+    }): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/storage', {
+            method: 'POST',
+            headers: this.authHeader,
+            body: payload,
+        });
+    }
+
+    /** PATCH /api/storage/:id - Update an existing storage provider */
+    async updateStorageProvider(id: string, payload: {
+        name?: string;
+        config?: Record<string, unknown>;
+        enabled?: boolean;
+        is_active?: boolean;
+    }): Promise<ApiResponse> {
+        return request(this.baseUrl, `api/storage/${encodeURIComponent(id)}`, {
+            method: 'PATCH',
+            headers: this.authHeader,
+            body: payload,
+        });
+    }
+
+    /** PATCH /api/storage/:id/activate - Promote a storage provider as active */
+    async activateStorageProvider(id: string): Promise<ApiResponse> {
+        return request(this.baseUrl, `api/storage/${encodeURIComponent(id)}/activate`, {
+            method: 'PATCH',
+            headers: this.authHeader,
+        });
+    }
+
+    /** DELETE /api/storage/:id - Delete a storage provider */
+    async deleteStorageProvider(id: string): Promise<ApiResponse> {
+        return request(this.baseUrl, `api/storage/${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+            headers: this.authHeader,
+        });
+    }
+
+    // ============================================================================
+    // FILE ATTACHMENTS & STORAGE
+    // ============================================================================
+
+    /** POST /api/file/upload - Upload file(s) */
+    async uploadFile(options: {
+        filePath?: string;
+        contentBase64?: string;
+        filename?: string;
+        mimeType?: string;
+        channel?: string;
+        provider?: string;
+    }): Promise<ApiResponse> {
+        const formData = new FormData();
+
+        if (options.filePath) {
+            if (!fs.existsSync(options.filePath)) {
+                return {
+                    ok: false,
+                    status: 400,
+                    data: { error: `File not found on disk: ${options.filePath}` },
+                };
+            }
+            const fileBuffer = fs.readFileSync(options.filePath);
+            const filename = options.filename || path.basename(options.filePath);
+            const blob = new Blob([fileBuffer], { type: options.mimeType || 'application/octet-stream' });
+            formData.append('files', blob, filename);
+        } else if (options.contentBase64) {
+            if (!options.filename) {
+                return {
+                    ok: false,
+                    status: 400,
+                    data: { error: 'filename is required when uploading with content_base64' },
+                };
+            }
+            const fileBuffer = Buffer.from(options.contentBase64, 'base64');
+            const blob = new Blob([fileBuffer], { type: options.mimeType || 'application/octet-stream' });
+            formData.append('files', blob, options.filename);
+        } else {
+            return {
+                ok: false,
+                status: 400,
+                data: { error: 'Either filePath or contentBase64 must be provided' },
+            };
+        }
+
+        const queryParams: Record<string, string> = {};
+        if (options.channel) queryParams.channel = options.channel;
+        if (options.provider) queryParams.provider = options.provider;
+
+        return request(this.baseUrl, 'api/file/upload', {
+            method: 'POST',
+            headers: this.authHeader,
+            body: formData,
+            params: queryParams,
+        });
+    }
+
+    /** GET /api/file/:id - Get file metadata */
+    async getFileMetadata(id: string): Promise<ApiResponse> {
+        return request(this.baseUrl, `api/file/${encodeURIComponent(id)}`, {
+            headers: this.authHeader,
+        });
+    }
+
+    /** GET /api/file/:id/download - Download file content */
+    async downloadFile(id: string, savePath?: string): Promise<ApiResponse> {
+        const result = await request<ArrayBuffer>(this.baseUrl, `api/file/${encodeURIComponent(id)}/download`, {
+            headers: this.authHeader,
+            responseType: 'arraybuffer',
+        });
+
+        if (!result.ok) {
+            let errorData = result.data as unknown;
+            if (result.data instanceof ArrayBuffer) {
+                try {
+                    errorData = JSON.parse(Buffer.from(result.data).toString('utf-8'));
+                } catch {
+                    errorData = Buffer.from(result.data).toString('utf-8');
+                }
+            }
+            return {
+                ok: false,
+                status: result.status,
+                data: errorData,
+            };
+        }
+
+        const buffer = Buffer.from(result.data);
+        if (savePath) {
+            fs.writeFileSync(savePath, buffer);
+            return {
+                ok: true,
+                status: result.status,
+                data: {
+                    message: `File downloaded successfully and saved to ${savePath}`,
+                    saved_to: savePath,
+                    size: buffer.byteLength,
+                },
+            };
+        }
+
+        return {
+            ok: true,
+            status: result.status,
+            data: {
+                size: buffer.byteLength,
+                content_base64: buffer.byteLength <= 10 * 1024 * 1024 ? buffer.toString('base64') : undefined,
+                note: buffer.byteLength > 10 * 1024 * 1024 ? 'File is larger than 10MB; provide save_path to save directly to disk.' : undefined,
+            },
+        };
+    }
+
+    // ============================================================================
+    // SERVICE HEALTH & DIAGNOSTICS
+    // ============================================================================
+
+    /** GET /api/health - Check service health and dependency readiness */
+    async getHealthStatus(): Promise<ApiResponse> {
+        return request(this.baseUrl, 'api/health', {
             headers: this.authHeader,
         });
     }
 }
-
-

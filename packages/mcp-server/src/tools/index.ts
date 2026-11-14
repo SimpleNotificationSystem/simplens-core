@@ -1,6 +1,6 @@
 /**
  * Tool Registration
- * 
+ *
  * Registers all MCP tools with the server.
  */
 
@@ -25,6 +25,9 @@ import { registerProviderTools } from './providers.js';
 import { registerSettingsTools } from './settings.js';
 import { registerPluginsManagementTools } from './plugins-management.js';
 import { registerAdminAuthTools } from './admin-auth.js';
+import { registerStorageTools } from './storage.js';
+import { registerFileTools } from './files.js';
+import { registerHealthTools } from './health.js';
 
 export function registerAllTools(server: McpServer, getCredentials: () => UserCredentials) {
     registerSendNotification(server, getCredentials);
@@ -45,4 +48,7 @@ export function registerAllTools(server: McpServer, getCredentials: () => UserCr
     registerSettingsTools(server, getCredentials);
     registerPluginsManagementTools(server, getCredentials);
     registerAdminAuthTools(server, getCredentials);
+    registerStorageTools(server, getCredentials);
+    registerFileTools(server, getCredentials);
+    registerHealthTools(server, getCredentials);
 }

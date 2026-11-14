@@ -71,13 +71,13 @@ export function registerSendNotification(server: McpServer, getCredentials: () =
                         'Always include user_id. Use list_plugins to see all channel-specific fields.'
                     ),
                 content: z
-                    .record(z.string(), z.record(z.string(), z.string()))
+                    .record(z.string(), z.record(z.string(), z.unknown()))
                     .optional()
                     .describe(
                         'Notification content keyed by channel name. Required if template_id is not provided. ' +
-                        'For email: { "email": { "subject": "Subject line", "message": "<h1>HTML body</h1>" } }. ' +
+                        'For email: { "email": { "subject": "Subject line", "message": "<h1>HTML body</h1>", "attachments": [...] } }. ' +
                         'For SMS: { "sms": { "message": "Text message" } }. ' +
-                        'Use list_plugins to see required content fields per channel.'
+                        'Use list_plugins to see required content fields per channel. Use upload_file to prepare attachments.'
                     ),
                 variables: z
                     .record(z.string(), z.string())
