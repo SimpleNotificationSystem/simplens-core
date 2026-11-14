@@ -1,0 +1,25 @@
+meta {
+  name: Upload Files
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{process.env.BASE_URL}}/api/file/upload?channel={{process.env.CHANNEL}}&provider={{process.env.PROVIDER}}
+  body: multipartForm
+  auth: inherit
+}
+
+params:query {
+  channel: {{process.env.CHANNEL}}
+  provider: {{process.env.PROVIDER}}
+}
+
+body:multipart-form {
+  files: @file()
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -1,0 +1,26 @@
+meta {
+  name: Webhook Callback
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{process.env.BASE_URL}}/api/webhook
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "request_id": "req-98765",
+    "notification_id": "{{process.env.NOTIFICATION_ID}}",
+    "status": "delivered",
+    "channel": "email",
+    "occurred_at": "2026-11-14T12:00:00.000Z"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

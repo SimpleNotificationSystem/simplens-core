@@ -1,0 +1,16 @@
+meta {
+  name: Liveness Probe
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{process.env.BASE_URL}}/api/healthz
+  body: none
+  auth: none
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

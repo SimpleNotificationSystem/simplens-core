@@ -1,0 +1,16 @@
+meta {
+  name: Delete Storage Provider
+  type: http
+  seq: 8
+}
+
+delete {
+  url: {{process.env.BASE_URL}}/api/storage/{{process.env.STORAGE_PROVIDER_ID}}
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

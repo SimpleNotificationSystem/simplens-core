@@ -1,0 +1,16 @@
+meta {
+  name: Get File Metadata
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{process.env.BASE_URL}}/api/file/{{process.env.FILE_ID}}
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
