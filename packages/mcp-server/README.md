@@ -8,7 +8,7 @@ A Model Context Protocol (MCP) server for the SimpleNS notification orchestratio
 
 - **Streamable HTTP Transport**: Connect remote or local MCP clients via HTTP (`/mcp`).
 - **Stdio Transport**: Local execution via command line (`--stdio`).
-- **Full Tool Suite (54 Tools)**: Comprehensive coverage for notifications, templates, alerts, logs, metrics, channel routing, providers, rate limits, dynamic settings, plugin lifecycle, and admin configuration.
+- **Full Tool Suite (66 Tools)**: Comprehensive coverage for notifications, templates, alerts, logs, metrics, channel routing, providers, rate limits, dynamic settings, plugin lifecycle, admin configuration, storage providers, and file attachments
 
 ---
 
@@ -87,7 +87,7 @@ Add to your MCP Client configuration:
 
 ---
 
-## Complete Tools Reference (54 Tools)
+## Complete Tools Reference (71 Tools)
 
 ### 1. Notification Dispatch
 | Tool | Description |
@@ -191,3 +191,35 @@ Add to your MCP Client configuration:
 | :--- | :--- |
 | `get_admin_auth_status` | Check whether SimpleNS administrator credentials have been configured or require initial setup. |
 
+### 13. Storage Provider Configuration & Management
+| Tool | Description |
+| :--- | :--- |
+| `get_active_storage_status` | Check whether an active storage provider (e.g. MinIO, S3) is configured and ready. |
+| `list_storage_provider_types` | List available storage provider types and their credential schemas (e.g. `minio`). |
+| `test_storage_connection` | Test connection and credentials for a storage provider configuration before saving. |
+| `list_storage_providers` | List all configured storage provider instances in the system. |
+| `create_storage_provider` | Register and configure a new storage provider instance with encrypted credentials. |
+| `update_storage_provider` | Update settings, credentials, or enabled state of an existing storage provider. |
+| `activate_storage_provider` | Promote a configured storage provider to be the single active provider for attachments. |
+| `delete_storage_provider` | Delete a storage provider configuration by its MongoDB ID. |
+
+### 14. File Attachments & Direct Storage Streaming
+| Tool | Description |
+| :--- | :--- |
+| `upload_file` | Stream a file to storage via local path or base64. Returns attachment metadata for notification payloads. |
+| `get_file_metadata` | Retrieve detailed metadata (filename, mime type, size, hash, url) for an uploaded file. |
+| `download_file` | Download an uploaded file from storage, saving to local disk or returning content. |
+
+### 15. Dynamic API Keys Management
+| Tool | Description |
+| :--- | :--- |
+| `list_api_keys` | List all API keys with metadata, type (admin/notification), status, expiration, and usage stats. |
+| `create_api_key` | Generate a new API key. Returns the plaintext raw key (`sns_live_...`) shown once. |
+| `get_api_key_usage` | Retrieve usage statistics and notification delivery status counts for a key. |
+| `revoke_api_key` | Revoke an active API key immediately, blocking subsequent API requests. |
+| `delete_api_key` | Permanently delete an API key record from the database. |
+
+### 16. Service Health & Diagnostics
+| Tool | Description |
+| :--- | :--- |
+| `get_health_status` | Check API service health and readiness of dependencies (MongoDB, Redis). |

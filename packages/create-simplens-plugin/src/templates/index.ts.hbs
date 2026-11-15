@@ -5,34 +5,98 @@ import {
     type ProviderConfig,
     type DeliveryResult,
     type RateLimitConfig,
+    type FileAttachmentConfig,
     baseNotificationSchema,
+    createFileAttachmentArraySchema,
+    resolveFileAttachmentConfig,
+    STANDARD_ATTACHMENT_OPTIONAL_KEYS,
 } from '@simplens/sdk';
 
-// Define your schemas
+/**
+ * Recipient Schema
+ *
+ * Defines and validates recipient details for this channel (e.g. email address, phone number, device token).
+ * SimpleNS validates incoming dispatch requests against this schema before publishing to processing queues.
+ */
 const recipientSchema = z.object({
 {{#each recipientFields}}
-    {{this}}: z.string(),
+    {{this}}: z.string().min(1, '{{this}} is required'),
 {{/each}}
 });
 
-const contentSchema = z.object({
+/**
+ * Dynamic Content Schema Builder
+ *
+ * Constructs the Zod validation schema for the notification payload.
+ * When file attachments are enabled, `createFileAttachmentArraySchema` automatically validates
+ * attachment metadata (max files, max file size, allowed MIME types) against the effective limits.
+ *
+ * @param attachmentConfig - Optional effective attachment constraints resolved for this provider.
+ */
+function buildContentSchema(attachmentConfig?: FileAttachmentConfig) {
+    return z.object({
 {{#each contentFields}}
-    {{this}}: z.string(),
+        {{this}}: z.string().min(1, '{{this}} is required'),
 {{/each}}
-});
+        /**
+         * Optional file attachments list.
+         * Validated against provider-specific or manifest default file size, count, and MIME constraints.
+         */
+        attachments: createFileAttachmentArraySchema(attachmentConfig).optional(),
+    });
+}
 
-const notificationSchema = baseNotificationSchema.extend({
-    channel: z.literal('{{channel}}'),
-    recipient: recipientSchema,
-    content: contentSchema,
-    created_at: z.coerce.date(),
-});
+/**
+ * Dynamic Notification Schema Builder
+ *
+ * Combines the base SimpleNS message envelope (id, request_id, channel, priority)
+ * with the channel-specific recipient schema and dynamic content schema.
+ *
+ * @param contentSchema - Content schema with active attachment constraints.
+ */
+function buildNotificationSchema(contentSchema: ReturnType<typeof buildContentSchema>) {
+    return baseNotificationSchema.extend({
+        channel: z.literal('{{channel}}'),
+        recipient: recipientSchema,
+        content: contentSchema,
+        created_at: z.coerce.date(),
+    });
+}
 
-type Notification = z.infer<typeof notificationSchema>;
+type Notification = z.infer<ReturnType<typeof buildNotificationSchema>>;
 
+/**
+ * {{pascalCase name}} Provider Implementation
+ *
+ * Implements the `SimpleNSProvider` interface to integrate '{{channel}}' delivery into SimpleNS.
+ */
 class {{pascalCase name}}Provider implements SimpleNSProvider<Notification> {
+    /**
+     * Stored provider configuration (credentials and options) passed during `initialize()`.
+     */
     private config: ProviderConfig | null = null;
 
+    /**
+     * Resolved file attachment configuration merging manifest defaults with runtime option overrides.
+     */
+    private effectiveAttachmentConfig?: FileAttachmentConfig;
+
+    /**
+     * Active content schema matching the resolved file attachment limits.
+     */
+    private dynamicContentSchema = buildContentSchema();
+
+    /**
+     * Active notification schema matching the resolved file attachment limits.
+     */
+    private dynamicNotificationSchema = buildNotificationSchema(this.dynamicContentSchema);
+
+    /**
+     * Provider Manifest
+     *
+     * Declares provider metadata, channel, required credentials, optional configuration keys,
+     * and baseline file attachment limits to SimpleNS.
+     */
     readonly manifest: ProviderManifest = {
         name: 'simplens-plugin-{{name}}',
         version: '1.0.0',
@@ -41,47 +105,176 @@ class {{pascalCase name}}Provider implements SimpleNSProvider<Notification> {
         description: '{{description}}',
         author: '{{author}}',
         homepage: '',
+
+        /**
+         * Required Credentials
+         * Sensitive credentials (API keys, auth tokens, passwords) required by this provider.
+         * These are envelope-encrypted at rest and decrypted only during provider execution.
+         */
         requiredCredentials: [{{#each credentials}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}],
+
+        /**
+         * Optional Configuration Keys
+         * Non-sensitive parameters (endpoints, timeouts, flags) that administrators can configure per provider instance.
+         * Including `STANDARD_ATTACHMENT_OPTIONAL_KEYS` allows admins to tune file attachment limits
+         * (ATTACHMENT_MAX_FILE_SIZE, ATTACHMENT_MAX_COUNT, ATTACHMENT_ALLOWED_MIME_TYPES, ATTACHMENT_ENABLED) via the dashboard.
+         */
+        optionalConfig: [
+            // Add provider-specific optional keys here (e.g. 'API_BASE_URL', 'TIMEOUT_MS')
+            ...STANDARD_ATTACHMENT_OPTIONAL_KEYS,
+        ],
+
+        /**
+         * Baseline File Attachment Constraints
+         * Defines default attachment limits supported by this provider tier if not overridden in provider options.
+         */
+        fileAttachment: {
+            enabled: true,
+            maxFileSize: 10 * 1024 * 1024, // 10 MB default limit per attachment
+            maxCount: 5,                   // Maximum 5 files per notification
+            allowedMimeTypes: [
+                'text/plain',
+                'text/csv',
+                'application/pdf',
+                'image/jpeg',
+                'image/png',
+                'image/webp',
+            ],
+        },
     };
 
+    /**
+     * Returns the complete Zod schema used to validate incoming notification payloads before processing.
+     */
     getNotificationSchema() {
-        return notificationSchema;
+        return this.dynamicNotificationSchema;
     }
 
+    /**
+     * Returns the Zod schema used to validate the recipient object.
+     */
     getRecipientSchema() {
         return recipientSchema;
     }
 
+    /**
+     * Returns the Zod schema used to validate the content object.
+     */
     getContentSchema() {
-        return contentSchema;
+        return this.dynamicContentSchema;
     }
 
+    /**
+     * Returns default rate limit settings for this provider.
+     * SimpleNS token bucket rate limiter uses these values to enforce throughput controls.
+     */
     getRateLimitConfig(): RateLimitConfig {
-        return { maxTokens: 100, refillRate: 10 };
+        return { maxTokens: 100, refillRate: 10, refillInterval: 'second' };
     }
 
+    /**
+     * Returns the effective file attachment configuration for this provider instance.
+     * SimpleNS core inspects this method to discover effective file size, count, and MIME constraints.
+     */
+    getFileAttachmentConfig(): FileAttachmentConfig | undefined {
+        return this.effectiveAttachmentConfig ?? this.manifest.fileAttachment;
+    }
+
+    /**
+     * Lifecycle Hook: Initialize
+     *
+     * Called once when the provider instance is loaded into memory or after credentials are updated.
+     * Use this hook to validate credentials, configure external API clients, and resolve dynamic options.
+     *
+     * @param config - Provider configuration containing decrypted credentials and custom options.
+     */
     async initialize(config: ProviderConfig): Promise<void> {
         this.config = config;
+
+        // Resolve effective attachment limits by merging manifest defaults with runtime option overrides
+        this.effectiveAttachmentConfig = resolveFileAttachmentConfig(
+            this.manifest.fileAttachment,
+            config.options
+        );
+
+        // Rebuild dynamic schemas to enforce custom attachment limits
+        this.dynamicContentSchema = buildContentSchema(this.effectiveAttachmentConfig);
+        this.dynamicNotificationSchema = buildNotificationSchema(this.dynamicContentSchema);
     }
 
+    /**
+     * Lifecycle Hook: Health Check
+     *
+     * Called by SimpleNS monitors or test connection requests from the dashboard.
+     * Perform lightweight connection checks or verify credentials with the upstream service.
+     *
+     * @returns `true` if provider is healthy and ready to deliver; `false` otherwise.
+     */
     async healthCheck(): Promise<boolean> {
-        return this.config !== null;
+        if (!this.config) {
+            return false;
+        }
+
+        // TODO: Perform upstream ping or authentication check with external service API
+        return true;
     }
 
+    /**
+     * Core Delivery Method: Send Notification
+     *
+     * Dispatches the validated notification payload through the external service.
+     * Must return a `DeliveryResult` indicating delivery success, upstream message IDs, or retryable failure.
+     *
+     * @param notification - Validated notification payload matching the notification schema.
+     * @returns Result of the delivery attempt.
+     */
     async send(notification: Notification): Promise<DeliveryResult> {
         if (!this.config) {
             return {
                 success: false,
-                error: { code: 'NOT_INITIALIZED', message: 'Provider not initialized', retryable: false },
+                error: {
+                    code: 'NOT_INITIALIZED',
+                    message: 'Provider has not been initialized with credentials.',
+                    retryable: false,
+                },
             };
         }
 
-        // TODO: Implement your delivery logic here
-        console.log(`[{{displayName}}] Sending:`, notification);
+        try {
+            // TODO: Implement external API delivery call here
+            console.log(`[{{displayName}}] Delivering notification to recipient:`, notification.recipient);
 
-        return { success: true };
+            if (notification.content.attachments && notification.content.attachments.length > 0) {
+                console.log(
+                    `[{{displayName}}] Processing ${notification.content.attachments.length} attachment(s)`
+                );
+            }
+
+            return {
+                success: true,
+                response: {
+                    messageId: `msg_${Date.now()}`,
+                },
+            };
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Unknown delivery failure';
+            return {
+                success: false,
+                error: {
+                    code: 'DELIVERY_FAILED',
+                    message,
+                    retryable: true, // Set to true if temporary network or upstream 5xx error
+                },
+            };
+        }
     }
 
+    /**
+     * Lifecycle Hook: Shutdown
+     *
+     * Called when the provider is removed, disabled, or when SimpleNS service shuts down.
+     * Clean up timers, close database/HTTP connections, and clear sensitive credentials from memory.
+     */
     async shutdown(): Promise<void> {
         this.config = null;
     }

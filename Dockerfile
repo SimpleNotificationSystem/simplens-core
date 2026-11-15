@@ -1,66 +1,72 @@
+
 # Multi-stage build for Node.js TypeScript application
-# Supports multiple services: api, worker, unified-processor, delayed-processor, recovery
+# Supports: api, worker, unified-processor, delayed-processor, recovery
 
 # ============================================
 # Stage 1: Build
 # ============================================
-FROM node:22-slim AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
+
+ENV HUSKY=0
 
 # Copy package files
 COPY package*.json ./
 
-# Install all dependencies (including devDependencies for build)
+# Install all dependencies (including devDependencies)
 RUN --mount=type=cache,target=/root/.npm \
     npm ci
 
-# Copy source code and TypeScript config
+# Copy source code and TypeScript configuration
 COPY tsconfig.json ./
 COPY src ./src
 
 # Build TypeScript
 RUN npm run build
 
+
 # ============================================
 # Stage 2: Production
 # ============================================
-FROM node:22-slim AS production
+FROM node:22-alpine AS production
 
 WORKDIR /app
 
-# Create non-root user for security (Debian syntax for slim image)
-RUN groupadd --gid 1001 nodejs && \
-    useradd --uid 1001 --gid nodejs --shell /bin/sh --create-home nodejs
+ENV NODE_ENV=production
+ENV HUSKY=0
+
+# Create non-root user and group
+RUN addgroup -S -g 1001 nodejs && \
+    adduser -S -u 1001 -G nodejs nodejs
 
 # Copy package files
 COPY package*.json ./
 
-# Install only production dependencies (ignore scripts to prevent husky from running)
+# Install production dependencies only
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --omit=dev --ignore-scripts
 
-# Copy built files from builder stage
-COPY --from=builder /app/dist ./dist
+# Copy compiled application from builder
+COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 
-# Create plugins directory for runtime plugin installation
-RUN mkdir -p /app/.plugins
+# Create plugins directory with read/write permissions
+RUN mkdir -p /app/.plugins && \
+    chown nodejs:nodejs /app/.plugins && \
+    chmod 755 /app/.plugins
 
-# Set ownership (including .plugins directory)
-RUN chown -R nodejs:nodejs /app
+# Set ownership of application directory
+RUN chown nodejs:nodejs /app
 
 # Switch to non-root user
 USER nodejs
 
-ARG NODE_ENV
-ARG PORT
-
-# Default environment variables
-ENV NODE_ENV=${NODE_ENV}
+# Runtime configuration
+ARG PORT=3000
 ENV PORT=${PORT}
 
-# Expose port (only used by API)
+# Expose application port
 EXPOSE ${PORT}
 
-# Default command (can be overridden in docker-compose)
+# Default command (override through docker-compose)
 CMD ["node", "dist/api/server.js"]

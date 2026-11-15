@@ -1,0 +1,32 @@
+meta {
+  name: Update Storage Provider
+  type: http
+  seq: 6
+}
+
+patch {
+  url: {{process.env.BASE_URL}}/api/storage/{{process.env.STORAGE_PROVIDER_ID}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Production MinIO Cluster",
+    "enabled": true,
+    "config": {
+      "endPoint": "localhost",
+      "port": "9000",
+      "useSSL": "false",
+      "accessKey": "minioadmin",
+      "secretKey": "minioadmin",
+      "bucket": "simplens-attachments",
+      "region": "us-east-1"
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -1,0 +1,34 @@
+meta {
+  name: Create Storage Provider
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{process.env.BASE_URL}}/api/storage
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Local MinIO Storage",
+    "provider_type": "minio",
+    "enabled": true,
+    "is_active": true,
+    "config": {
+      "endPoint": "localhost",
+      "port": "9000",
+      "useSSL": "false",
+      "accessKey": "minioadmin",
+      "secretKey": "minioadmin",
+      "bucket": "simplens-attachments",
+      "region": "us-east-1"
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

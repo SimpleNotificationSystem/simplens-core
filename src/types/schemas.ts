@@ -12,6 +12,9 @@ import {
   OUTBOX_STATUS,
   NOTIFICATION_STATUS_SF,
   ALERT_TYPE,
+  type FieldDefinition,
+  type FieldType,
+  type FileAttachmentConfig,
 } from "./types.js";
 import type { UUID } from "crypto";
 import { validate, version } from "uuid";
@@ -37,7 +40,7 @@ const hasNonEmptyTemplateIds = (
 ) => Array.isArray(templateIds) && templateIds.some((id) => Boolean(id));
 
 const hasNonEmptyContent = (
-  content?: Record<string, Record<string, string>>,
+  content?: Record<string, Record<string, unknown>>,
 ) => !!content && Object.keys(content).length > 0;
 
 export const providerAttemptSchema = z.object({
@@ -73,7 +76,7 @@ const notificationRequestFields = {
   provider: z
     .union([z.string(), z.array(z.string().nullable().optional())])
     .optional(),
-  content: z.record(z.string(), z.record(z.string(), z.string())).optional(),
+  content: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
   scheduled_at: z.coerce.date().optional(),
   webhook_url: z.url(),
 };
@@ -290,6 +293,114 @@ export const encryptedCredentialsSchema = z.object({
 });
 
 /**
+ * File attachment configuration schema for providers
+ */
+export const fileAttachmentConfigSchema = z.object({
+    enabled: z.boolean().optional(),
+    maxFileSize: z.number().int().positive().optional(),
+    maxCount: z.number().int().positive().optional(),
+    allowedMimeTypes: z.array(z.string()).optional(),
+});
+
+/**
+ * Standard file attachment item schema
+ */
+export const fileAttachmentItemSchema = z.object({
+    id: z.string().min(1, 'File ID is required'),
+    filename: z.string().min(1, 'Filename is required'),
+    mime_type: z.string().min(1, 'MIME type is required'),
+    size: z.number().nonnegative('Size cannot be negative'),
+    hash: z.string().min(1, 'File hash is required'),
+    url: z.string().optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    buffer: z.any().optional(),
+    stream: z.any().optional(),
+});
+
+/**
+ * Standard array of file attachments
+ */
+export const fileAttachmentArraySchema = z.array(fileAttachmentItemSchema);
+
+/**
+ * Format bytes helper for human-readable error messages
+ */
+function formatBytesForError(bytes: number): string {
+    if (bytes >= 1024 * 1024 * 1024) {
+        return `${(bytes / (1024 * 1024 * 1024)).toFixed(1).replace(/\.0$/, '')} GB`;
+    }
+    if (bytes >= 1024 * 1024) {
+        return `${(bytes / (1024 * 1024)).toFixed(1).replace(/\.0$/, '')} MB`;
+    }
+    if (bytes >= 1024) {
+        return `${(bytes / 1024).toFixed(1).replace(/\.0$/, '')} KB`;
+    }
+    return `${bytes} B`;
+}
+
+/**
+ * Helper to build an attachment array schema tailored to a provider's constraints
+ */
+export function createFileAttachmentArraySchema(config?: {
+    enabled?: boolean;
+    maxFileSize?: number;
+    maxCount?: number;
+    allowedMimeTypes?: string[];
+}): z.ZodType<Array<z.infer<typeof fileAttachmentItemSchema>>> {
+    let schema: z.ZodType<Array<z.infer<typeof fileAttachmentItemSchema>>> = z.array(fileAttachmentItemSchema);
+
+    if (config?.enabled === false) {
+        return (schema as z.ZodArray<typeof fileAttachmentItemSchema>).max(
+            0,
+            'File attachments are disabled for this provider'
+        );
+    }
+
+    if (config?.maxCount !== undefined && config.maxCount >= 0) {
+        schema = (schema as z.ZodArray<typeof fileAttachmentItemSchema>).max(
+            config.maxCount,
+            config.maxCount === 0
+                ? 'File attachments are disabled for this provider'
+                : `Cannot attach more than ${config.maxCount} files (limit exceeded)`
+        );
+    }
+
+    if (config?.maxFileSize || (config?.allowedMimeTypes && config.allowedMimeTypes.length > 0)) {
+        schema = schema.superRefine((attachments, ctx) => {
+            for (let i = 0; i < attachments.length; i++) {
+                const att = attachments[i];
+                if (config.maxFileSize && att.size > config.maxFileSize) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        path: [i, 'size'],
+                        message: `Attachment '${att.filename}' (${formatBytesForError(att.size)}) exceeds maximum allowed size of ${formatBytesForError(config.maxFileSize)} for this provider.`,
+                    });
+                }
+                if (config.allowedMimeTypes && config.allowedMimeTypes.length > 0) {
+                    const allowed = config.allowedMimeTypes.some(pattern => {
+                        if (pattern === '*/*' || pattern === '*') return true;
+                        if (pattern.endsWith('/*')) {
+                            const prefix = pattern.slice(0, -2);
+                            return att.mime_type.startsWith(prefix);
+                        }
+                        return att.mime_type === pattern;
+                    });
+                    if (!allowed) {
+                        ctx.addIssue({
+                            code: z.ZodIssueCode.custom,
+                            path: [i, 'mime_type'],
+                            message: `Attachment '${att.filename}' has unsupported MIME type '${att.mime_type}'. Allowed types for this provider: ${config.allowedMimeTypes.join(', ')}.`,
+                        });
+                    }
+                }
+            }
+        });
+    }
+
+    return schema;
+}
+
+/**
  * Provider manifest schema for plugins
  */
 export const providerManifestSchema = z.object({
@@ -302,7 +413,425 @@ export const providerManifestSchema = z.object({
     homepage: z.string().optional(),
     requiredCredentials: z.array(z.string()),
     optionalConfig: z.array(z.string()).optional(),
+    fileAttachment: fileAttachmentConfigSchema.optional(),
 });
+
+/**
+ * Helper to parse byte size from number or string representation (e.g. "25MB", "10KB", "26214400")
+ */
+export function parseByteSize(val: unknown): number | undefined {
+    if (typeof val === 'number') {
+        return Number.isFinite(val) && val > 0 ? Math.floor(val) : undefined;
+    }
+    if (typeof val !== 'string') {
+        return undefined;
+    }
+    const trimmed = val.trim();
+    if (!trimmed) return undefined;
+
+    // Direct integer
+    if (/^\d+$/.test(trimmed)) {
+        const parsed = parseInt(trimmed, 10);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+    }
+
+    // Multiplication expression like "18 * 1024 * 1024"
+    if (/^[\d\s*]+$/.test(trimmed) && trimmed.includes('*')) {
+        const parts = trimmed.split('*').map(p => parseInt(p.trim(), 10));
+        if (parts.every(p => Number.isFinite(p) && p > 0)) {
+            return parts.reduce((acc, curr) => acc * curr, 1);
+        }
+    }
+
+    // Units: B, KB, MB, GB, TB
+    const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?$/);
+    if (!match) return undefined;
+
+    const num = parseFloat(match[1]);
+    const unit = (match[2] || 'b').toUpperCase();
+
+    if (!Number.isFinite(num) || num <= 0) return undefined;
+
+    switch (unit) {
+        case 'B':
+            return Math.floor(num);
+        case 'K':
+        case 'KB':
+        case 'KIB':
+            return Math.floor(num * 1024);
+        case 'M':
+        case 'MB':
+        case 'MIB':
+            return Math.floor(num * 1024 * 1024);
+        case 'G':
+        case 'GB':
+        case 'GIB':
+            return Math.floor(num * 1024 * 1024 * 1024);
+        case 'T':
+        case 'TB':
+        case 'TIB':
+            return Math.floor(num * 1024 * 1024 * 1024 * 1024);
+        default:
+            return undefined;
+    }
+}
+
+/**
+ * Resolves effective file attachment configuration by merging plugin manifest defaults
+ * with provider instance options / optional configuration.
+ */
+export function resolveFileAttachmentConfig(
+    manifestConfig?: {
+        enabled?: boolean;
+        maxFileSize?: number;
+        maxCount?: number;
+        allowedMimeTypes?: string[];
+    },
+    options?: Record<string, unknown>
+): {
+    enabled?: boolean;
+    maxFileSize?: number;
+    maxCount?: number;
+    allowedMimeTypes?: string[];
+} | undefined {
+    if (!manifestConfig && !options) {
+        return undefined;
+    }
+
+    const base = manifestConfig ? { ...manifestConfig } : { enabled: false };
+
+    if (!options || typeof options !== 'object') {
+        return base;
+    }
+
+    // 1. Check nested options.fileAttachment
+    const nested = (options.fileAttachment && typeof options.fileAttachment === 'object')
+        ? (options.fileAttachment as Record<string, unknown>)
+        : undefined;
+
+    // 2. Resolve 'enabled'
+    const enabledRaw = nested?.enabled 
+        ?? options.ATTACHMENT_ENABLED 
+        ?? options.attachmentEnabled 
+        ?? options.enabled;
+    if (enabledRaw !== undefined) {
+        if (typeof enabledRaw === 'boolean') {
+            base.enabled = enabledRaw;
+        } else if (typeof enabledRaw === 'string') {
+            base.enabled = enabledRaw.toLowerCase() === 'true' || enabledRaw === '1';
+        }
+    }
+
+    // 3. Resolve 'maxFileSize'
+    const maxFileSizeRaw = nested?.maxFileSize 
+        ?? options.ATTACHMENT_MAX_FILE_SIZE 
+        ?? options.MAX_FILE_SIZE 
+        ?? options.attachmentMaxFileSize 
+        ?? options.maxFileSize;
+    const parsedFileSize = parseByteSize(maxFileSizeRaw);
+    if (parsedFileSize !== undefined) {
+        base.maxFileSize = parsedFileSize;
+    }
+
+    // 4. Resolve 'maxCount'
+    const maxCountRaw = nested?.maxCount 
+        ?? options.ATTACHMENT_MAX_COUNT 
+        ?? options.MAX_COUNT 
+        ?? options.attachmentMaxCount 
+        ?? options.maxCount;
+    if (maxCountRaw !== undefined) {
+        const count = typeof maxCountRaw === 'number' ? maxCountRaw : parseInt(String(maxCountRaw).trim(), 10);
+        if (Number.isFinite(count) && count > 0) {
+            base.maxCount = Math.floor(count);
+        }
+    }
+
+    // 5. Resolve 'allowedMimeTypes'
+    const mimeRaw = nested?.allowedMimeTypes 
+        ?? options.ATTACHMENT_ALLOWED_MIME_TYPES 
+        ?? options.ALLOWED_MIME_TYPES 
+        ?? options.attachmentAllowedMimeTypes 
+        ?? options.allowedMimeTypes;
+    if (mimeRaw !== undefined) {
+        if (Array.isArray(mimeRaw)) {
+            base.allowedMimeTypes = mimeRaw.map(m => String(m).trim()).filter(Boolean);
+        } else if (typeof mimeRaw === 'string') {
+            base.allowedMimeTypes = mimeRaw.split(',').map(m => m.trim()).filter(Boolean);
+        }
+    }
+
+    return base;
+}
+
+type ZodDefNode = {
+    typeName?: string;
+    type?: string;
+    innerType?: unknown;
+    schema?: unknown;
+    in?: unknown;
+    element?: unknown;
+    shape?: Record<string, unknown>;
+    values?: unknown;
+    options?: unknown;
+    checks?: Array<{ kind?: string; format?: string; def?: { format?: string }; constructor?: { name?: string } }>;
+    description?: string;
+    defaultValue?: unknown;
+};
+
+type ZodInternalNode = {
+    isOptional?: () => boolean;
+    isNullable?: () => boolean;
+    description?: string;
+    type?: string;
+    _def?: ZodDefNode;
+    def?: ZodDefNode;
+    element?: unknown;
+    shape?: Record<string, unknown>;
+    options?: unknown;
+    constructor?: { name?: string };
+};
+
+/**
+ * Unwraps Zod schema modifiers (optional, nullable, default, effects/superRefine, pipe, etc.)
+ * across both Zod 3 and Zod 4.
+ */
+export function unwrapZodSchema(schema: unknown): { inner: unknown; isOptional: boolean; description?: string; defaultValue?: unknown } {
+    let current: ZodInternalNode | null = (schema && typeof schema === 'object') ? (schema as ZodInternalNode) : null;
+    let isOptional = false;
+    let description = current?.description || current?._def?.description || current?.def?.description;
+    let defaultValue: unknown = undefined;
+
+    while (current) {
+        if (typeof current.isOptional === 'function' && current.isOptional()) {
+            isOptional = true;
+        }
+        if (typeof current.isNullable === 'function' && current.isNullable()) {
+            isOptional = true;
+        }
+        const typeName = current._def?.typeName || current.def?.typeName;
+        const type = current.type || current._def?.type || current.def?.type;
+
+        if (typeName === 'ZodOptional' || typeName === 'ZodNullable' || type === 'optional' || type === 'nullable') {
+            isOptional = true;
+        }
+        if (typeName === 'ZodDefault' || type === 'default') {
+            isOptional = true;
+            defaultValue = current._def?.defaultValue ?? current.def?.defaultValue;
+            if (typeof defaultValue === 'function') {
+                try { defaultValue = defaultValue(); } catch { /* ignore */ }
+            }
+        }
+
+        if (current.description) description = current.description;
+
+        const nextInner = current.def?.innerType
+            || current._def?.innerType
+            || current.def?.schema
+            || current._def?.schema
+            || current.def?.in
+            || current._def?.in;
+
+        if (nextInner && typeof nextInner === 'object') {
+            current = nextInner as ZodInternalNode;
+        } else {
+            break;
+        }
+    }
+
+    return { inner: current, isOptional, description, defaultValue };
+}
+
+/**
+ * Checks whether an object shape represents a FileAttachment item
+ * (e.g. matching fileAttachmentItemSchema).
+ */
+export function isAttachmentItemShape(shape: unknown): boolean {
+    if (!shape || typeof shape !== 'object') return false;
+    const s = shape as Record<string, unknown>;
+    const hasId = 'id' in s || 'fileId' in s || 'file_id' in s;
+    const hasFilename = 'filename' in s || 'name' in s;
+    const hasMime = 'mime_type' in s || 'contentType' in s || 'mime' in s;
+    const hasSize = 'size' in s;
+    const hasHash = 'hash' in s;
+    return Boolean(hasId && (hasFilename || hasMime || hasSize || hasHash));
+}
+
+/**
+ * Checks if a schema structurally matches an attachment array or attachment item.
+ */
+export function isAttachmentZodSchema(schema: unknown, fieldName?: string, attachmentConfig?: FileAttachmentConfig): boolean {
+    const { inner } = unwrapZodSchema(schema);
+    const node = inner as ZodInternalNode | null;
+    const typeStr = node?.type || node?._def?.type || node?.def?.type || '';
+    const typeName = node?._def?.typeName || node?.def?.typeName || '';
+    const constructorName = node?.constructor?.name || '';
+    const isArr = typeStr === 'array' || typeName === 'ZodArray' || constructorName === 'ZodArray';
+
+    if (isArr) {
+        const rawElem = node?.element || node?.def?.element || node?._def?.element;
+        const { inner: elemInner } = unwrapZodSchema(rawElem);
+        const elemNode = elemInner as ZodInternalNode | null;
+        const elemShape = elemNode?.shape || elemNode?.def?.shape || elemNode?._def?.shape;
+        if (isAttachmentItemShape(elemShape)) {
+            return true;
+        }
+        if (fieldName === 'attachments' && attachmentConfig && attachmentConfig.enabled !== false) {
+            return true;
+        }
+    } else {
+        const shape = node?.shape || node?.def?.shape || node?._def?.shape;
+        if (isAttachmentItemShape(shape)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Recursively extracts rich FieldDefinition array from any arbitrary Zod schema.
+ */
+export function extractFieldDefinitionsFromZod(
+    schema: unknown,
+    attachmentConfig?: FileAttachmentConfig
+): FieldDefinition[] {
+    if (!schema || typeof schema !== 'object') {
+        return [];
+    }
+
+    const { inner } = unwrapZodSchema(schema);
+    const node = inner as ZodInternalNode | null;
+    const shape = node?.shape ?? node?.def?.shape ?? node?._def?.shape;
+    if (!shape || typeof shape !== 'object') {
+        return [];
+    }
+
+    const fields: FieldDefinition[] = [];
+
+    for (const [name, rawField] of Object.entries(shape)) {
+        const { inner: fieldSchema, isOptional, description, defaultValue } = unwrapZodSchema(rawField);
+        const fieldNode = fieldSchema as ZodInternalNode | null;
+        const typeName = fieldNode?._def?.typeName || fieldNode?.def?.typeName || '';
+        const typeStr = fieldNode?.type || fieldNode?._def?.type || fieldNode?.def?.type || '';
+        const constructorName = fieldNode?.constructor?.name || '';
+        const checks = fieldNode?._def?.checks || fieldNode?.def?.checks || [];
+
+        const isArr = typeStr === 'array' || typeName === 'ZodArray' || constructorName === 'ZodArray';
+        const isObj = typeStr === 'object' || typeName === 'ZodObject' || constructorName === 'ZodObject';
+        const isNum = typeStr === 'number' || typeName === 'ZodNumber' || constructorName === 'ZodNumber';
+        const isBool = typeStr === 'boolean' || typeName === 'ZodBoolean' || constructorName === 'ZodBoolean';
+        const isStr = typeStr === 'string' || typeName === 'ZodString' || constructorName === 'ZodString';
+        const isEnm = typeStr === 'enum' || typeName === 'ZodEnum' || constructorName === 'ZodEnum';
+
+        if (isArr) {
+            const rawElem = fieldNode?.element || fieldNode?.def?.element || fieldNode?._def?.element;
+            const { inner: elemInner } = unwrapZodSchema(rawElem);
+            const elemNode = elemInner as ZodInternalNode | null;
+            const elemShape = elemNode?.shape || elemNode?.def?.shape || elemNode?._def?.shape;
+
+            if (isAttachmentItemShape(elemShape) || (name === 'attachments' && attachmentConfig && attachmentConfig.enabled !== false)) {
+                fields.push({
+                    name,
+                    type: 'attachment',
+                    required: !isOptional,
+                    description,
+                    defaultValue,
+                    ...(attachmentConfig ? { attachmentConfig } : {}),
+                });
+            } else {
+                const elemTypeStr = elemNode?.type || elemNode?._def?.type || elemNode?._def?.typeName || elemNode?.constructor?.name || '';
+                let itemType: FieldType = 'string';
+                let itemFields: FieldDefinition[] | undefined;
+
+                if (elemTypeStr === 'number' || elemTypeStr === 'ZodNumber') {
+                    itemType = 'number';
+                } else if (elemTypeStr === 'boolean' || elemTypeStr === 'ZodBoolean') {
+                    itemType = 'boolean';
+                } else if (elemShape && typeof elemShape === 'object') {
+                    itemType = 'object';
+                    itemFields = extractFieldDefinitionsFromZod(elemInner, attachmentConfig);
+                }
+
+                fields.push({
+                    name,
+                    type: 'array',
+                    itemType,
+                    itemFields,
+                    required: !isOptional,
+                    description,
+                    defaultValue,
+                });
+            }
+        } else if (isObj) {
+            const childFields = extractFieldDefinitionsFromZod(fieldSchema, attachmentConfig);
+            fields.push({
+                name,
+                type: 'object',
+                required: !isOptional,
+                description,
+                defaultValue,
+                fields: childFields,
+            });
+        } else if (isEnm) {
+            const rawValues = fieldNode?._def?.values || fieldNode?.def?.values || fieldNode?.options || [];
+            const values = Array.isArray(rawValues)
+                ? rawValues.map(v => String(v))
+                : typeof rawValues === 'object' && rawValues !== null
+                    ? Object.keys(rawValues)
+                    : [];
+            fields.push({
+                name,
+                type: 'enum',
+                enumValues: values,
+                required: !isOptional,
+                description,
+                defaultValue,
+            });
+        } else if (isNum) {
+            fields.push({
+                name,
+                type: 'number',
+                required: !isOptional,
+                description,
+                defaultValue,
+            });
+        } else if (isBool) {
+            fields.push({
+                name,
+                type: 'boolean',
+                required: !isOptional,
+                description,
+                defaultValue,
+            });
+        } else if (isStr) {
+            const hasEmail = checks.some((c) => c.kind === 'email' || c.format === 'email' || c.def?.format === 'email' || c.constructor?.name === 'ZodEmail');
+            const hasUrl = checks.some((c) => c.kind === 'url' || c.format === 'url' || c.def?.format === 'url' || c.constructor?.name === 'ZodUrl');
+            let detectedType: FieldType = 'string';
+            if (hasEmail) detectedType = 'email';
+            else if (hasUrl) detectedType = 'url';
+            else if (name.toLowerCase().includes('phone')) detectedType = 'phone';
+            else if (name.toLowerCase().includes('message') || name.toLowerCase().includes('body') || name.toLowerCase().includes('html')) detectedType = 'text';
+
+            fields.push({
+                name,
+                type: detectedType,
+                required: !isOptional,
+                description,
+                defaultValue,
+            });
+        } else {
+            fields.push({
+                name,
+                type: 'string',
+                required: !isOptional,
+                description,
+                defaultValue,
+            });
+        }
+    }
+
+    return fields;
+}
 
   /** Options supplied by a YAML/JSON provider configuration entry. */
   export const providerConfigOptionsSchema = z.object({
@@ -312,6 +841,7 @@ export const providerManifestSchema = z.object({
       refillRate: z.number().nonnegative().optional(),
       refillInterval: z.enum(['second', 'minute', 'hour', 'day']).optional(),
     }).optional(),
+    fileAttachment: fileAttachmentConfigSchema.optional(),
   }).catchall(z.unknown());
 
   /** Provider entry as read from YAML/JSON configuration. */
@@ -516,6 +1046,11 @@ export const safeValidateNotificationTemplateUpdateRequestSchema = (data: unknow
 // DYNAMIC OPERATIONAL SETTINGS & ADMIN AUTH SCHEMAS
 // ============================================================================
 
+export const attachmentSettingsSchema = z.object({
+  max_file_size: z.number().int().min(1024).max(500 * 1024 * 1024).default(100 * 1024 * 1024),
+  max_file_count: z.number().int().min(1).max(50).default(10),
+});
+
 export const operationalSettingsSchema = z.object({
   api: z.object({
     max_batch_req_limit: z.number().int().min(10).max(10000).default(1000),
@@ -546,10 +1081,18 @@ export const operationalSettingsSchema = z.object({
     recovery_claim_timeout_ms: z.number().int().min(5000).max(300000).default(60000),
     cleanup_resolved_alerts_retention_ms: z.number().int().min(60000).max(2592000000).default(86400000),
     cleanup_processed_status_outbox_retention_ms: z.number().int().min(60000).max(2592000000).default(86400000),
+    cleanup_delivered_attachments_retention_ms: z.preprocess(
+      (val) => (val === '' || val === null || val === undefined || val === 0 ? null : Number(val)),
+      z.number().int().min(60000).max(2592000000).nullable().optional()
+    ).default(86400000),
   }),
   logging: z.object({
     log_level: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     log_to_file: z.boolean().default(true),
+  }),
+  attachment: attachmentSettingsSchema.default({
+    max_file_size: 100 * 1024 * 1024,
+    max_file_count: 10,
   }),
 });
 
@@ -560,6 +1103,7 @@ export const partialOperationalSettingsSchema = z.object({
   delayed: operationalSettingsSchema.shape.delayed.partial().optional(),
   recovery: operationalSettingsSchema.shape.recovery.partial().optional(),
   logging: operationalSettingsSchema.shape.logging.partial().optional(),
+  attachment: attachmentSettingsSchema.partial().optional(),
 });
 
 export const adminSetupSchema = z.object({
@@ -768,5 +1312,43 @@ export const apiHealthResponseSchema = z.object({
   status: z.enum(['healthy', 'unhealthy', 'ready', 'not_ready']),
   timestamp: z.string(),
   checks: z.record(z.string(), z.boolean()),
+});
+
+// ============================================================================
+// STORAGE PROVIDER SCHEMAS
+// ============================================================================
+
+export const storageProviderCreateSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required').max(100),
+  provider_type: z.string().trim().min(1, 'Provider type is required'),
+  enabled: z.boolean().default(true),
+  is_active: z.boolean().default(false),
+  config: z.record(z.string(), z.string()),
+});
+
+export const storageProviderUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(100).optional(),
+  enabled: z.boolean().optional(),
+  is_active: z.boolean().optional(),
+  config: z.record(z.string(), z.string()).optional(),
+});
+
+export const minioStorageConfigSchema = z.object({
+  endPoint: z.string().trim().min(1, 'Endpoint is required'),
+  port: z.union([z.number(), z.string()]).optional().transform((val) => {
+    if (typeof val === 'string' && val.trim() !== '') {
+      const parsed = parseInt(val, 10);
+      return isNaN(parsed) ? undefined : parsed;
+    }
+    return typeof val === 'number' ? val : undefined;
+  }),
+  useSSL: z.union([z.boolean(), z.string()]).optional().transform((val) => {
+    if (typeof val === 'string') return val.toLowerCase() === 'true';
+    return Boolean(val);
+  }),
+  accessKey: z.string().trim().min(1, 'Access Key is required'),
+  secretKey: z.string().trim().min(1, 'Secret Key is required'),
+  bucket: z.string().trim().min(1, 'Bucket name is required'),
+  region: z.string().trim().optional(),
 });
 

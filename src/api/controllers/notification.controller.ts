@@ -46,7 +46,8 @@ export const notification_controller = async (req: Request, res: Response)=>{
         }
         if(err instanceof InvalidContentSchemaError){
             res.status(400).json({
-                message: err.message
+                message: err.message,
+                errors: err.issues,
             });
             return;
         }
@@ -107,7 +108,8 @@ export const batch_notification_controller = async (req: Request, res: Response)
         }
         if(err instanceof InvalidContentSchemaError){
             res.status(400).json({
-                message: err.message
+                message: err.message,
+                errors: err.issues,
             });
             return;
         }

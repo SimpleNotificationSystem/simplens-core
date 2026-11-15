@@ -2,36 +2,79 @@
 
 {{description}}
 
+A SimpleNS channel plugin providing integration for the **{{channel}}** channel backed by **{{displayName}}**.
+
+---
+
 ## Installation
 
 ```bash
 npm install @simplens/plugin-{{name}}
 ```
 
+---
+
 ## Configuration
 
-Add the {{displayName}} provider to your `simplens.config.yaml`:
+You can configure {{displayName}} through the SimpleNS Admin Dashboard or declaratively in your `simplens.config.yaml`.
 
 ```yaml
 providers:
-- name: {{name}}
-package: '@simplens/plugin-{{name}}'
-credentials:
+  - name: {{name}}
+    package: '@simplens/plugin-{{name}}'
+    credentials:
 {{#each credentials}}
-{{this}}: ${{screamingSnakeCase this}}
+      {{this}}: ${{screamingSnakeCase this}}
 {{/each}}
 {{#unless credentials.length}}
-# Add your credentials here
+      # Add your credentials here
 {{/unless}}
-options:
-rateLimit:
-maxTokens: 100
-refillRate: 10
+    options:
+      rateLimit:
+        maxTokens: 100
+        refillRate: 10
+        refillInterval: second
+      # Optional file attachment limit overrides (omit to use plugin defaults)
+      ATTACHMENT_MAX_FILE_SIZE: '25MB'
+      ATTACHMENT_MAX_COUNT: 10
+      ATTACHMENT_ALLOWED_MIME_TYPES:
+        - application/pdf
+        - image/jpeg
+        - image/png
+        - text/plain
 ```
+
+---
+
+## File Attachment Support
+
+This plugin declares baseline attachment limits in its manifest. Administrators can adjust these limits per provider instance in the SimpleNS Dashboard or via provider `options`.
+
+### Manifest Defaults
+
+| Parameter | Default Value | Description |
+|:---|:---|:---|
+| `enabled` | `true` | Whether file attachments are supported |
+| `maxFileSize` | `10MB` (`10485760` bytes) | Baseline maximum size per attached file |
+| `maxCount` | `5` | Maximum number of attachments per notification |
+| `allowedMimeTypes` | `pdf, txt, csv, jpeg, png, webp` | Allowed MIME types / patterns |
+
+### Dynamic Runtime Overrides
+
+You can override these limits per provider tier using standard optional config keys:
+
+- `ATTACHMENT_MAX_FILE_SIZE`: String (e.g. `'25MB'`, `'500KB'`) or numeric bytes (`26214400`).
+- `ATTACHMENT_MAX_COUNT`: Integer limit (e.g. `10`).
+- `ATTACHMENT_ALLOWED_MIME_TYPES`: Array of MIME types or wildcards (e.g. `['image/*', 'application/pdf']`).
+- `ATTACHMENT_ENABLED`: Boolean (`true` / `false`).
+
+When omitted, the provider automatically falls back to manifest baseline limits.
+
+---
 
 ## Usage
 
-### Sending Notifications
+### Sending Notifications via SDK / Core API
 
 ```typescript
 import { SimpleNS } from '@simplens/core';
@@ -39,56 +82,85 @@ import { SimpleNS } from '@simplens/core';
 const simplens = new SimpleNS();
 
 await simplens.send({
-channel: '{{channel}}',
-recipient: {
+  channel: '{{channel}}',
+  recipient: {
 {{#each recipientFields}}
-{{this}}: 'your-{{this}}-value',
+    {{this}}: 'your-{{this}}-value',
 {{/each}}
 {{#unless recipientFields.length}}
-// Add recipient fields
+    // Add recipient fields
 {{/unless}}
-},
-content: {
+  },
+  content: {
 {{#each contentFields}}
-{{this}}: 'your-{{this}}-value',
+    {{this}}: 'your-{{this}}-value',
 {{/each}}
 {{#unless contentFields.length}}
-// Add content fields
+    // Add content fields
 {{/unless}}
-},
+    attachments: [
+      {
+        id: 'att_123456789',
+        filename: 'invoice.pdf',
+        mime_type: 'application/pdf',
+        size: 1048576,
+        hash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        url: 'https://storage.example.com/attachments/invoice.pdf',
+      },
+    ],
+  },
 });
 ```
 
 ### Notification Schema
 
-The {{displayName}} provider accepts notifications with the following structure:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `channel` | `'{{channel}}'` | Must be `'{{channel}}'` |
+| Field | Type | Required | Description |
+|:---|:---|:---|:---|
+| `channel` | `'{{channel}}'` | Yes | Channel identifier |
 {{#each recipientFields}}
-| `recipient.{{this}}` | `string` | TODO: Add description |
+| `recipient.{{this}}` | `string` | Yes | Target recipient {{this}} |
 {{/each}}
 {{#each contentFields}}
-| `content.{{this}}` | `string` | TODO: Add description |
+| `content.{{this}}` | `string` | Yes | Notification content {{this}} |
 {{/each}}
+| `content.attachments` | `FileAttachmentItem[]` | No | List of validated file attachments |
 
-## Configuration Options
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `rateLimit.maxTokens` | `number` | `100` | Maximum tokens in rate limit bucket |
-| `rateLimit.refillRate` | `number` | `10` | Tokens refilled per second |
+---
 
 {{#if credentials.length}}
 ## Required Credentials
 
 | Credential | Environment Variable | Description |
-|------------|---------------------|-------------|
+|:---|:---|:---|
 {{#each credentials}}
-| `{{this}}` | `{{screamingSnakeCase this}}` | TODO: Add description |
+| `{{this}}` | `{{screamingSnakeCase this}}` | Credential required to authenticate with {{../displayName}} |
 {{/each}}
+
+All credentials stored in SimpleNS are envelope-encrypted at rest using AES-256-GCM.
 {{/if}}
+
+---
+
+## Provider Architecture & Lifecycle
+
+The plugin implements the `SimpleNSProvider` interface from `@simplens/sdk`:
+
+1. **`manifest`**:
+   Declares static metadata, required credentials, optional configuration keys (`...STANDARD_ATTACHMENT_OPTIONAL_KEYS`), and baseline file attachment limits.
+2. **`initialize(config)`**:
+   Called when the provider is instantiated or updated. Resolves dynamic attachment limits via `resolveFileAttachmentConfig` and compiles active Zod validation schemas.
+3. **`healthCheck()`**:
+   Pings upstream services to verify credentials and network availability.
+4. **`send(notification)`**:
+   Transforms the notification payload and dispatches it through the provider API. Returns `{ success: true, response }` or `{ success: false, error }`.
+5. **`getFileAttachmentConfig()`**:
+   Exposes effective attachment constraints (merged overrides) to the SimpleNS runtime.
+6. **`getNotificationSchema()` / `getRecipientSchema()` / `getContentSchema()`**:
+   Supplies runtime Zod schemas for ingress and worker validation.
+7. **`shutdown()`**:
+   Gracefully closes HTTP keep-alive connections, client sessions, and releases resources.
+
+---
 
 ## Development
 
@@ -97,16 +169,16 @@ The {{displayName}} provider accepts notifications with the following structure:
 - Node.js 18+
 - npm or pnpm
 
-### Setup
+### Setup & Commands
 
 ```bash
 # Install dependencies
 npm install
 
-# Build the plugin
+# Build TypeScript to dist/
 npm run build
 
-# Run tests
+# Run unit tests
 npm test
 
 # Run tests in watch mode
@@ -118,28 +190,15 @@ npm run test:watch
 ```
 plugin-{{name}}/
 ├── src/
-│ ├── index.ts # Main provider implementation
-│ └── index.test.ts # Test suite
-├── dist/ # Compiled output (generated)
+│   ├── index.ts        # Main provider implementation with lifecycle methods
+│   └── index.test.ts   # Vitest unit test suite
+├── dist/               # Compiled TypeScript output (generated)
 ├── package.json
 ├── tsconfig.json
 └── README.md
 ```
 
-### Implementing Your Provider
-
-1. **Define your schemas** in `src/index.ts`:
-- `recipientSchema`: Who receives notifications
-- `contentSchema`: What data the notification contains
-
-2. **Implement the `send()` method**:
-- Add your API client initialization in `initialize()`
-- Implement the delivery logic in `send()`
-- Handle errors appropriately
-
-3. **Add tests** for your implementation in `src/index.test.ts`
-
-4. **Update this README** with accurate documentation
+---
 
 ## Publishing
 
@@ -147,9 +206,11 @@ plugin-{{name}}/
 # Build the plugin
 npm run build
 
-# Publish to npm
+# Publish to npm registry
 npm publish --access public
 ```
+
+---
 
 ## License
 

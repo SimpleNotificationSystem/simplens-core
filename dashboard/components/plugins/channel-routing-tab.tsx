@@ -222,7 +222,7 @@ export function ChannelRoutingTab() {
                     Cascading Failover Route
                   </div>
                   <div className="p-2.5 bg-muted/40 rounded-md flex items-center gap-1.5 flex-wrap text-[11px] min-h-10">
-                    <Badge variant="default" className="font-mono text-[11px] bg-blue-600 hover:bg-blue-700">
+                    <Badge variant="default" className="font-mono text-[11px] bg-blue-600 text-white">
                       Primary: {route.default_provider_id}
                     </Badge>
 

@@ -6,7 +6,6 @@ import { pluginService } from "@/lib/api-client";
 import type { InstalledPlugin, PluginCatalogItem, InstallPluginPayload, NpmAuthStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -32,8 +31,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Download, Package, RefreshCw, Trash2, ArrowUpDown, Loader2, ExternalLink, Info, Search, Lock, ShieldCheck, Eye, EyeOff, Check } from "lucide-react";
+import { Download, Package, RefreshCw, Trash2, ArrowUpDown, Loader2, ExternalLink, Info, Search, Lock, ShieldCheck, Eye, EyeOff, Check, Tag } from "lucide-react";
 import { toast } from "sonner";
+import { toCamelCase, truncateLongDescriptions } from "@/lib/utils";
 
 export function InstalledPluginsTab() {
   const { data, error, isLoading, mutate } = useSWR<{ plugins: InstalledPlugin[] }>(
@@ -302,9 +302,9 @@ export function InstalledPluginsTab() {
 
       {/* Plugins Grid */}
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {[1, 2, 3].map((i) => (
-            <Card key={i}>
+            <Card key={i} className="rounded-2xl border border-slate-200/80 dark:border-slate-800">
               <CardContent className="p-6 space-y-4">
                 <Skeleton className="h-6 w-3/4" />
                 <Skeleton className="h-4 w-1/2" />
@@ -336,72 +336,84 @@ export function InstalledPluginsTab() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
           {plugins.map((plugin) => (
-            <Card key={plugin.name} className="overflow-hidden relative group h-full">
-              <CardContent className="p-5 space-y-4 flex min-h-[250px] h-full flex-col">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-1 min-w-0">
-                    <h3 className="font-semibold text-base truncate">{plugin.name}</h3>
-                    <p className="text-xs text-muted-foreground">
-                      {plugin.manifest?.displayName || plugin.name}
-                    </p>
+            <Card
+              key={plugin.name}
+              className="rounded-2xl bg-card shadow-xs overflow-hidden h-full flex flex-col justify-between"
+            >
+              <CardContent className="p-6 flex flex-col h-full justify-between">
+                <div>
+                  {/* Header: Title, Subtitle, and Version Tag */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-0.5 min-w-0 flex-1">
+                      <h3 className="font-semibold text-base truncate">
+                        {plugin.name}
+                      </h3>
+                      <p className="text-sm font-normal text-muted-foreground">
+                        {plugin.manifest?.displayName || plugin.name}
+                      </p>
+                    </div>
+                    <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0">
+                      <Tag className="h-3.5 w-3.5" />
+                      <span>v{plugin.version}</span>
+                    </div>
                   </div>
-                  <Badge variant="outline" className="font-mono text-xs">
-                    v{plugin.version}
-                  </Badge>
+
+                  {/* Badges: Channel & Status */}
+                  <div className="mt-4 flex items-center gap-2.5 flex-wrap">
+                    <span className="inline-flex items-center rounded-full px-3.5 py-1 text-xs font-medium bg-[#2b72ed] text-white">
+                      Channel: {plugin.manifest?.channel || "generic"}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-medium bg-green-700 text-white">
+                      <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+                      {plugin.status === "installed" ? "Installed" : plugin.status}
+                    </span>
+                  </div>
+
+                  {/* Description */}
+                  <p className="mt-4 text-sm text-foreground/90 dark:text-slate-300 leading-relaxed font-normal line-clamp-2">
+                    {truncateLongDescriptions(plugin.manifest?.description || "No description provided.", 150)}
+                  </p>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="text-xs">
-                    Channel: {plugin.manifest?.channel || "generic"}
-                  </Badge>
-                  <Badge
-                    variant={plugin.status === "installed" ? "default" : "destructive"}
-                    className="text-xs"
-                  >
-                    {plugin.status}
-                  </Badge>
-                </div>
-
-                <p className="text-xs text-muted-foreground line-clamp-2 min-h-8">
-                  {plugin.manifest?.description || "No description provided."}
-                </p>
-
-                <div className="flex items-center gap-2 pt-2 border-t mt-auto">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-xs gap-1.5"
+                {/* Footer Section */}
+                <div className="mt-6 pt-5 border-t flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground/80 dark:text-slate-300 hover:text-foreground dark:hover:text-white transition-colors cursor-pointer group"
                     onClick={() => setDetailsPlugin(plugin)}
                   >
-                    <Info className="h-3.5 w-3.5" />
-                    View details
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 text-xs gap-1.5"
-                    onClick={() => {
-                      setSelectedPlugin(plugin);
-                      setTargetVersion(plugin.version);
-                      setVersionModalOpen(true);
-                    }}
-                  >
-                    <ArrowUpDown className="h-3.5 w-3.5" />
-                    Change Version
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="text-xs gap-1.5"
-                    onClick={() => {
-                      setPluginToUninstall(plugin.name);
-                      setUninstallDialogOpen(true);
-                    }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                    <Info className="h-4 w-4 text-muted-foreground group-hover:text-foreground dark:group-hover:text-white" />
+                    <span>View details</span>
+                  </button>
+
+                  <div className="flex items-center gap-2.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="px-3.5 py-2 h-9 text-xs font-medium gap-1.5 bg-background text-foreground shadow-xs"
+                      onClick={() => {
+                        setSelectedPlugin(plugin);
+                        setTargetVersion(plugin.version);
+                        setVersionModalOpen(true);
+                      }}
+                    >
+                      <ArrowUpDown className="h-3.5 w-3.5" />
+                      Change Version
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="h-9 w-9 bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 text-white shadow-xs shrink-0"
+                      onClick={() => {
+                        setPluginToUninstall(plugin.name);
+                        setUninstallDialogOpen(true);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 text-white" />
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -427,7 +439,7 @@ export function InstalledPluginsTab() {
                 </div>
                 <div>
                   <div className="text-muted-foreground">Channel</div>
-                  <div>{detailsPlugin.manifest?.channel || "generic"}</div>
+                  <div>{toCamelCase(detailsPlugin.manifest?.channel || "generic")}</div>
                 </div>
                 <div>
                   <div className="text-muted-foreground">Author</div>
@@ -435,7 +447,7 @@ export function InstalledPluginsTab() {
                 </div>
                 <div>
                   <div className="text-muted-foreground">Status</div>
-                  <div>{detailsPlugin.status}</div>
+                  <div>{toCamelCase(detailsPlugin.status)}</div>
                 </div>
               </div>
               <div>
@@ -455,7 +467,7 @@ export function InstalledPluginsTab() {
                   href={detailsPlugin.manifest.homepage}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                  className="inline-flex items-center gap-1.5 text-sm text-blue-500 underline"
                 >
                   Plugin homepage
                   <ExternalLink className="h-3.5 w-3.5" />

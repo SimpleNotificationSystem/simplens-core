@@ -17,6 +17,12 @@ const manifestSubSchema = new mongoose.Schema<provider_manifest>(
     homepage: { type: String },
     requiredCredentials: [{ type: String, required: true }],
     optionalConfig: [{ type: String }],
+    fileAttachment: {
+      enabled: { type: Boolean },
+      maxFileSize: { type: Number },
+      maxCount: { type: Number },
+      allowedMimeTypes: [{ type: String }],
+    },
   },
   { _id: false }
 );

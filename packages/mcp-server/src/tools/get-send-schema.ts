@@ -60,6 +60,38 @@ Send a notification to one recipient via one or more channels.
 }
 \`\`\`
 
+## Example: Email with Inline Content & Attachments
+
+\`\`\`json
+{
+  "request_id": "550e8400-e29b-41d4-a716-446655440000",
+  "client_id": "660e8400-e29b-41d4-a716-446655440001",
+  "channel": ["email"],
+  "recipient": {
+    "user_id": "user123",
+    "email": "user@example.com"
+  },
+  "content": {
+    "email": {
+      "subject": "Invoice for Order #1234",
+      "message": "<h1>Thank you!</h1><p>Please find attached your invoice.</p>",
+      "attachments": [
+        {
+          "id": "c8e23b44-b258-4034-8c01-7fa1e5d7621c",
+          "filename": "invoice.pdf",
+          "mime_type": "application/pdf",
+          "size": 524288,
+          "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    }
+  },
+  "webhook_url": "https://your-app.com/webhook"
+}
+\`\`\`
+
+> **Note**: Upload files first using the \`upload_file\` tool to obtain attachment metadata (\`id\`, \`filename\`, \`mime_type\`, \`size\`, \`hash\`).
+
 ## Example: Email with Template
 
 \`\`\`json

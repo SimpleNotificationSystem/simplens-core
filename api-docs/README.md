@@ -44,6 +44,8 @@ Refer to the [Bruno Secrets Management & DotEnv Documentation](https://docs.useb
 | `ROUTING_CHANNEL` | Notification channel identifier for routing config | `mock` |
 | `NPM_AUTH_TOKEN` | Private npm registry authentication token | `npm_...` |
 | `NPM_REGISTRY_URL` | Custom or default npm registry URL | `https://registry.npmjs.org/` |
+| `FILE_ID` | UUID identifier of an uploaded file attachment | `c8e23b44-b258-4034-8c01-7fa1e5d7621c` |
+| `STORAGE_PROVIDER_ID` | MongoDB ObjectId of a configured storage provider | `64f...` |
 
 ---
 
@@ -73,6 +75,8 @@ All protected routes in SimpleNS accept either authentication method interchange
 Public server and health information (no authentication required).
 - **API Root**: `GET /api` - Basic server info.
 - **Health Check**: `GET /api/health` - Health status and timestamp for Docker/Kubernetes probes.
+- **Liveness Probe**: `GET /api/healthz` - Kubernetes liveness check probe.
+- **Readiness Probe**: `GET /api/readyz` - Kubernetes readiness check probe.
 
 ### 2. `admin_auth` (Public)
 Administrator setup, authentication, and session management.
@@ -276,3 +280,51 @@ Create, manage, inspect, and revoke programmatic API keys.
 - **Get API Key Usage**: `GET /api/keys/:id` - Inspect key metadata, usage counters, and last used timestamp.
 - **Revoke API Key**: `POST /api/keys/:id/revoke` - Immediately deactivate an active API key.
 - **Delete API Key**: `DELETE /api/keys/:id` - Permanently remove an API key record.
+
+### 14. `file_upload` (Protected)
+Upload, inspect, and download notification attachments directly streamed to active storage providers. See [file_upload/README.md](./file_upload/README.md) for full documentation.
+- **Upload Files**: `POST /api/file/upload?channel=...&provider=...` - Stream up to 10 files (max 100MB per file) directly to the active storage provider.
+- **Get File Metadata**: `GET /api/file/:id` - Retrieve metadata (filename, size, hash, url) for an uploaded attachment.
+- **Download File**: `GET /api/file/:id/download` - Stream or download binary content of the attachment.
+
+### 15. `storage` (Protected)
+Manage storage provider configurations, test connections, and control the active storage provider for attachments. See [storage/README.md](./storage/README.md) for full documentation.
+- **Get Storage Status**: `GET /api/storage/status` - Check whether an active storage provider is currently configured.
+- **Get Available Storage Providers**: `GET /api/storage/providers` - List supported storage provider types and their credential schemas.
+- **Test Storage Connection**: `POST /api/storage/test` - Test candidate storage credentials and connectivity prior to saving.
+- **List Storage Providers**: `GET /api/storage` - List all configured storage providers (credentials masked).
+- **Create Storage Provider**: `POST /api/storage` - Register a new storage provider with encrypted credentials.
+  ```json
+  {
+    "name": "Local MinIO Storage",
+    "provider_type": "minio",
+    "enabled": true,
+    "is_active": true,
+    "config": {
+      "endPoint": "localhost",
+      "port": "9000",
+      "useSSL": "false",
+      "accessKey": "minioadmin",
+      "secretKey": "minioadmin",
+      "bucket": "simplens-attachments",
+      "region": "us-east-1"
+    }
+  }
+  ```
+- **Update Storage Provider**: `PATCH /api/storage/:id` - Update provider name, enabled state, active flag, or credentials.
+- **Activate Storage Provider**: `PATCH /api/storage/:id/activate` - Promote a provider as the single active storage provider.
+- **Delete Storage Provider**: `DELETE /api/storage/:id` - Remove a storage provider configuration.
+
+### 16. `webhook` (Public)
+Public callback endpoint for external providers (e.g. Resend, SendGrid, Twilio) to deliver delivery receipts and status notifications.
+- **Webhook Callback**: `POST /api/webhook` - Ingest provider status callback payload.
+  ```json
+  {
+    "request_id": "req-98765",
+    "notification_id": "{{process.env.NOTIFICATION_ID}}",
+    "status": "delivered",
+    "channel": "email",
+    "occurred_at": "2026-11-14T12:00:00.000Z"
+  }
+  ```
+

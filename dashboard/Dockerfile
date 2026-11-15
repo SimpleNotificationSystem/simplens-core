@@ -59,13 +59,13 @@ RUN chown -R nextjs:nodejs public
 # Switch to non-root user
 USER nextjs
 
-ARG PORT
+ARG PORT=3002
 
-ENV PORT=${PORT}
+ENV PORT=${PORT:-3002}
 ENV HOSTNAME="0.0.0.0"
 
 # Expose the port
-EXPOSE ${PORT} 
+EXPOSE ${PORT}
 
 # Start the application using entrypoint script
 CMD ["./entrypoint.sh"]

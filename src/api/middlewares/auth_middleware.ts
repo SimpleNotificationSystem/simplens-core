@@ -69,6 +69,7 @@ async function handleDynamicApiKey(
             fullPath.includes('/api/plugins') ||
             fullPath.includes('/api/channels/routing') ||
             fullPath.includes('/api/admin-channels') ||
+            fullPath.includes('/api/storage') ||
             fullPath.includes('/api/settings') ||
             fullPath.includes('/api/keys') ||
             fullPath.includes('/api/dashboard') ||

@@ -1,0 +1,31 @@
+meta {
+  name: Test Storage Connection
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{process.env.BASE_URL}}/api/storage/test
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "provider_type": "minio",
+    "config": {
+      "endPoint": "localhost",
+      "port": "9000",
+      "useSSL": "false",
+      "accessKey": "minioadmin",
+      "secretKey": "minioadmin",
+      "bucket": "simplens-attachments",
+      "region": "us-east-1"
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
