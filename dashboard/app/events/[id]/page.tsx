@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { StatusBadge } from "@/components/events/status-badge";
 import { ChannelBadge } from "@/components/events/channel-badge";
+import { StructuredDataViewer } from "@/components/events/structured-data-viewer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,13 +21,21 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog";
 
-import { ArrowLeft, RefreshCw, Trash2, Clock, User, Mail, Phone, Link as LinkIcon, Paperclip, Download } from "lucide-react";
+import {
+    ArrowLeft,
+    RefreshCw,
+    Trash2,
+    Clock,
+    Link as LinkIcon,
+    Copy,
+    Check,
+} from "lucide-react";
 import { format } from "date-fns";
 import { Notification, NOTIFICATION_STATUS, PluginMetadata, ProviderMetadata } from "@/lib/types";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
-import { withBasePath, formatBytes } from "@/lib/utils";
+import { withBasePath } from "@/lib/utils";
 import { apiClient, notificationService } from "@/lib/api-client";
 
 const fetcher = <T,>(url: string): Promise<T> => apiClient.get(url) as unknown as Promise<T>;
@@ -35,12 +44,43 @@ interface PageProps {
     params: Promise<{ id: string }>;
 }
 
+function CopyableValue({ value, label }: { value: string; label?: string }) {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(value);
+            setCopied(true);
+            toast.success(label ? `Copied ${label}` : "Copied to clipboard");
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            toast.error("Failed to copy");
+        }
+    };
+
+    return (
+        <div className="flex items-start justify-between gap-1.5 font-mono text-xs bg-muted/50 px-2 py-1 rounded w-full min-w-0">
+            <span className="break-all [overflow-wrap:anywhere] flex-1">{value}</span>
+            <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 text-muted-foreground hover:text-foreground shrink-0 mt-0.5"
+                onClick={handleCopy}
+                title="Copy"
+            >
+                {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+            </Button>
+        </div>
+    );
+}
+
 export default function EventDetailPage({ params }: PageProps) {
     const resolvedParams = use(params);
     const router = useRouter();
     const [isRetrying, setIsRetrying] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [retryDialogOpen, setRetryDialogOpen] = useState(false);
 
     const { data: notification, isLoading, error, mutate } = useSWR<Notification>(
         `/api/notifications/${resolvedParams.id}`,
@@ -49,8 +89,6 @@ export default function EventDetailPage({ params }: PageProps) {
 
     // Fetch plugin metadata for dynamic schema rendering
     const { data: plugins } = useSWR<PluginMetadata>('/api/plugins', fetcher);
-
-    const [retryDialogOpen, setRetryDialogOpen] = useState(false);
 
     // Helper to find provider metadata based on channel and provider ID
     const getProviderMetadata = (
@@ -130,6 +168,11 @@ export default function EventDetailPage({ params }: PageProps) {
     }
 
     const isFailed = notification.status === NOTIFICATION_STATUS.failed;
+    const providerMeta = getProviderMetadata(notification.channel, notification.provider);
+
+    // Content may be nested under channel key or flat
+    const channelContent = (notification.content as Record<string, unknown>)?.[notification.channel] as Record<string, unknown> | undefined
+        || notification.content as Record<string, unknown>;
 
     return (
         <DashboardLayout
@@ -166,8 +209,6 @@ export default function EventDetailPage({ params }: PageProps) {
                                                 This will reset the notification to pending status and reprocess it.
                                             </DialogDescription>
                                         </DialogHeader>
-
-
 
                                         <DialogFooter>
                                             <Button variant="outline" onClick={() => setRetryDialogOpen(false)}>
@@ -222,8 +263,9 @@ export default function EventDetailPage({ params }: PageProps) {
                     </div>
                 </div>
 
+                {/* Layout Row 1: Notification Info | Identifiers */}
                 <div className="grid gap-6 md:grid-cols-2">
-                    {/* Status & Info */}
+                    {/* Status & Info Card */}
                     <Card>
                         <CardHeader>
                             <CardTitle>Notification Info</CardTitle>
@@ -284,354 +326,184 @@ export default function EventDetailPage({ params }: PageProps) {
                         </CardContent>
                     </Card>
 
-                    {/* Recipient */}
+                    {/* Identifiers Card */}
                     <Card>
                         <CardHeader>
-                            <CardTitle>Recipient</CardTitle>
-                            <CardDescription>Recipient details</CardDescription>
+                            <CardTitle>Identifiers</CardTitle>
+                            <CardDescription>Request identifiers and callback endpoints</CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-4">
-                            {(() => {
-                                const providerMeta = getProviderMetadata(notification.channel, notification.provider);
-
-                                return (
-                                    <>
-                                        {providerMeta?.recipientFields.map(field => {
-                                            const value = notification.recipient[field.name];
-                                            if (value === undefined || value === null || value === '') return null;
-
-                                            // Choose icon based on field type
-                                            const IconComponent = field.type === 'email' ? Mail
-                                                : field.type === 'phone' ? Phone
-                                                : User;
-
-                                            return (
-                                                <div key={field.name} className="flex items-center gap-2">
-                                                    <IconComponent className="h-4 w-4 text-muted-foreground" />
-                                                    <span className="text-sm text-muted-foreground capitalize">
-                                                        {field.name.replace(/_/g, ' ')}:
-                                                    </span>
-                                                    <span className={`text-sm ${field.type === 'email' || field.name === 'user_id' ? 'font-mono' : ''}`}>
-                                                        {String(value)}
-                                                    </span>
-                                                </div>
-                                            );
-                                        })}
-                                    </>
-                                );
-                            })()}
+                        <CardContent className="space-y-3.5">
+                            <div className="space-y-1">
+                                <span className="text-sm text-muted-foreground block">
+                                    Notification ID
+                                </span>
+                                <CopyableValue value={notification._id} label="Notification ID" />
+                            </div>
                             <Separator />
-                            <div className="flex items-start gap-2">
-                                <LinkIcon className="h-4 w-4 text-muted-foreground mt-0.5" />
-                                <div>
-                                    <span className="text-sm text-muted-foreground block">Webhook URL:</span>
-                                    <span className="text-sm font-mono break-all">{notification.webhook_url}</span>
-                                </div>
+                            <div className="space-y-1">
+                                <span className="text-sm text-muted-foreground block">
+                                    Request ID
+                                </span>
+                                <CopyableValue value={notification.request_id} label="Request ID" />
                             </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Content */}
-                    <Card className="md:col-span-2">
-                        <CardHeader>
-                            <CardTitle>Content</CardTitle>
-                            <CardDescription>Message content for this notification</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            {(() => {
-                                const providerMeta = getProviderMetadata(notification.channel, notification.provider);
-                                // Content may be nested under channel key or flat
-                                const channelContent = (notification.content as Record<string, unknown>)[notification.channel] as Record<string, unknown> | undefined
-                                    || notification.content as Record<string, unknown>;
-
-                                const renderAttachmentList = (attachments: unknown[]) => {
-                                    if (!Array.isArray(attachments) || attachments.length === 0) return null;
-                                    return (
-                                        <div className="grid gap-2 sm:grid-cols-2 mt-2">
-                                            {attachments.map((item, idx) => {
-                                                const att = (typeof item === 'object' && item !== null ? item : {}) as {
-                                                    id?: string;
-                                                    fileId?: string;
-                                                    filename?: string;
-                                                    name?: string;
-                                                    contentType?: string;
-                                                    mime_type?: string;
-                                                    size?: number;
-                                                    url?: string;
-                                                };
-                                                const fileId = att.fileId || att.id;
-                                                const filename = att.filename || att.name || (fileId ? `file-${fileId.slice(0, 8)}` : `attachment-${idx + 1}`);
-                                                const mimeType = att.contentType || att.mime_type;
-                                                const downloadUrl = fileId
-                                                    ? withBasePath(`/api/file/${fileId}/download?filename=${encodeURIComponent(filename)}`)
-                                                    : undefined;
-
-                                                return (
-                                                    <div
-                                                        key={fileId || idx}
-                                                        className="flex items-center justify-between p-3 rounded-lg border bg-card text-card-foreground shadow-sm hover:border-primary/50 transition-colors"
-                                                    >
-                                                        <div className="flex items-center gap-3 min-w-0">
-                                                            <div className="p-2 rounded-md bg-muted text-muted-foreground shrink-0">
-                                                                <Paperclip className="h-4 w-4" />
-                                                            </div>
-                                                            <div className="min-w-0">
-                                                                <p className="text-sm font-medium truncate" title={filename}>
-                                                                    {filename}
-                                                                </p>
-                                                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                                    {mimeType && <span className="truncate max-w-[140px]">{mimeType}</span>}
-                                                                    {att.size !== undefined && (
-                                                                        <>
-                                                                            {mimeType && <span>•</span>}
-                                                                            <span>{formatBytes(att.size)}</span>
-                                                                        </>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
-                                                        {downloadUrl && (
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                className="h-8 shrink-0 ml-2 text-xs"
-                                                                asChild
-                                                            >
-                                                                <a
-                                                                    href={downloadUrl}
-                                                                    target="_blank"
-                                                                    rel="noreferrer"
-                                                                >
-                                                                    <Download className="h-3.5 w-3.5 mr-1" />
-                                                                    Download
-                                                                </a>
-                                                            </Button>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    );
-                                };
-
-                                // No schema available - fallback to JSON (with attachment preview if available)
-                                if (!providerMeta?.contentFields?.length) {
-                                    const fallbackAttachments = Array.isArray(channelContent?.attachments) ? channelContent.attachments : [];
-                                    return (
-                                        <div className="space-y-4">
-                                            {fallbackAttachments.length > 0 && (
-                                                <div className="space-y-1">
-                                                    <span className="text-sm font-medium capitalize flex items-center gap-1.5">
-                                                        <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
-                                                        Attachments ({fallbackAttachments.length}):
-                                                    </span>
-                                                    {renderAttachmentList(fallbackAttachments)}
-                                                </div>
-                                            )}
-                                            <pre className="p-4 bg-muted rounded-lg text-xs overflow-auto">
-                                                {JSON.stringify(notification.content, null, 2)}
-                                            </pre>
-                                        </div>
-                                    );
-                                }
-
-                                const hasSchemaAttachmentField = providerMeta.contentFields.some(
-                                    (f) => f.name === 'attachments' || f.type === 'attachment'
-                                );
-                                const fallbackAttachments = !hasSchemaAttachmentField && Array.isArray(channelContent?.attachments) && channelContent.attachments.length > 0
-                                    ? channelContent.attachments
-                                    : [];
-
-                                return (
-                                    <>
-                                        {providerMeta.contentFields.map(field => {
-                                            const value = channelContent[field.name];
-                                            if (value === undefined || value === null || value === '') return null;
-
-                                            const isAttachmentField = field.name === 'attachments' || field.type === 'attachment';
-
-                                            if (isAttachmentField) {
-                                                const attachmentList = Array.isArray(value) ? value : [];
-                                                if (attachmentList.length === 0) return null;
-
-                                                return (
-                                                    <div key={field.name} className="space-y-1">
-                                                        <span className="text-sm font-medium capitalize flex items-center gap-1.5">
-                                                            <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
-                                                            Attachments ({attachmentList.length}):
-                                                        </span>
-                                                        {renderAttachmentList(attachmentList)}
-                                                    </div>
-                                                );
-                                            }
-
-                                            const stringValue = Array.isArray(value)
-                                                ? value.map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v))).join(", ")
-                                                : typeof value === "object"
-                                                    ? JSON.stringify(value, null, 2)
-                                                    : String(value);
-
-                                            return (
-                                                <div key={field.name}>
-                                                    <span className="text-sm font-medium capitalize">
-                                                        {field.name.replace(/_/g, ' ')}:
-                                                    </span>
-                                                    {field.type === 'text' ? (
-                                                        // Long text/HTML content - styled box
-                                                        <div
-                                                            className="mt-2 p-4 bg-muted rounded-lg text-sm prose prose-sm max-w-none dark:prose-invert"
-                                                            dangerouslySetInnerHTML={{ __html: stringValue }}
-                                                        />
-                                                    ) : (
-                                                        // Short string content - inline
-                                                        <p className="mt-1 text-sm">{stringValue}</p>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-
-                                        {fallbackAttachments.length > 0 && (
-                                            <div className="space-y-1 pt-2">
-                                                <span className="text-sm font-medium capitalize flex items-center gap-1.5">
-                                                    <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
-                                                    Attachments ({fallbackAttachments.length}):
-                                                </span>
-                                                {renderAttachmentList(fallbackAttachments)}
-                                            </div>
-                                        )}
-                                    </>
-                                );
-                            })()}
-                        </CardContent>
-                    </Card>
-
-                    {/* Provider Execution History */}
-                    <Card className="md:col-span-2">
-                        <CardHeader>
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <CardTitle>Provider Execution History</CardTitle>
-                                    <CardDescription>
-                                        Timeline of provider dispatch attempts, rate limit cascades, and failure reasons
-                                    </CardDescription>
-                                </div>
-                                {notification.provider_history && notification.provider_history.length > 0 && (
-                                    <span className="text-xs font-mono px-2 py-1 bg-muted rounded-full text-muted-foreground">
-                                        {notification.provider_history.length} {notification.provider_history.length === 1 ? 'attempt' : 'attempts'}
-                                    </span>
-                                )}
+                            <Separator />
+                            <div className="space-y-1">
+                                <span className="text-sm text-muted-foreground block">
+                                    Client ID
+                                </span>
+                                <CopyableValue value={notification.client_id} label="Client ID" />
                             </div>
-                        </CardHeader>
-                        <CardContent>
-                            {(!notification.provider_history || notification.provider_history.length === 0) ? (
-                                <div className="text-center py-6 text-muted-foreground text-sm">
-                                    No intermediate provider cascade attempts recorded.
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    {notification.provider_history.map((attempt, index) => {
-                                        const isSuccess = attempt.status === 'delivered';
-                                        const isRateLimit = attempt.status === 'rate_limited';
-
-                                        return (
-                                            <div
-                                                key={index}
-                                                className={`p-4 rounded-lg border text-sm flex flex-col md:flex-row md:items-center justify-between gap-3 ${
-                                                    isSuccess
-                                                        ? 'bg-green-50/50 border-green-200 dark:bg-green-950/20 dark:border-green-900'
-                                                        : isRateLimit
-                                                        ? 'bg-yellow-50/50 border-yellow-200 dark:bg-yellow-950/20 dark:border-yellow-900'
-                                                        : 'bg-red-50/50 border-red-200 dark:bg-red-950/20 dark:border-red-900'
-                                                }`}
-                                            >
-                                                <div className="space-y-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-semibold">{index + 1}. {attempt.provider}</span>
-                                                        <span
-                                                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                                                isSuccess
-                                                                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                                                    : isRateLimit
-                                                                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                                                                    : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                                                            }`}
-                                                        >
-                                                            {isSuccess ? 'Delivered' : isRateLimit ? 'Rate Limited' : 'Failed'}
-                                                        </span>
-                                                        {attempt.error_code && (
-                                                            <span className="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                                                                {attempt.error_code}
-                                                            </span>
-                                                        )}
-                                                        {attempt.duration_ms !== undefined && (
-                                                            <span className="text-xs text-muted-foreground">
-                                                                ({attempt.duration_ms}ms)
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    {attempt.error_message && (
-                                                        <p className="text-xs text-muted-foreground font-mono mt-1">
-                                                            {attempt.error_message}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                                <div className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
-                                                    <Clock className="h-3 w-3" />
-                                                    {format(new Date(attempt.attempted_at), "PPpp")}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
+                            {notification.client_name && (
+                                <>
+                                    <Separator />
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-sm text-muted-foreground">
+                                            Client Name
+                                        </span>
+                                        <span className="text-sm font-medium">{notification.client_name}</span>
+                                    </div>
+                                </>
+                            )}
+                            {notification.webhook_url && (
+                                <>
+                                    <Separator />
+                                    <div className="space-y-1">
+                                        <span className="text-sm text-muted-foreground flex items-center gap-1.5">
+                                            <LinkIcon className="h-3 w-3" />
+                                            Webhook URL
+                                        </span>
+                                        <CopyableValue value={notification.webhook_url} label="Webhook URL" />
+                                    </div>
+                                </>
                             )}
                         </CardContent>
                     </Card>
+                </div>
 
-                    {/* Error Message (if failed) */}
-                    {isFailed && notification.error_message && (
-                        <Card className="md:col-span-2 border-red-200 dark:border-red-900">
-                            <CardHeader>
-                                <CardTitle className="text-red-600 dark:text-red-400">Error Details</CardTitle>
-                                <CardDescription>This notification failed with the following error</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <p className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg text-sm text-red-800 dark:text-red-300 font-mono">
-                                    {notification.error_message}
-                                </p>
-                            </CardContent>
-                        </Card>
-                    )}
+                {/* Layout Row 2: Recipient */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Recipient</CardTitle>
+                        <CardDescription>Recipient destination details and parameters</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <StructuredDataViewer
+                            data={notification.recipient}
+                            schema={providerMeta?.recipientFields}
+                        />
+                    </CardContent>
+                </Card>
 
-                    {/* IDs */}
-                    <Card className="md:col-span-2">
+                {/* Layout Row 3: Content */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Content</CardTitle>
+                        <CardDescription>Notification payload and message content</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <StructuredDataViewer
+                            data={channelContent}
+                            schema={providerMeta?.contentFields}
+                        />
+                    </CardContent>
+                </Card>
+
+                {/* Layout Row 4: Provider Execution History */}
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle>Provider Execution History</CardTitle>
+                                <CardDescription>
+                                    Timeline of provider dispatch attempts, rate limit cascades, and failure reasons
+                                </CardDescription>
+                            </div>
+                            {notification.provider_history && notification.provider_history.length > 0 && (
+                                <span className="text-xs font-mono px-2 py-1 bg-muted rounded-full text-muted-foreground">
+                                    {notification.provider_history.length} {notification.provider_history.length === 1 ? 'attempt' : 'attempts'}
+                                </span>
+                            )}
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        {(!notification.provider_history || notification.provider_history.length === 0) ? (
+                            <div className="text-center py-6 text-muted-foreground text-sm">
+                                No intermediate provider cascade attempts recorded.
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {notification.provider_history.map((attempt, index) => {
+                                    const isSuccess = attempt.status === 'delivered';
+                                    const isRateLimit = attempt.status === 'rate_limited';
+
+                                    return (
+                                        <div
+                                            key={index}
+                                            className={`p-4 rounded-lg border text-sm flex flex-col md:flex-row md:items-center justify-between gap-3 ${
+                                                isSuccess
+                                                    ? 'bg-green-50/50 border-green-200 dark:bg-green-950/20 dark:border-green-900'
+                                                    : isRateLimit
+                                                    ? 'bg-yellow-50/50 border-yellow-200 dark:bg-yellow-950/20 dark:border-yellow-900'
+                                                    : 'bg-red-50/50 border-red-200 dark:bg-red-950/20 dark:border-red-900'
+                                            }`}
+                                        >
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-semibold">{index + 1}. {attempt.provider}</span>
+                                                    <span
+                                                        className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                                            isSuccess
+                                                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                                                : isRateLimit
+                                                                ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                                                                : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                                                        }`}
+                                                    >
+                                                        {isSuccess ? 'Delivered' : isRateLimit ? 'Rate Limited' : 'Failed'}
+                                                    </span>
+                                                    {attempt.error_code && (
+                                                        <span className="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                                            {attempt.error_code}
+                                                        </span>
+                                                    )}
+                                                    {attempt.duration_ms !== undefined && (
+                                                        <span className="text-xs text-muted-foreground">
+                                                            ({attempt.duration_ms}ms)
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {attempt.error_message && (
+                                                    <p className="text-xs text-muted-foreground font-mono mt-1">
+                                                        {attempt.error_message}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
+                                                <Clock className="h-3 w-3" />
+                                                {format(new Date(attempt.attempted_at), "PPpp")}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Error Message (if failed) */}
+                {isFailed && notification.error_message && (
+                    <Card className="border-red-200 dark:border-red-900">
                         <CardHeader>
-                            <CardTitle>Identifiers</CardTitle>
+                            <CardTitle className="text-red-600 dark:text-red-400">Error Details</CardTitle>
+                            <CardDescription>This notification failed with the following error</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <div>
-                                    <span className="text-sm text-muted-foreground">Notification ID</span>
-                                    <p className="font-mono text-sm mt-1">{notification._id}</p>
-                                </div>
-                                <div>
-                                    <span className="text-sm text-muted-foreground">Request ID</span>
-                                    <p className="font-mono text-sm mt-1">{notification.request_id}</p>
-                                </div>
-                                <div>
-                                    <span className="text-sm text-muted-foreground">Client ID</span>
-                                    <p className="font-mono text-sm mt-1">{notification.client_id}</p>
-                                </div>
-                                {notification.client_name && (
-                                    <div>
-                                        <span className="text-sm text-muted-foreground">Client Name</span>
-                                        <p className="text-sm mt-1">{notification.client_name}</p>
-                                    </div>
-                                )}
-                            </div>
+                            <p className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg text-sm text-red-800 dark:text-red-300 font-mono">
+                                {notification.error_message}
+                            </p>
                         </CardContent>
                     </Card>
-                </div>
+                )}
             </div>
         </DashboardLayout>
     );
