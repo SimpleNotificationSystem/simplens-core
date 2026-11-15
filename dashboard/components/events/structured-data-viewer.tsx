@@ -1,14 +1,13 @@
 "use client";
 
 import React, { useState } from "react";
+import DOMPurify from "dompurify";
 import { FieldDefinition } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import {
-    ChevronDown,
-    ChevronRight,
     Copy,
     Check,
     ExternalLink,
@@ -31,6 +30,16 @@ export function isHtmlContent(value: unknown): boolean {
     if (/^<!DOCTYPE/i.test(trimmed)) return true;
     const htmlRegex = /<\/?(html|head|body|p|div|span|h[1-6]|table|tbody|thead|tr|td|th|ul|ol|li|a|b|strong|i|em|br|hr|img|pre|code|blockquote|section|article|header|footer|nav|button|input|form|style)\b[^>]*>/i;
     return htmlRegex.test(trimmed);
+}
+
+/**
+ * Safely sanitizes HTML content using DOMPurify (with SSR safety check).
+ */
+function sanitizeHtml(html: string): string {
+    if (typeof window !== "undefined") {
+        return DOMPurify.sanitize(html);
+    }
+    return html;
 }
 
 /**
@@ -116,7 +125,7 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
 }
 
 /**
- * Tabbed HTML preview and source viewer
+ * Tabbed HTML preview and source viewer using DOMPurify and Tailwind prose styling
  */
 function HtmlContentBlock({ html, label }: { html: string; label?: string }) {
     return (
@@ -146,38 +155,10 @@ function HtmlContentBlock({ html, label }: { html: string; label?: string }) {
                 </TabsList>
 
                 <TabsContent value="preview" className="mt-2 w-full max-w-full">
-                    <div className="border rounded-lg bg-white dark:bg-zinc-950 overflow-hidden shadow-sm w-full">
-                        <iframe
-                            srcDoc={`
-                                <!DOCTYPE html>
-                                <html>
-                                  <head>
-                                    <meta charset="utf-8">
-                                    <meta name="viewport" content="width=device-width, initial-scale=1">
-                                    <style>
-                                      body {
-                                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-                                        padding: 16px;
-                                        margin: 0;
-                                        color: #1f2937;
-                                        background-color: #ffffff;
-                                        line-height: 1.5;
-                                        word-break: break-word;
-                                        overflow-wrap: anywhere;
-                                      }
-                                      * { box-sizing: border-box; }
-                                      img { max-width: 100%; height: auto; }
-                                      table { border-collapse: collapse; max-width: 100%; width: 100%; }
-                                    </style>
-                                  </head>
-                                  <body>${html}</body>
-                                </html>
-                            `}
-                            className="w-full min-h-[220px] max-h-[500px] border-0"
-                            sandbox="allow-same-origin"
-                            title="Rendered Message Preview"
-                        />
-                    </div>
+                    <div
+                        className="p-4 bg-muted/30 rounded-lg text-sm prose prose-sm max-w-none dark:prose-invert border w-full overflow-auto"
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }}
+                    />
                 </TabsContent>
 
                 <TabsContent value="source" className="mt-2 w-full max-w-full">
@@ -214,7 +195,7 @@ function AttachmentListView({ attachments }: { attachments: unknown[] }) {
                 const fileId = att.fileId || att.id;
                 const filename = att.filename || att.name || (fileId ? `file-${fileId.slice(0, 8)}` : `attachment-${idx + 1}`);
                 const mimeType = att.contentType || att.mime_type;
-                const downloadUrl = att.url || (fileId
+                const downloadUrl = (fileId
                     ? withBasePath(`/api/file/${fileId}/download?filename=${encodeURIComponent(filename)}`)
                     : undefined);
 
@@ -338,7 +319,7 @@ function ScalarValueView({
 }
 
 /**
- * Generalized array viewer (primitives -> badges, objects -> vertical sub-panels)
+ * Generalized array viewer (primitives -> badges, objects -> vertical sub-panels with vertical line)
  */
 function ArrayValueView({
     name,
@@ -379,26 +360,28 @@ function ArrayValueView({
         );
     }
 
-    // Array of objects - rendered vertically
+    // Array of objects - rendered vertically with vertical line matching dynamic-field.tsx
     return (
         <div className="space-y-3 mt-1.5 w-full max-w-full">
             {items.map((item, idx) => (
                 <div
                     key={idx}
-                    className="p-3.5 rounded-lg border bg-muted/10 space-y-2 w-full max-w-full"
+                    className="rounded-lg border bg-muted/10 p-3.5 space-y-2 w-full max-w-full"
                 >
                     <div className="text-sm text-muted-foreground">
                         {name} #{idx + 1}
                     </div>
-                    {typeof item === "object" && item !== null ? (
-                        <StructuredDataViewer
-                            data={item as Record<string, unknown>}
-                            schema={fieldDef?.itemFields}
-                            isNested
-                        />
-                    ) : (
-                        <div className="text-sm font-mono break-all [overflow-wrap:anywhere]">{String(item)}</div>
-                    )}
+                    <div className="ml-1 pl-3.5 space-y-3.5 border-l-2 border-primary/30 w-full max-w-full">
+                        {typeof item === "object" && item !== null ? (
+                            <StructuredDataViewer
+                                data={item as Record<string, unknown>}
+                                schema={fieldDef?.itemFields}
+                                isNested
+                            />
+                        ) : (
+                            <div className="text-sm font-mono break-all [overflow-wrap:anywhere]">{String(item)}</div>
+                        )}
+                    </div>
                 </div>
             ))}
         </div>
@@ -406,7 +389,8 @@ function ArrayValueView({
 }
 
 /**
- * Nested object section viewer - collapsible panel
+ * Nested object section viewer:
+ * Renders objects without collapsible, featuring an indented colored vertical line matching dynamic-field.tsx
  */
 function ObjectSectionView({
     name,
@@ -419,46 +403,24 @@ function ObjectSectionView({
     fieldDef?: FieldDefinition;
     depth?: number;
 }) {
-    const [collapsed, setCollapsed] = useState(false);
     const keys = Object.keys(value || {});
 
     if (keys.length === 0) {
-        return <span className="text-xs text-muted-foreground italic">None (empty object)</span>;
+        return <span className="text-sm text-muted-foreground italic">None (empty object)</span>;
     }
 
     const title = formatKeyLabel(name);
 
     return (
-        <div
-            className={cn(
-                "w-full max-w-full rounded-lg border bg-card text-card-foreground shadow-sm transition-all",
-                depth > 0 ? "border-muted-foreground/20 bg-muted/15" : "border-border"
-            )}
-        >
-            <div
-                className="flex items-center justify-between p-3.5 cursor-pointer select-none hover:bg-muted/30 rounded-t-lg gap-2 flex-wrap"
-                onClick={() => setCollapsed(!collapsed)}
-            >
-                <div className="flex items-center gap-2 flex-wrap min-w-0">
-                    {collapsed ? (
-                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                    ) : (
-                        <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                    )}
-                    <span className="text-sm font-semibold tracking-tight break-words">{title}</span>
-                    <Badge variant="outline" className="text-[10px] font-mono py-0 h-4 px-1.5 text-muted-foreground shrink-0">
-                        {keys.length} {keys.length === 1 ? "field" : "fields"}
-                    </Badge>
-                </div>
+        <div className="space-y-1.5 w-full max-w-full">
+            <div>
+                <span className="text-sm text-muted-foreground block">{title}</span>
                 {fieldDef?.description && (
-                    <span className="text-xs text-muted-foreground break-words text-right sm:text-left">
-                        {fieldDef.description}
-                    </span>
+                    <p className="text-xs text-muted-foreground mt-0.5">{fieldDef.description}</p>
                 )}
             </div>
-
-            {!collapsed && (
-                <div className="p-3.5 border-t border-border/50 w-full max-w-full">
+            <div className="rounded-lg border bg-muted/10 p-3.5 mt-1.5 w-full max-w-full">
+                <div className="ml-1 pl-3.5 space-y-3.5 border-l-2 border-primary/30 w-full max-w-full">
                     <StructuredDataViewer
                         data={value}
                         schema={fieldDef?.fields}
@@ -466,7 +428,7 @@ function ObjectSectionView({
                         depth={depth + 1}
                     />
                 </div>
-            )}
+            </div>
         </div>
     );
 }
@@ -483,7 +445,8 @@ export interface StructuredDataViewerProps {
 /**
  * Main StructuredDataViewer Component:
  * Generalized, schema-aware, pure vertical renderer for complex JSON structures.
- * Groups embedded objects into collapsibles and formats HTML, arrays, and scalars vertically.
+ * Renders embedded objects and nested objects with vertical lines (matching dynamic-field.tsx)
+ * and formats sanitized HTML, arrays, and scalars vertically.
  */
 export function StructuredDataViewer({
     data,
@@ -622,7 +585,7 @@ export function StructuredDataViewer({
                             );
                         }
 
-                        // 3. Nested Object (Collapsible)
+                        // 3. Nested Object (Rendered with vertical line matching dynamic-field.tsx)
                         if (typeof val === "object" && val !== null && !Array.isArray(val)) {
                             return (
                                 <div key={key} className="w-full max-w-full">
