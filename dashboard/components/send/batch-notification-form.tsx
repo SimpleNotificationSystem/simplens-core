@@ -18,7 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { pluginService, templateService, notificationService, storageService } from "@/lib/api-client";
-import { withBasePath, showErrorToast, pruneEmptyValues } from "@/lib/utils";
+import { withBasePath, showErrorToast, pruneEmptyValues, extractTemplateVariables } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getMissingRequiredCsvFields, importCsvRecipients as createCsvRecipients, mapCsvHeaders, parseCsv, flattenRecipientFieldsForCsv } from "@/lib/csv-import";
 
@@ -86,34 +86,6 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
 
     // Preview
     const [previewVariables, setPreviewVariables] = useState<Record<string, string>>({});
-
-    const extractTemplateVariables = (input: unknown): string[] => {
-        const variables = new Set<string>();
-        const regex = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
-
-        const visit = (value: unknown) => {
-            if (typeof value === "string") {
-                for (const match of value.matchAll(regex)) {
-                    if (match[1]) {
-                        variables.add(match[1]);
-                    }
-                }
-                return;
-            }
-
-            if (Array.isArray(value)) {
-                value.forEach(visit);
-                return;
-            }
-
-            if (value && typeof value === "object") {
-                Object.values(value).forEach(visit);
-            }
-        };
-
-        visit(input);
-        return Array.from(variables).sort((left, right) => left.localeCompare(right));
-    };
 
     const getTemplatePreviewHtml = (content: Record<string, unknown> | undefined): string => {
         if (!content) return "";

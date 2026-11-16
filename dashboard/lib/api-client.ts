@@ -43,12 +43,19 @@ import {
 export class ApiError extends Error {
   status?: number;
   details?: unknown;
+  errors?: Array<{ path: string; message: string }>;
 
-  constructor(message: string, status?: number, details?: unknown) {
+  constructor(
+    message: string,
+    status?: number,
+    details?: unknown,
+    errors?: Array<{ path: string; message: string }>,
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.details = details;
+    this.errors = errors;
   }
 }
 
@@ -71,19 +78,28 @@ apiClient.interceptors.response.use(
   (error: AxiosError) => {
     let message = 'An unexpected error occurred';
     let details: unknown = null;
+    let errors: Array<{ path: string; message: string }> | undefined;
 
     if (error.response) {
       // Backend core error formats: { error: 'msg' } or { message: 'msg' }
       const data = error.response.data as Record<string, unknown> | null | undefined;
       message = (data?.error as string) || (data?.message as string) || `Request failed with status ${error.response.status}`;
-      details = data?.details || null;
+      details = data?.details || data?.errors || null;
+
+      const rawErrors = (data?.errors || data?.details) as Array<{ path?: string | (string | number)[]; message?: string }> | undefined;
+      if (Array.isArray(rawErrors)) {
+        errors = rawErrors.map((item) => ({
+          path: Array.isArray(item.path) ? item.path.join('.') : (item.path ? String(item.path) : ''),
+          message: item.message || String(item),
+        }));
+      }
     } else if (error.request) {
       message = 'No response received from server. Check your network connection.';
     } else {
       message = error.message;
     }
 
-    return Promise.reject(new ApiError(message, error.response?.status, details));
+    return Promise.reject(new ApiError(message, error.response?.status, details, errors));
   }
 );
 

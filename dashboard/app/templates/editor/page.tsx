@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { ArrowLeft, Code, Copy, Eye, Maximize2, Save, X } from "lucide-react";
-import { withBasePath, pruneEmptyValues } from "@/lib/utils";
+import { withBasePath, pruneEmptyValues, showErrorToast, extractTemplateVariables } from "@/lib/utils";
 import { HtmlPreview } from "@/components/send/html-preview";
 import type {
   FieldDefinition,
@@ -192,31 +192,8 @@ function TemplateEditorContent() {
     return [...schema, ...extras];
   }, [packageSchemas, form.package, form.content, mode]);
 
-  // Variable detection
-  const extractVariables = (value: unknown): string[] => {
-    const names = new Set<string>();
-    const pattern = /\$?\{\{?\s*([a-zA-Z0-9_.-]+)\s*\}?\}/g;
-    const visit = (node: unknown) => {
-      if (typeof node === "string") {
-        for (const match of node.matchAll(pattern)) {
-          if (match[1]) names.add(match[1]);
-        }
-        return;
-      }
-      if (Array.isArray(node)) {
-        node.forEach(visit);
-        return;
-      }
-      if (node && typeof node === "object") {
-        Object.values(node).forEach(visit);
-      }
-    };
-    visit(value);
-    return Array.from(names).sort((a, b) => a.localeCompare(b));
-  };
-
   const variableNames = useMemo(
-    () => extractVariables(form.content),
+    () => extractTemplateVariables(form.content),
     [form.content],
   );
 
@@ -333,10 +310,10 @@ function TemplateEditorContent() {
       );
       router.push(withBasePath("/templates"));
     } catch (err) {
+      showErrorToast(err, `Failed to ${mode} template`);
       const message =
         err instanceof Error ? err.message : `Failed to ${mode} template`;
       setError(message);
-      toast.error(message);
     } finally {
       setIsSaving(false);
     }

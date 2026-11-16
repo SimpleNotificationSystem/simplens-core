@@ -49,7 +49,7 @@ import {
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { withBasePath, pruneEmptyValues, extractTemplateVariables } from "@/lib/utils";
+import { withBasePath, pruneEmptyValues, extractTemplateVariables, showErrorToast } from "@/lib/utils";
 import {
     apiClient,
     notificationService,
@@ -398,8 +398,7 @@ export default function EventDetailPage({ params }: PageProps) {
             setEditDialogOpen(false);
             mutate();
         } catch (err) {
-            const error = err as Error;
-            toast.error(error.message || "Failed to edit and requeue notification");
+            showErrorToast(err, "Failed to edit and requeue notification");
         } finally {
             setIsSubmitting(false);
         }

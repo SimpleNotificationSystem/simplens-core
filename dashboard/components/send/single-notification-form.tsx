@@ -18,7 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { pluginService, templateService, notificationService, storageService } from "@/lib/api-client";
-import { withBasePath, showErrorToast, pruneEmptyValues } from "@/lib/utils";
+import { withBasePath, showErrorToast, pruneEmptyValues, extractTemplateVariables } from "@/lib/utils";
 
 // Generate a UUIDv4
 function generateUUID(): string {
@@ -63,34 +63,6 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
     const [templateDetailsByChannel, setTemplateDetailsByChannel] = useState<Record<string, NotificationTemplateDetail | null>>({});
     const [templateVariablesByChannel, setTemplateVariablesByChannel] = useState<Record<string, Record<string, string>>>({});
     const [templateVariableNamesByChannel, setTemplateVariableNamesByChannel] = useState<Record<string, string[]>>({});
-
-    const extractTemplateVariables = (input: unknown): string[] => {
-        const variables = new Set<string>();
-        const regex = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
-
-        const visit = (value: unknown) => {
-            if (typeof value === "string") {
-                for (const match of value.matchAll(regex)) {
-                    if (match[1]) {
-                        variables.add(match[1]);
-                    }
-                }
-                return;
-            }
-
-            if (Array.isArray(value)) {
-                value.forEach(visit);
-                return;
-            }
-
-            if (value && typeof value === "object") {
-                Object.values(value).forEach(visit);
-            }
-        };
-
-        visit(input);
-        return Array.from(variables).sort((left, right) => left.localeCompare(right));
-    };
 
     const getTemplatePreviewHtml = (content: Record<string, unknown> | undefined): string => {
         if (!content) return "";

@@ -60,19 +60,51 @@ export function formatBytes(bytes: number, decimals = 1): string {
 }
 
 /**
- * Show error toast with proper multi-line formatting.
+ * Show error toast with proper multi-line formatting and structured validation bullets.
  */
 export function showErrorToast(error: unknown, fallbackMessage = "An error occurred"): void {
-  const message = error instanceof Error ? error.message : String(error || fallbackMessage);
-  const [firstLine, ...rest] = message.split("\n");
-  if (rest.length > 0) {
-    toast.error(firstLine, {
-      description: rest.join("\n"),
-      style: { whiteSpace: "pre-line" },
-    });
-  } else {
-    toast.error(message);
+  let message = fallbackMessage;
+  let bulletPoints: string[] = [];
+
+  if (error && typeof error === "object") {
+    const errObj = error as { message?: string; errors?: Array<{ path?: string; message?: string }> };
+    if (typeof errObj.message === "string" && errObj.message.trim().length > 0) {
+      message = errObj.message;
+    }
+    if (Array.isArray(errObj.errors) && errObj.errors.length > 0) {
+      bulletPoints = errObj.errors
+        .map((e) => {
+          const path = e.path ? `${e.path}: ` : "";
+          return `• ${path}${e.message || "Invalid value"}`;
+        })
+        .filter(Boolean);
+    }
+  } else if (typeof error === "string") {
+    message = error;
   }
+
+  const lines = message.split("\n").map((l) => l.trim()).filter(Boolean);
+  if (lines.length > 1) {
+    const title = lines[0].replace(/:$/, "");
+    const description = lines.slice(1).join("\n");
+    toast.error(title, {
+      description,
+      style: { whiteSpace: "pre-line" },
+      duration: 6000,
+    });
+    return;
+  }
+
+  if (bulletPoints.length > 0) {
+    toast.error(message.replace(/:$/, ""), {
+      description: bulletPoints.join("\n"),
+      style: { whiteSpace: "pre-line" },
+      duration: 6000,
+    });
+    return;
+  }
+
+  toast.error(message);
 }
 
 // Command string function to format lowercase or uppoercase to make the first letter of every word alone into upper case
@@ -137,17 +169,27 @@ export function pruneEmptyValues<T = unknown>(val: T): T {
 }
 
 /**
- * Extracts template variable placeholders (e.g. {{ var_name }}) recursively from any object or string.
+ * Extracts template variable placeholders recursively from any object or string.
+ * Supports: {{var_name}}, {var_name}, $var_name, ${var_name}, ${{var_name}}
+ * Explicitly ignores prices (e.g. $100, $5.50) and single-brace non-variables (e.g. JSON/CSS).
  */
 export function extractTemplateVariables(input: unknown): string[] {
   const variables = new Set<string>();
-  const regex = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
+  const regexes = [
+    /\$\{\{\s*([a-zA-Z_][a-zA-Z0-9_.-]*)\s*\}\}/g,      // ${{ var }}
+    /\{\{\s*([a-zA-Z_][a-zA-Z0-9_.-]*)\s*\}\}/g,        // {{ var }}
+    /\$\{\s*([a-zA-Z_][a-zA-Z0-9_.-]*)\s*\}/g,          // ${ var }
+    /(?<![{$])\{\s*([a-zA-Z_][a-zA-Z0-9_.-]*)\s*\}(?!\})/g, // { var }
+    /\$(?![{\d\s])([a-zA-Z_][a-zA-Z0-9_]*)/g,           // $var (not $100, ${var})
+  ];
 
   const visit = (value: unknown) => {
     if (typeof value === "string") {
-      for (const match of value.matchAll(regex)) {
-        if (match[1]) {
-          variables.add(match[1]);
+      for (const re of regexes) {
+        for (const match of value.matchAll(re)) {
+          if (match[1]) {
+            variables.add(match[1]);
+          }
         }
       }
       return;
