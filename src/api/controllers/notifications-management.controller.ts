@@ -1,7 +1,11 @@
 import type { Request, Response } from 'express';
 import notification_model from '@src/database/models/notification.models.js';
+import notification_template_model from '@src/database/models/notification-template.models.js';
 import outbox_model from '@src/database/models/outbox.models.js';
-import { NOTIFICATION_STATUS, OUTBOX_STATUS, getTopicForChannel } from '@src/types/types.js';
+import { NOTIFICATION_STATUS, OUTBOX_STATUS, getTopicForChannel, type notification } from '@src/types/types.js';
+import { safeValidateEditFailedNotificationRequest, resolveFileAttachmentConfig, createFileAttachmentArraySchema } from '@src/types/schemas.js';
+import { PluginRegistry } from '@src/plugins/index.js';
+import { convert_notification_schema_to_outbox_schema, pruneEmptyValues } from '../utils/utils.js';
 import mongoose from 'mongoose';
 import { apiLogger as logger } from '@src/workers/utils/logger.js';
 
@@ -317,5 +321,270 @@ export const retryNotification = async (req: Request, res: Response): Promise<vo
   } catch (error) {
     logger.error('Error retrying notification:', error);
     res.status(500).json({ error: 'Failed to retry notification' });
+  }
+};
+
+/**
+ * PUT /api/notifications/:id
+ * Edits a failed notification and re-queues it for processing.
+ * Only failed notifications can be edited. Only permitted fields are editable.
+ * Server resets retry_count to 0 and atomically inserts into outbox.
+ */
+export const editAndRequeueNotification = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({ error: 'Invalid ID' });
+      return;
+    }
+
+    const notification = await notification_model.findById(id);
+
+    if (!notification) {
+      res.status(404).json({ error: 'Notification not found' });
+      return;
+    }
+
+    if (notification.status !== NOTIFICATION_STATUS.failed) {
+      res.status(400).json({ error: 'Only failed notifications can be edited and requeued' });
+      return;
+    }
+
+    const validationResult = safeValidateEditFailedNotificationRequest(req.body);
+    if (!validationResult.success) {
+      const validationErrors = validationResult.error.issues.map((i) => ({
+        path: i.path.join('.'),
+        message: i.message,
+      }));
+      res.status(400).json({
+        error: validationErrors.map((e) => e.message).join('\n'),
+        errors: validationErrors,
+      });
+      return;
+    }
+
+    const {
+      provider,
+      template_id,
+      recipient,
+      content,
+      variables,
+      webhook_url,
+      scheduled_at,
+    } = validationResult.data;
+
+    // 1. Resolve Provider
+    let effectiveProviderId: string | undefined;
+    let effectiveProvider;
+
+    if (typeof provider === 'string' && provider.trim().length > 0) {
+      const trimmedProvider = provider.trim();
+      if (!PluginRegistry.has(trimmedProvider)) {
+        res.status(400).json({ error: `Provider '${trimmedProvider}' is not a valid provider` });
+        return;
+      }
+      const regProvider = PluginRegistry.get(trimmedProvider);
+      if (!regProvider || regProvider.manifest.channel !== notification.channel) {
+        res.status(400).json({
+          error: `Provider '${trimmedProvider}' is not a valid provider for channel '${notification.channel}'`
+        });
+        return;
+      }
+      effectiveProvider = regProvider;
+      effectiveProviderId = trimmedProvider;
+    } else {
+      // Unset provider / revert to channel default
+      effectiveProviderId = undefined;
+      effectiveProvider = PluginRegistry.getDefaultProvider(notification.channel);
+      if (!effectiveProvider) {
+        res.status(400).json({
+          error: `No default provider available for channel '${notification.channel}'`
+        });
+        return;
+      }
+    }
+
+    // 2. Resolve File Attachment Config for the effective provider
+    const targetProviderId = effectiveProviderId || PluginRegistry.getDefaultProviderId?.(notification.channel);
+    const registered = targetProviderId ? PluginRegistry.getRegistered?.(targetProviderId) : undefined;
+    const baselineAttachment = effectiveProvider.getFileAttachmentConfig?.() ?? effectiveProvider.manifest?.fileAttachment;
+    const effectiveAttachment = resolveFileAttachmentConfig(
+      baselineAttachment,
+      registered?.options as Record<string, unknown> | undefined
+    ) ?? baselineAttachment;
+
+    // 3. Resolve Content & Template
+    let resolvedContent: Record<string, unknown>;
+
+    if (typeof template_id === 'string' && template_id.trim().length > 0) {
+      const trimmedTemplateId = template_id.trim();
+      const template = await notification_template_model.findOne({ template_id: trimmedTemplateId });
+      if (!template) {
+        res.status(400).json({ error: `Template not found for template_id: ${trimmedTemplateId}` });
+        return;
+      }
+
+      if (template.package !== effectiveProvider.manifest.name) {
+        res.status(400).json({
+          error: `Template '${trimmedTemplateId}' is for package '${template.package}', which does not match provider '${effectiveProviderId || 'default'}' (${effectiveProvider.manifest.name}) on channel '${notification.channel}'`
+        });
+        return;
+      }
+
+      // Template content completely replaces the content block
+      resolvedContent = { ...(template.content as Record<string, unknown>) };
+
+      // Preserve/merge any file attachments if present in the edit payload
+      if (content && Array.isArray((content as Record<string, unknown>).attachments)) {
+        const payloadAttachments = (content as Record<string, unknown>).attachments as unknown[];
+        if (payloadAttachments.length > 0) {
+          resolvedContent.attachments = payloadAttachments;
+        } else {
+          delete resolvedContent.attachments;
+        }
+      }
+    } else if (content !== undefined && content !== null && Object.keys(content).length > 0) {
+      resolvedContent = { ...content };
+      if (!Array.isArray(resolvedContent.attachments) || resolvedContent.attachments.length === 0) {
+        delete resolvedContent.attachments;
+      }
+    } else {
+      resolvedContent = { ...(notification.content as Record<string, unknown>) };
+      if (!resolvedContent || Object.keys(resolvedContent).length === 0) {
+        res.status(400).json({ error: 'At least one of content block or template_id must be provided' });
+        return;
+      }
+    }
+
+    resolvedContent = (pruneEmptyValues(resolvedContent) || {}) as Record<string, unknown>;
+
+    // 4. Validate Recipient
+    const rawRecipient = recipient !== undefined ? recipient : (notification.recipient as Record<string, unknown>);
+    const resolvedRecipient = (pruneEmptyValues(rawRecipient) || {}) as Record<string, unknown>;
+    const recipientSchema = effectiveProvider.getRecipientSchema();
+    const recipientValidation = recipientSchema.safeParse(resolvedRecipient);
+    if (!recipientValidation.success) {
+      const recipientIssues = recipientValidation.error.issues.map((i) => i.message).join('; ');
+      res.status(400).json({
+        error: `Recipient validation failed for provider '${effectiveProviderId || 'default'}': ${recipientIssues}`,
+        errors: recipientValidation.error.issues,
+      });
+      return;
+    }
+
+    // 5. Validate Content & File Attachments
+    const rawAttachments = resolvedContent.attachments;
+    if (Array.isArray(rawAttachments) && rawAttachments.length > 0) {
+      if (!effectiveAttachment || effectiveAttachment.enabled === false) {
+        res.status(400).json({
+          error: `File attachments are disabled or not supported for provider '${effectiveProviderId || 'default'}'`
+        });
+        return;
+      }
+
+      const attachmentSchema = createFileAttachmentArraySchema(effectiveAttachment);
+      const attachmentValidation = attachmentSchema.safeParse(rawAttachments);
+      if (!attachmentValidation.success) {
+        const attachmentIssues = attachmentValidation.error.issues.map((i: { message: string }) => i.message).join('; ');
+        res.status(400).json({
+          error: `Attachment validation failed: ${attachmentIssues}`,
+          errors: attachmentValidation.error.issues,
+        });
+        return;
+      }
+    }
+
+    const contentValidation = effectiveProvider.getContentSchema().safeParse(resolvedContent);
+    if (!contentValidation.success) {
+      const contentIssues = contentValidation.error.issues.map((i) => i.message).join('; ');
+      res.status(400).json({
+        error: `Content validation failed for provider '${effectiveProviderId || 'default'}': ${contentIssues}`,
+        errors: contentValidation.error.issues,
+      });
+      return;
+    }
+
+    // 6. Variables, Webhook URL, Scheduled At
+    const resolvedVariables = variables !== undefined ? (variables === null ? undefined : variables) : notification.variables;
+    const resolvedWebhookUrl = webhook_url !== undefined ? webhook_url : notification.webhook_url;
+    const resolvedScheduledAt = scheduled_at !== undefined ? (scheduled_at === null ? undefined : new Date(scheduled_at)) : notification.scheduled_at;
+
+    // 7. Atomic Transaction: Update notification and enqueue in outbox
+    const session = await mongoose.startSession();
+
+    try {
+      let updatedDoc: InstanceType<typeof notification_model> | null = null;
+
+      await session.withTransaction(async () => {
+        const updateFields: Record<string, unknown> = {
+          status: NOTIFICATION_STATUS.pending,
+          error_message: null,
+          retry_count: 0,
+          recipient: resolvedRecipient,
+          content: resolvedContent,
+          webhook_url: resolvedWebhookUrl,
+          updated_at: new Date(),
+        };
+
+        if (effectiveProviderId !== undefined) {
+          updateFields.provider = effectiveProviderId;
+        }
+        if (resolvedVariables !== undefined) {
+          updateFields.variables = resolvedVariables;
+        }
+        if (resolvedScheduledAt !== undefined) {
+          updateFields.scheduled_at = resolvedScheduledAt;
+        }
+
+        const unsetFields: Record<string, 1> = {};
+        if (effectiveProviderId === undefined) {
+          unsetFields.provider = 1;
+        }
+        if (resolvedVariables === undefined) {
+          unsetFields.variables = 1;
+        }
+        if (resolvedScheduledAt === undefined) {
+          unsetFields.scheduled_at = 1;
+        }
+
+        const updateOp: Record<string, unknown> = { $set: updateFields };
+        if (Object.keys(unsetFields).length > 0) {
+          updateOp.$unset = unsetFields;
+        }
+
+        updatedDoc = await notification_model.findByIdAndUpdate(
+          id,
+          updateOp,
+          { session, new: true }
+        );
+
+        if (!updatedDoc) {
+          throw new Error('Notification not found during update');
+        }
+
+        const notificationObj = (typeof (updatedDoc as { toObject?: () => unknown }).toObject === 'function')
+          ? (updatedDoc as { toObject: () => unknown }).toObject()
+          : updatedDoc;
+
+        const outboxEntry = convert_notification_schema_to_outbox_schema(
+          notificationObj as unknown as notification,
+          updatedDoc._id as mongoose.Types.ObjectId
+        );
+
+        await outbox_model.create([outboxEntry], { session });
+      });
+
+      res.json({
+        success: true,
+        message: 'Notification updated and queued for reprocessing',
+        data: updatedDoc
+      });
+    } finally {
+      await session.endSession();
+    }
+  } catch (error) {
+    logger.error('Error editing and requeuing notification:', error);
+    res.status(500).json({ error: 'Failed to edit and requeue notification' });
   }
 };

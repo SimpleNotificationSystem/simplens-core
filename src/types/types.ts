@@ -163,11 +163,14 @@ import {
     storageProviderCreateSchema,
     storageProviderUpdateSchema,
     minioStorageConfigSchema,
+    editFailedNotificationSchema,
 } from "./schemas.js";
 
 // ============================================================================
 // TYPE EXPORTS
 // ============================================================================
+
+export type EditFailedNotificationRequest = z.infer<typeof editFailedNotificationSchema>;
 
 export type delayed_notification_topic = z.infer<typeof delayedNotificationTopicSchema>;
 
@@ -343,7 +346,8 @@ export type FieldType =
     | 'enum'
     | 'array'
     | 'object'
-    | 'attachment';
+    | 'attachment'
+    | 'date';
 
 export interface FieldDefinition {
     name: string;

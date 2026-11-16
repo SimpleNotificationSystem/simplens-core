@@ -4,7 +4,8 @@ import {
   getRecentNotifications,
   getNotificationById,
   deleteNotification,
-  retryNotification
+  retryNotification,
+  editAndRequeueNotification,
 } from '../controllers/notifications-management.controller.js';
 
 const router = Router();
@@ -23,5 +24,8 @@ router.delete('/:id', deleteNotification);
 
 // POST /api/notifications/:id/retry - Retry failed notification
 router.post('/:id/retry', retryNotification);
+
+// PUT /api/notifications/:id - Edit and requeue failed notification
+router.put('/:id', editAndRequeueNotification);
 
 export default router;

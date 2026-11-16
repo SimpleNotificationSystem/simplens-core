@@ -123,7 +123,8 @@ export const convert_notification_request_to_notification_schema = async (
         }
     }
 
-    validateContentSchema(channel, content, provider);
+    const sanitizedContent = (pruneEmptyValues(content) || {}) as Record<string, unknown>;
+    validateContentSchema(channel, sanitizedContent, provider);
 
     const base_notification: notification = {
       request_id: data.request_id,
@@ -131,8 +132,8 @@ export const convert_notification_request_to_notification_schema = async (
       client_name: data.client_name,
       channel: channel,
       provider: provider,
-      recipient: data.recipient,
-      content: content,
+      recipient: (pruneEmptyValues(data.recipient) || {}) as Record<string, unknown>,
+      content: sanitizedContent,
       variables: data.variables,
       webhook_url: data.webhook_url,
       status: NOTIFICATION_STATUS.pending,
@@ -214,7 +215,9 @@ export const convert_batch_notification_schema_to_notification_schema = async (
             }
         }
 
-      validateContentSchema(channel, content, provider);
+      const resolvedContent = content || data.content;
+      const sanitizedContent = (pruneEmptyValues(resolvedContent) || {}) as Record<string, unknown>;
+      validateContentSchema(channel, sanitizedContent, provider);
 
       const notification_obj: notification = {
         request_id: recipient.request_id,
@@ -225,7 +228,7 @@ export const convert_batch_notification_schema_to_notification_schema = async (
         recipient: {
           ...recipient, // Include any channel-specific fields
         },
-        content: content || data.content,
+        content: sanitizedContent,
         variables: recipient.variables,
         webhook_url: data.webhook_url,
         status: NOTIFICATION_STATUS.pending,
@@ -600,6 +603,43 @@ export class ProviderNotFoundError extends Error {
 }
 
 /**
+ * Recursively removes empty strings (""), empty arrays ([]), and empty objects ({})
+ * from an object or array. Preserves booleans (including false), numbers (including 0),
+ * Date instances, and non-empty strings.
+ */
+export function pruneEmptyValues<T = unknown>(val: T): T {
+  if (val === null || val === undefined) {
+    return undefined as unknown as T;
+  }
+  if (typeof val === "string") {
+    return (val.trim() === "" ? undefined : val) as unknown as T;
+  }
+  if (typeof val === "number" || typeof val === "boolean") {
+    return val;
+  }
+  if (val instanceof Date) {
+    return val;
+  }
+  if (Array.isArray(val)) {
+    const cleaned = val
+      .map((item) => pruneEmptyValues(item))
+      .filter((item) => item !== undefined);
+    return (cleaned.length === 0 ? undefined : cleaned) as unknown as T;
+  }
+  if (typeof val === "object") {
+    const res: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
+      const cleaned = pruneEmptyValues(v);
+      if (cleaned !== undefined) {
+        res[k] = cleaned;
+      }
+    }
+    return (Object.keys(res).length === 0 ? undefined : res) as unknown as T;
+  }
+  return val;
+}
+
+/**
  * Validate request content schema with the provider's content schema
  */
 export const validateContentSchema = (
@@ -625,6 +665,8 @@ export const validateContentSchema = (
     provider.manifest?.displayName ||
     "Default Provider";
 
+  const sanitizedContent = (pruneEmptyValues(content) || {}) as Record<string, unknown>;
+
   // Check if file attachments are explicitly disabled for this provider instance
   const targetProviderId = provider_id || PluginRegistry.getDefaultProviderId?.(channel);
   const registered = targetProviderId ? PluginRegistry.getRegistered?.(targetProviderId) : undefined;
@@ -635,7 +677,7 @@ export const validateContentSchema = (
   ) ?? baselineAttachment;
 
   if (effectiveAttachment && effectiveAttachment.enabled === false) {
-    const rawAttachments = content.attachments;
+    const rawAttachments = sanitizedContent.attachments;
     if (Array.isArray(rawAttachments) && rawAttachments.length > 0) {
       const error = new ZodError([
           {
@@ -652,7 +694,7 @@ export const validateContentSchema = (
   }
 
   const providerContentSchema = provider.getContentSchema();
-  const validationResult = providerContentSchema.safeParse(content);
+  const validationResult = providerContentSchema.safeParse(sanitizedContent);
   if (!validationResult.success) {
     throw new InvalidContentSchemaError(
       resolvedProviderId,

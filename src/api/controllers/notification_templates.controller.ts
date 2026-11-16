@@ -15,6 +15,7 @@ import {
 import { PluginRegistry } from "@src/plugins/index.js";
 import { MongoServerError } from "mongodb";
 import mongoose from "mongoose";
+import { pruneEmptyValues } from "@src/api/utils/utils.js";
 
 const normalizeTemplateVariablesInString = (value: string): string => {
   const normalizedDollarBraces = value.replace(
@@ -82,7 +83,8 @@ const validatePackageAndContentSchema = (
 
   const provider = PluginRegistry.get(providerId);
   const providerContentSchema = provider!.getContentSchema();
-  const contentSchemaValidationRes = providerContentSchema.safeParse(content);
+  const sanitizedContent = (pruneEmptyValues(content) || {}) as Record<string, unknown>;
+  const contentSchemaValidationRes = providerContentSchema.safeParse(sanitizedContent);
   if (!contentSchemaValidationRes.success) {
     return {
       success: false,
@@ -141,10 +143,12 @@ export const createTemplate = async (
         ? rawTemplateId
         : new mongoose.Types.ObjectId().toString();
 
+    const sanitizedContent = (pruneEmptyValues(normalizedContent) || {}) as Record<string, unknown>;
+
     await notification_template_model.insertOne({
       ...validationResult.data,
       template_id,
-      content: normalizedContent,
+      content: sanitizedContent,
     });
     logger.success(`Successfully added template to db with template_id: ${template_id}`);
     res.status(201).json({
@@ -234,12 +238,14 @@ export const updateTemplate = async (
       return;
     }
 
+    const sanitizedContent = (pruneEmptyValues(normalizedContent) || {}) as Record<string, unknown>;
+
     await notification_template_model.updateOne(
       { template_id },
       {
         $set: {
           ...validationResult.data,
-          content: normalizedContent,
+          content: sanitizedContent,
         },
       },
     );
