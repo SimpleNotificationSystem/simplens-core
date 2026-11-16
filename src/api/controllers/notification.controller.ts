@@ -9,6 +9,7 @@ import {
   ProviderNotFoundError,
   process_notifications,
   updateApiKeyNotificationUsage,
+  formatZodErrorResponse,
 } from '../utils/utils.js';
 import { notification } from '@src/types/types.js';
 import { apiLogger as logger } from '@src/workers/utils/logger.js';
@@ -28,11 +29,8 @@ export const notification_controller = async (req: Request, res: Response)=>{
             res.status(202).json({ message: 'Notifications are being processed', ...response});
         }
         else{
-            const validationErrors = result.error.issues.map(i => ({ path: i.path.join('.'), message: i.message }));
-            res.status(400).json({
-                message: validationErrors.map(e => e.message).join('\n'),
-                errors: validationErrors,
-            });
+            const formatted = formatZodErrorResponse(result.error);
+            res.status(400).json(formatted);
             return;
         }
     } catch(err) {
@@ -45,9 +43,11 @@ export const notification_controller = async (req: Request, res: Response)=>{
             return;
         }
         if(err instanceof InvalidContentSchemaError){
+            const formatted = formatZodErrorResponse(err.issues);
             res.status(400).json({
+                ...formatted,
+                error: err.message,
                 message: err.message,
-                errors: err.issues,
             });
             return;
         }
@@ -88,12 +88,8 @@ export const batch_notification_controller = async (req: Request, res: Response)
             res.status(202).json({ message: 'Notifications are being processed', ...response});
         }
         else{
-            res.status(400).json({
-                message: result.error.issues.reduce((accumulator, currmsg)=>{
-                    return accumulator + "\n" + currmsg.message;
-                },""),
-                errors: result.error.issues
-            });
+            const formatted = formatZodErrorResponse(result.error);
+            res.status(400).json(formatted);
             return;
         }
     }
@@ -107,9 +103,11 @@ export const batch_notification_controller = async (req: Request, res: Response)
             return;
         }
         if(err instanceof InvalidContentSchemaError){
+            const formatted = formatZodErrorResponse(err.issues);
             res.status(400).json({
+                ...formatted,
+                error: err.message,
                 message: err.message,
-                errors: err.issues,
             });
             return;
         }

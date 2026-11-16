@@ -5,7 +5,7 @@ import outbox_model from '@src/database/models/outbox.models.js';
 import { NOTIFICATION_STATUS, OUTBOX_STATUS, getTopicForChannel, type notification } from '@src/types/types.js';
 import { safeValidateEditFailedNotificationRequest, resolveFileAttachmentConfig, createFileAttachmentArraySchema } from '@src/types/schemas.js';
 import { PluginRegistry } from '@src/plugins/index.js';
-import { convert_notification_schema_to_outbox_schema, pruneEmptyValues } from '../utils/utils.js';
+import { convert_notification_schema_to_outbox_schema, pruneEmptyValues, formatZodErrorResponse } from '../utils/utils.js';
 import mongoose from 'mongoose';
 import { apiLogger as logger } from '@src/workers/utils/logger.js';
 
@@ -353,14 +353,7 @@ export const editAndRequeueNotification = async (req: Request, res: Response): P
 
     const validationResult = safeValidateEditFailedNotificationRequest(req.body);
     if (!validationResult.success) {
-      const validationErrors = validationResult.error.issues.map((i) => ({
-        path: i.path.join('.'),
-        message: i.message,
-      }));
-      res.status(400).json({
-        error: validationErrors.map((e) => e.message).join('\n'),
-        errors: validationErrors,
-      });
+      res.status(400).json(formatZodErrorResponse(validationResult.error));
       return;
     }
 
@@ -465,11 +458,12 @@ export const editAndRequeueNotification = async (req: Request, res: Response): P
     const recipientSchema = effectiveProvider.getRecipientSchema();
     const recipientValidation = recipientSchema.safeParse(resolvedRecipient);
     if (!recipientValidation.success) {
-      const recipientIssues = recipientValidation.error.issues.map((i) => i.message).join('; ');
-      res.status(400).json({
-        error: `Recipient validation failed for provider '${effectiveProviderId || 'default'}': ${recipientIssues}`,
-        errors: recipientValidation.error.issues,
-      });
+      res.status(400).json(
+        formatZodErrorResponse(
+          recipientValidation.error,
+          `Recipient validation failed for provider '${effectiveProviderId || 'default'}'`
+        )
+      );
       return;
     }
 
@@ -486,22 +480,24 @@ export const editAndRequeueNotification = async (req: Request, res: Response): P
       const attachmentSchema = createFileAttachmentArraySchema(effectiveAttachment);
       const attachmentValidation = attachmentSchema.safeParse(rawAttachments);
       if (!attachmentValidation.success) {
-        const attachmentIssues = attachmentValidation.error.issues.map((i: { message: string }) => i.message).join('; ');
-        res.status(400).json({
-          error: `Attachment validation failed: ${attachmentIssues}`,
-          errors: attachmentValidation.error.issues,
-        });
+        res.status(400).json(
+          formatZodErrorResponse(
+            attachmentValidation.error,
+            'Attachment validation failed'
+          )
+        );
         return;
       }
     }
 
     const contentValidation = effectiveProvider.getContentSchema().safeParse(resolvedContent);
     if (!contentValidation.success) {
-      const contentIssues = contentValidation.error.issues.map((i) => i.message).join('; ');
-      res.status(400).json({
-        error: `Content validation failed for provider '${effectiveProviderId || 'default'}': ${contentIssues}`,
-        errors: contentValidation.error.issues,
-      });
+      res.status(400).json(
+        formatZodErrorResponse(
+          contentValidation.error,
+          `Content validation failed for provider '${effectiveProviderId || 'default'}'`
+        )
+      );
       return;
     }
 

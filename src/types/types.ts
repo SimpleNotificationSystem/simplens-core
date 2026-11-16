@@ -821,3 +821,14 @@ export interface DecryptedRegistryEntry {
   token: string;
   updated_at: string;
 }
+
+export interface ValidationErrorDetail {
+  path: string;
+  message: string;
+}
+
+export interface UniformValidationErrorResponse {
+  error: string;
+  message: string;
+  errors: ValidationErrorDetail[];
+}

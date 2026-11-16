@@ -15,17 +15,27 @@ import {
 import { PluginRegistry } from "@src/plugins/index.js";
 import { MongoServerError } from "mongodb";
 import mongoose from "mongoose";
-import { pruneEmptyValues } from "@src/api/utils/utils.js";
+import { pruneEmptyValues, formatZodErrorResponse } from "@src/api/utils/utils.js";
+import type { ValidationErrorDetail } from "@src/types/types.js";
 
 const normalizeTemplateVariablesInString = (value: string): string => {
-  const normalizedDollarBraces = value.replace(
+  let res = value.replace(
+    /\$\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g,
+    "{{$1}}",
+  );
+  res = res.replace(
     /\$\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}/g,
     "{{$1}}",
   );
-  return normalizedDollarBraces.replace(
-    /(?<!\{)\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}(?!\})/g,
+  res = res.replace(
+    /(?<![{$])\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}(?!\})/g,
     "{{$1}}",
   );
+  res = res.replace(
+    /\$(?![{\d\s])([a-zA-Z_][a-zA-Z0-9_]*)/g,
+    "{{$1}}",
+  );
+  return res;
 };
 
 const normalizeTemplateContentVariables = (value: unknown): unknown => {
@@ -60,6 +70,7 @@ const validatePackageAndContentSchema = (
       statusCode: number;
       message: string;
       error?: unknown;
+      errors?: ValidationErrorDetail[];
     } => {
   const metadata = PluginRegistry.getPluginMetadata();
   let isavailable: boolean = false;
@@ -86,11 +97,14 @@ const validatePackageAndContentSchema = (
   const sanitizedContent = (pruneEmptyValues(content) || {}) as Record<string, unknown>;
   const contentSchemaValidationRes = providerContentSchema.safeParse(sanitizedContent);
   if (!contentSchemaValidationRes.success) {
+    const formatted = formatZodErrorResponse(
+      contentSchemaValidationRes.error,
+      `Invalid content schema for the package: ${packageName}`
+    );
     return {
       success: false,
       statusCode: 400,
-      message: `Invalid content schema for the package: ${packageName}`,
-      error: contentSchemaValidationRes.error,
+      ...formatted,
     };
   }
 
@@ -109,16 +123,9 @@ export const createTemplate = async (
     const validationResult =
       safeValidateNotificationTemplateRequestSchema(reqBody);
     if (!validationResult.success) {
-      const validationErrors = validationResult.error.issues.map((i) => ({
-        path: i.path.join("."),
-        message: i.message,
-      }));
-      const errmsg = validationErrors.map((e) => e.message).join("\n");
-      res.status(400).json({
-        message: errmsg,
-        errors: validationErrors,
-      });
-      logger.error(`Error in creating template request validation :${errmsg}`);
+      const formatted = formatZodErrorResponse(validationResult.error);
+      res.status(400).json(formatted);
+      logger.error(`Error in creating template request validation: ${formatted.message}`);
       return;
     }
     const normalizedContent = normalizeTemplateContentVariables(
@@ -130,8 +137,9 @@ export const createTemplate = async (
     );
     if (!packageValidation.success) {
       res.status(packageValidation.statusCode).json({
+        error: packageValidation.error || packageValidation.message,
         message: packageValidation.message,
-        error: packageValidation.error,
+        errors: packageValidation.errors,
       });
       logger.error(packageValidation.message);
       return;
@@ -198,16 +206,9 @@ export const updateTemplate = async (
     const validationResult =
       safeValidateNotificationTemplateUpdateRequestSchema(req.body);
     if (!validationResult.success) {
-      const validationErrors = validationResult.error.issues.map((i) => ({
-        path: i.path.join("."),
-        message: i.message,
-      }));
-      const errmsg = validationErrors.map((e) => e.message).join("\n");
-      res.status(400).json({
-        message: errmsg,
-        errors: validationErrors,
-      });
-      logger.error(`Error in updating template request validation :${errmsg}`);
+      const formatted = formatZodErrorResponse(validationResult.error);
+      res.status(400).json(formatted);
+      logger.error(`Error in updating template request validation: ${formatted.message}`);
       return;
     }
 
@@ -231,8 +232,9 @@ export const updateTemplate = async (
     );
     if (!packageValidation.success) {
       res.status(packageValidation.statusCode).json({
+        error: packageValidation.error || packageValidation.message,
         message: packageValidation.message,
-        error: packageValidation.error,
+        errors: packageValidation.errors,
       });
       logger.error(packageValidation.message);
       return;

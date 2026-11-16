@@ -1408,4 +1408,79 @@ describe("API Utility Functions", () => {
       );
     });
   });
+
+  describe("formatZodErrorResponse", () => {
+    it("should format ZodError into uniform response with bulleted summary and structured errors", async () => {
+      const { formatZodErrorResponse } = await import("../../../src/api/utils/utils.js");
+      const { z } = await import("zod");
+
+      const schema = z.object({
+        email: z.string().email(),
+        age: z.number().min(18),
+      });
+
+      const parseResult = schema.safeParse({ email: "invalid", age: 10 });
+      expect(parseResult.success).toBe(false);
+
+      if (!parseResult.success) {
+        const response = formatZodErrorResponse(parseResult.error);
+        expect(response.error).toContain("Validation failed:\n");
+        expect(response.error).toContain("• email:");
+        expect(response.error).toContain("• age:");
+        expect(response.message).toBe(response.error);
+        expect(response.errors).toEqual([
+          { path: "email", message: expect.any(String) },
+          { path: "age", message: expect.any(String) },
+        ]);
+      }
+    });
+
+    it("should support custom prefix", async () => {
+      const { formatZodErrorResponse } = await import("../../../src/api/utils/utils.js");
+      const { z } = await import("zod");
+
+      const schema = z.object({
+        phone: z.string().min(5),
+      });
+
+      const parseResult = schema.safeParse({ phone: "" });
+      if (!parseResult.success) {
+        const response = formatZodErrorResponse(parseResult.error, "Recipient validation failed for provider 'twilio'");
+        expect(response.error).toContain("Recipient validation failed for provider 'twilio':\n• phone:");
+        expect(response.message).toBe(response.error);
+        expect(response.errors).toHaveLength(1);
+      }
+    });
+  });
+
+  describe("pruneEmptyValues", () => {
+    it("should strip empty strings, empty arrays, and empty objects while keeping numbers and booleans", async () => {
+      const { pruneEmptyValues } = await import("../../../src/api/utils/utils.js");
+
+      const input = {
+        name: "Alice",
+        emptyStr: "",
+        trimmedEmpty: "   ",
+        zero: 0,
+        boolFalse: false,
+        emptyArr: [],
+        nestedEmpty: {
+          innerEmpty: "",
+        },
+        nestedValid: {
+          key: "val",
+        },
+      };
+
+      const result = pruneEmptyValues(input);
+      expect(result).toEqual({
+        name: "Alice",
+        zero: 0,
+        boolFalse: false,
+        nestedValid: {
+          key: "val",
+        },
+      });
+    });
+  });
 });

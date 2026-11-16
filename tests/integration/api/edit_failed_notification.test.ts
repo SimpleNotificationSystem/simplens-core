@@ -305,6 +305,9 @@ describe('PUT /api/notifications/:id (Edit and Requeue Failed Notification)', ()
 
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('Recipient validation failed');
+    expect(res.body.message).toContain('Recipient validation failed');
+    expect(Array.isArray(res.body.errors)).toBe(true);
+    expect(res.body.errors[0]).toEqual(expect.objectContaining({ path: 'email', message: expect.any(String) }));
   });
 
   it('should return 400 if content fails provider schema', async () => {
@@ -319,6 +322,9 @@ describe('PUT /api/notifications/:id (Edit and Requeue Failed Notification)', ()
 
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('Content validation failed');
+    expect(res.body.message).toContain('Content validation failed');
+    expect(Array.isArray(res.body.errors)).toBe(true);
+    expect(res.body.errors.length).toBeGreaterThan(0);
   });
 
   it('should return 400 if attachments are added to a provider that has file attachments disabled', async () => {

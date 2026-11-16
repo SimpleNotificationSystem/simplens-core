@@ -15,6 +15,8 @@ import {
   delayed_notification_topic,
   SimpleNSProvider,
   ApiKeyDoc,
+  ValidationErrorDetail,
+  UniformValidationErrorResponse,
 } from "@src/types/types.js";
 import { NOTIFICATION_STATUS, OUTBOX_STATUS } from "@src/types/types.js";
 import mongoose from "mongoose";
@@ -601,6 +603,42 @@ export class ProviderNotFoundError extends Error {
     this.name = "ProviderNotFoundError";
   }
 }
+
+/**
+ * Formats Zod errors or validation issue lists into a uniform API error response.
+ * Guarantees both `error` and `message` contain the multi-line human-readable summary,
+ * and `errors` contains structured `{ path, message }` items.
+ */
+export const formatZodErrorResponse = (
+  error: ZodError | Array<{ path?: string | (string | number)[]; message: string }>,
+  customPrefix?: string,
+): UniformValidationErrorResponse => {
+  let issues: ValidationErrorDetail[] = [];
+  if (error && typeof error === "object" && "issues" in error && Array.isArray((error as ZodError).issues)) {
+    issues = (error as ZodError).issues.map((i) => ({
+      path: i.path && i.path.length > 0 ? i.path.join(".") : "",
+      message: i.message,
+    }));
+  } else if (Array.isArray(error)) {
+    issues = error.map((i) => ({
+      path: Array.isArray(i.path) ? i.path.join(".") : String(i.path || ""),
+      message: i.message,
+    }));
+  }
+
+  const bulletList = issues
+    .map((i) => (i.path ? `• ${i.path}: ${i.message}` : `• ${i.message}`))
+    .join("\n");
+
+  const prefix = customPrefix ? `${customPrefix}:\n` : "Validation failed:\n";
+  const summary = bulletList ? `${prefix}${bulletList}` : (customPrefix || "Validation failed");
+
+  return {
+    error: summary,
+    message: summary,
+    errors: issues,
+  };
+};
 
 /**
  * Recursively removes empty strings (""), empty arrays ([]), and empty objects ({})

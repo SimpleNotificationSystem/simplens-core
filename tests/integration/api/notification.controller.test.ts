@@ -130,6 +130,29 @@ vi.mock("../../../src/api/utils/utils.js", () => {
     InvalidContentSchemaError,
     ProviderNotFoundError,
     updateApiKeyNotificationUsage: vi.fn(),
+    formatZodErrorResponse: (error: any, customPrefix?: string) => {
+      const issues = error?.issues
+        ? error.issues.map((i: any) => ({
+            path: i.path && i.path.length > 0 ? i.path.join('.') : '',
+            message: i.message,
+          }))
+        : Array.isArray(error)
+          ? error.map((i: any) => ({
+              path: Array.isArray(i.path) ? i.path.join('.') : String(i.path || ''),
+              message: i.message,
+            }))
+          : [];
+      const bulletList = issues
+        .map((i: any) => (i.path ? `• ${i.path}: ${i.message}` : `• ${i.message}`))
+        .join('\n');
+      const prefix = customPrefix ? `${customPrefix}:\n` : 'Validation failed:\n';
+      const summary = bulletList ? `${prefix}${bulletList}` : (customPrefix || 'Validation failed');
+      return {
+        error: summary,
+        message: summary,
+        errors: issues,
+      };
+    },
   };
 });
 
