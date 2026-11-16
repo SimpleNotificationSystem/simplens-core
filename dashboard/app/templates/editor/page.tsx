@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { ArrowLeft, Code, Copy, Eye, Maximize2, Save, X } from "lucide-react";
-import { withBasePath } from "@/lib/utils";
+import { withBasePath, pruneEmptyValues } from "@/lib/utils";
 import { HtmlPreview } from "@/components/send/html-preview";
 import type {
   FieldDefinition,
@@ -299,7 +299,7 @@ function TemplateEditorContent() {
     setIsSaving(true);
 
     try {
-      const cleanedContent = { ...form.content };
+      const cleanedContent = (pruneEmptyValues(form.content) || {}) as Record<string, unknown>;
       delete cleanedContent.attachments;
       delete cleanedContent.fileAttachment;
       delete cleanedContent.fileAttachments;

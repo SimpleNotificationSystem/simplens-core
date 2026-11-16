@@ -18,7 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { pluginService, templateService, notificationService, storageService } from "@/lib/api-client";
-import { withBasePath, showErrorToast } from "@/lib/utils";
+import { withBasePath, showErrorToast, pruneEmptyValues } from "@/lib/utils";
 
 // Generate a UUIDv4
 function generateUUID(): string {
@@ -331,7 +331,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                 request_id: requestId,
                 client_id: clientId,
                 channel: selectedChannels,
-                recipient: { ...recipientData },
+                recipient: (pruneEmptyValues(recipientData) || {}) as Record<string, unknown>,
                 webhook_url: typeof window !== "undefined"
                     ? `${window.location.origin}${withBasePath("/api/webhook")}`
                     : "http://localhost:3000/api/webhook",
@@ -380,7 +380,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
             selectedChannels.forEach((channel) => {
                 const isTemplate = (contentModeByChannel[channel] || "content") === "template";
                 if (!isTemplate) {
-                    payload.content[channel] = contentData[channel] || {};
+                    payload.content[channel] = (pruneEmptyValues(contentData[channel]) || {}) as Record<string, unknown>;
                 } else if (contentData[channel]?.attachments?.length) {
                     payload.content[channel] = {
                         attachments: contentData[channel].attachments,

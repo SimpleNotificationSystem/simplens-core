@@ -5,6 +5,18 @@ import DOMPurify from "dompurify";
 import { FieldDefinition } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { DateTimePicker } from "@/components/ui/datetime-picker";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -13,8 +25,11 @@ import {
     ExternalLink,
     Eye,
     Code,
+    CurlyBraces,
     Download,
     Paperclip,
+    Plus,
+    X,
 } from "lucide-react";
 import { formatBytes, withBasePath, cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -440,13 +455,81 @@ export interface StructuredDataViewerProps {
     isNested?: boolean;
     depth?: number;
     allowRawToggle?: boolean;
+    editable?: boolean;
+    onChange?: (updated: unknown) => void;
+    excludeKeys?: string[];
+    allowAddField?: boolean;
+}
+
+function EditablePrimitiveArray({
+    items,
+    onChange,
+}: {
+    items: unknown[];
+    onChange: (items: unknown[]) => void;
+}) {
+    const [newItemText, setNewItemText] = useState("");
+
+    const addItem = () => {
+        if (!newItemText.trim()) return;
+        onChange([...items, newItemText.trim()]);
+        setNewItemText("");
+    };
+
+    const removeItem = (idx: number) => {
+        onChange(items.filter((_, i) => i !== idx));
+    };
+
+    return (
+        <div className="space-y-2">
+            {items.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                    {items.map((it, idx) => (
+                        <Badge key={idx} variant="secondary" className="flex items-center gap-1 text-xs py-0.5">
+                            <span>{String(it)}</span>
+                            <button
+                                type="button"
+                                onClick={() => removeItem(idx)}
+                                className="rounded-full hover:bg-muted p-0.5"
+                            >
+                                <X className="h-3 w-3" />
+                            </button>
+                        </Badge>
+                    ))}
+                </div>
+            )}
+            <div className="flex gap-2">
+                <Input
+                    className="h-8 text-xs flex-1"
+                    placeholder="Add item..."
+                    value={newItemText}
+                    onChange={(e) => setNewItemText(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                            e.preventDefault();
+                            addItem();
+                        }
+                    }}
+                />
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={addItem}
+                    disabled={!newItemText.trim()}
+                >
+                    <Plus className="h-3 w-3 mr-1" /> Add
+                </Button>
+            </div>
+        </div>
+    );
 }
 
 /**
  * Main StructuredDataViewer Component:
  * Generalized, schema-aware, pure vertical renderer for complex JSON structures.
- * Renders embedded objects and nested objects with vertical lines (matching dynamic-field.tsx)
- * and formats sanitized HTML, arrays, and scalars vertically.
+ * Supports both read-only viewing and live editing using Shadcn UI components.
  */
 export function StructuredDataViewer({
     data,
@@ -455,11 +538,102 @@ export function StructuredDataViewer({
     isNested = false,
     depth = 0,
     allowRawToggle = true,
+    editable = false,
+    onChange,
+    excludeKeys = [],
+    allowAddField = false,
 }: StructuredDataViewerProps) {
     const [viewMode, setViewMode] = useState<"formatted" | "raw">("formatted");
+    const [customRawText, setCustomRawText] = useState<string | null>(null);
+    const [jsonError, setJsonError] = useState<string | null>(null);
+
+    const dataObj = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+
+    // Filter out excludeKeys for display if any
+    const displayData = excludeKeys && excludeKeys.length > 0
+        ? Object.fromEntries(Object.entries(dataObj).filter(([k]) => !excludeKeys.includes(k)))
+        : dataObj;
+
+    const rawText = customRawText !== null ? customRawText : JSON.stringify(displayData ?? {}, null, 2);
+
+    // New field creation state
+    const [newKey, setNewKey] = useState("");
+    const [newType, setNewType] = useState<"string" | "number" | "boolean" | "object">("string");
+    const [showAddField, setShowAddField] = useState(false);
+
+    const handleRawChange = (text: string) => {
+        setCustomRawText(text);
+        try {
+            const parsed = JSON.parse(text);
+            setJsonError(null);
+            if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+                let merged = { ...(parsed as Record<string, unknown>) };
+                if (excludeKeys && excludeKeys.length > 0 && data && typeof data === "object") {
+                    const orig = data as Record<string, unknown>;
+                    for (const k of excludeKeys) {
+                        if (k in orig) {
+                            merged = { ...merged, [k]: orig[k] };
+                        }
+                    }
+                }
+                onChange?.(merged);
+            } else {
+                onChange?.(parsed);
+            }
+        } catch (err) {
+            setJsonError((err as Error).message);
+        }
+    };
+
+    const handleSwitchToFormatted = () => {
+        setCustomRawText(null);
+        setJsonError(null);
+        setViewMode("formatted");
+    };
+
+    const handleSwitchToRaw = () => {
+        setCustomRawText(JSON.stringify(displayData ?? {}, null, 2));
+        setJsonError(null);
+        setViewMode("raw");
+    };
+
+    const handleFieldChange = (key: string, value: unknown) => {
+        if (!data || typeof data !== "object") return;
+        const updated = { ...(data as Record<string, unknown>), [key]: value };
+        onChange?.(updated);
+    };
+
+    const handleAddNewField = () => {
+        const trimmedKey = newKey.trim();
+        if (!trimmedKey || !data || typeof data !== "object") return;
+
+        let defaultValue: unknown = "";
+        if (newType === "number") defaultValue = 0;
+        if (newType === "boolean") defaultValue = false;
+        if (newType === "object") defaultValue = {};
+
+        const updated = { ...(data as Record<string, unknown>), [trimmedKey]: defaultValue };
+        onChange?.(updated);
+        setNewKey("");
+        setShowAddField(false);
+    };
 
     // Guard: null or primitive non-object at root
     if (data === null || data === undefined) {
+        if (editable) {
+            return (
+                <div className="py-4 text-center text-sm text-muted-foreground w-full">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onChange?.({})}
+                    >
+                        <Plus className="h-3 w-3 mr-1" /> Initialize Object
+                    </Button>
+                </div>
+            );
+        }
         return (
             <div className="py-6 text-center text-sm text-muted-foreground italic w-full">
                 No data available
@@ -476,10 +650,16 @@ export function StructuredDataViewer({
 
     // If data is an array at root
     if (Array.isArray(data)) {
+        if (editable) {
+            return (
+                <EditablePrimitiveArray
+                    items={data}
+                    onChange={(newItems) => onChange?.(newItems)}
+                />
+            );
+        }
         return <ArrayValueView name="Items" items={data} />;
     }
-
-    const dataObj = data as Record<string, unknown>;
 
     // Calculate ordered fields: Schema fields first, followed by remaining keys in data
     const schemaMap = new Map<string, FieldDefinition>();
@@ -489,24 +669,39 @@ export function StructuredDataViewer({
         }
     }
 
+    const isExcluded = (key: string, val?: unknown): boolean => {
+        if (excludeKeys && excludeKeys.includes(key)) return true;
+        if (editable) {
+            const def = schemaMap.get(key);
+            if (key === "attachments" || def?.type === "attachment" || isAttachmentArray(val)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     const orderedKeys: string[] = [];
     if (schema) {
         for (const f of schema) {
-            if (f.name in dataObj) {
+            if (isExcluded(f.name, dataObj[f.name])) continue;
+            if (f.name in dataObj || editable) {
                 orderedKeys.push(f.name);
             }
         }
     }
     for (const key of Object.keys(dataObj)) {
+        if (isExcluded(key, dataObj[key])) continue;
         if (!orderedKeys.includes(key)) {
             orderedKeys.push(key);
         }
     }
 
-    const activeKeys = orderedKeys.filter((key) => {
-        const val = dataObj[key];
-        return val !== undefined && val !== null && val !== "";
-    });
+    const activeKeys = editable
+        ? orderedKeys
+        : orderedKeys.filter((key) => {
+            const val = dataObj[key];
+            return val !== undefined && val !== null && val !== "";
+        });
 
     return (
         <div className={cn("space-y-4 w-full max-w-full min-w-0", className)}>
@@ -518,22 +713,23 @@ export function StructuredDataViewer({
                     </span>
                     <div className="flex items-center gap-1.5">
                         <Button
+                            type="button"
                             variant={viewMode === "formatted" ? "default" : "ghost"}
                             size="sm"
                             className="h-7 text-xs px-2.5"
-                            onClick={() => setViewMode("formatted")}
+                            onClick={handleSwitchToFormatted}
                         >
                             <Eye className="h-3 w-3 mr-1" />
                             Formatted
                         </Button>
                         <Button
+                            type="button"
                             variant={viewMode === "raw" ? "default" : "ghost"}
                             size="sm"
                             className="h-7 text-xs px-2.5"
-                            onClick={() => setViewMode("raw")}
+                            onClick={handleSwitchToRaw}
                         >
-                            <Code className="h-3 w-3 mr-1" />
-                            Raw JSON
+                          <CurlyBraces/> Raw JSON
                         </Button>
                     </div>
                 </div>
@@ -541,22 +737,173 @@ export function StructuredDataViewer({
 
             {/* Raw JSON View */}
             {viewMode === "raw" ? (
-                <div className="relative w-full max-w-full">
-                    <div className="absolute right-3 top-3">
-                        <CopyButton text={JSON.stringify(dataObj, null, 2)} label="JSON" />
-                    </div>
-                    <pre className="p-4 bg-muted rounded-lg text-xs font-mono overflow-auto max-h-[500px] border w-full whitespace-pre-wrap break-words break-all [overflow-wrap:anywhere]">
-                        {JSON.stringify(dataObj, null, 2)}
-                    </pre>
+                <div className="relative w-full max-w-full space-y-1">
+                    {!editable && (
+                        <div className="absolute right-3 top-3 z-10">
+                            <CopyButton text={JSON.stringify(dataObj, null, 2)} label="JSON" />
+                        </div>
+                    )}
+                    {editable ? (
+                        <>
+                            <Textarea
+                                value={rawText}
+                                onChange={(e) => handleRawChange(e.target.value)}
+                                rows={10}
+                                className="font-mono text-xs bg-muted/40 w-full min-h-[220px]"
+                                placeholder="Enter valid JSON..."
+                            />
+                            {jsonError && (
+                                <p className="text-xs text-red-500 font-mono">
+                                    Invalid JSON: {jsonError}
+                                </p>
+                            )}
+                        </>
+                    ) : (
+                        <pre className="p-4 bg-muted rounded-lg text-xs font-mono overflow-auto max-h-[500px] border w-full whitespace-pre-wrap break-words break-all [overflow-wrap:anywhere]">
+                            {JSON.stringify(dataObj, null, 2)}
+                        </pre>
+                    )}
                 </div>
             ) : (
-                /* Pure Vertical Structured View */
+                /* Formatted View (Editable or Read-only) */
                 <div className="space-y-4 w-full max-w-full">
                     {activeKeys.map((key, index) => {
                         const val = dataObj[key];
                         const fieldDef = schemaMap.get(key);
                         const label = formatKeyLabel(key);
 
+                        // Editable Rendering Mode
+                        if (editable) {
+                            // Check if this is an object field
+                            const isObjectField = fieldDef?.type === "object" ||
+                                (typeof val === "object" && val !== null && !Array.isArray(val));
+
+                            // Check if this is an array field
+                            const isArrayField = fieldDef?.type === "array" || Array.isArray(val);
+
+                            return (
+                                <div key={key} className="space-y-1.5 w-full max-w-full">
+                                    <div className="flex items-center gap-1.5">
+                                        <Label className="text-xs font-medium">
+                                            {label}
+                                            {fieldDef?.required && <span className="text-red-500 ml-0.5">*</span>}
+                                        </Label>
+                                        {fieldDef?.description && (
+                                            <span className="text-[11px] text-muted-foreground">({fieldDef.description})</span>
+                                        )}
+                                    </div>
+
+                                    {/* Boolean input */}
+                                    {(fieldDef?.type === "boolean" || typeof val === "boolean") && (
+                                        <div className="flex items-center gap-2 pt-0.5">
+                                            <Checkbox
+                                                id={`cb-${key}-${depth}`}
+                                                checked={Boolean(val)}
+                                                onCheckedChange={(checked) => handleFieldChange(key, Boolean(checked))}
+                                            />
+                                            <Label htmlFor={`cb-${key}-${depth}`} className="text-xs cursor-pointer">
+                                                {Boolean(val) ? "True" : "False"}
+                                            </Label>
+                                        </div>
+                                    )}
+
+                                    {/* Enum select */}
+                                    {fieldDef?.type === "enum" && fieldDef.enumValues && fieldDef.enumValues.length > 0 && (
+                                        <Select
+                                            value={val ? String(val) : ""}
+                                            onValueChange={(newVal) => handleFieldChange(key, newVal)}
+                                        >
+                                            <SelectTrigger className="h-8 text-xs">
+                                                <SelectValue placeholder={`Select ${label}`} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {fieldDef.enumValues.map((opt) => (
+                                                    <SelectItem key={opt} value={opt} className="text-xs">
+                                                        {opt}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    )}
+
+                                    {/* Number input */}
+                                    {(fieldDef?.type === "number" || (typeof val === "number" && fieldDef?.type !== "enum")) && (
+                                        <Input
+                                            type="number"
+                                            className="h-8 text-xs"
+                                            value={val !== undefined && val !== null ? String(val) : ""}
+                                            onChange={(e) =>
+                                                handleFieldChange(
+                                                    key,
+                                                    e.target.value === "" ? undefined : Number(e.target.value)
+                                                )
+                                            }
+                                        />
+                                    )}
+
+                                    {/* Date input */}
+                                    {fieldDef?.type === "date" && (
+                                        <DateTimePicker
+                                            value={val ? new Date(val as string) : undefined}
+                                            onChange={(date) => handleFieldChange(key, date ? date.toISOString() : undefined)}
+                                        />
+                                    )}
+
+                                    {/* Nested Object */}
+                                    {isObjectField && (
+                                        <div className="rounded-lg border bg-muted/10 p-3 w-full">
+                                            <div className="ml-1 pl-3 space-y-3 border-l-2 border-primary/30 w-full">
+                                                <StructuredDataViewer
+                                                    data={val ?? {}}
+                                                    schema={fieldDef?.fields}
+                                                    isNested
+                                                    depth={depth + 1}
+                                                    editable
+                                                    onChange={(newNested) => handleFieldChange(key, newNested)}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Array of primitives */}
+                                    {isArrayField && !isObjectField && (
+                                        <EditablePrimitiveArray
+                                            items={Array.isArray(val) ? val : []}
+                                            onChange={(newItems) => handleFieldChange(key, newItems)}
+                                        />
+                                    )}
+
+                                    {/* Default String input (text/textarea) */}
+                                    {!isObjectField &&
+                                        !isArrayField &&
+                                        fieldDef?.type !== "boolean" &&
+                                        fieldDef?.type !== "enum" &&
+                                        fieldDef?.type !== "number" &&
+                                        fieldDef?.type !== "date" &&
+                                        typeof val !== "boolean" &&
+                                        typeof val !== "number" && (
+                                            isHtmlContent(val) || String(val ?? "").includes("\n") || String(val ?? "").length > 80 ? (
+                                                <Textarea
+                                                    rows={3}
+                                                    className="text-xs"
+                                                    value={val !== undefined && val !== null ? String(val) : ""}
+                                                    onChange={(e) => handleFieldChange(key, e.target.value)}
+                                                />
+                                            ) : (
+                                                <Input
+                                                    className="h-8 text-xs"
+                                                    value={val !== undefined && val !== null ? String(val) : ""}
+                                                    onChange={(e) => handleFieldChange(key, e.target.value)}
+                                                />
+                                            )
+                                        )}
+
+                                    {index < activeKeys.length - 1 && <Separator className="mt-3" />}
+                                </div>
+                            );
+                        }
+
+                        // Read-Only Rendering Mode (Original Behavior)
                         // 1. HTML Content
                         if (isHtmlContent(val)) {
                             return (
@@ -642,7 +989,68 @@ export function StructuredDataViewer({
                         );
                     })}
 
-                    {activeKeys.length === 0 && (
+                    {/* Add Field section in editable mode */}
+                    {editable && allowAddField && (
+                        <div className="pt-2">
+                            {showAddField ? (
+                                <div className="flex items-center gap-2 flex-wrap p-2.5 rounded-md border bg-muted/20">
+                                    <Input
+                                        className="h-8 text-xs w-36"
+                                        placeholder="Field name"
+                                        value={newKey}
+                                        onChange={(e) => setNewKey(e.target.value)}
+                                    />
+                                    <Select
+                                        value={newType}
+                                        onValueChange={(val) => setNewType(val as "string" | "number" | "boolean" | "object")}
+                                    >
+                                        <SelectTrigger className="h-8 text-xs w-28">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="string" className="text-xs">String</SelectItem>
+                                            <SelectItem value="number" className="text-xs">Number</SelectItem>
+                                            <SelectItem value="boolean" className="text-xs">Boolean</SelectItem>
+                                            <SelectItem value="object" className="text-xs">Object</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        className="h-8 text-xs"
+                                        onClick={handleAddNewField}
+                                        disabled={!newKey.trim()}
+                                    >
+                                        Add
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 text-xs"
+                                        onClick={() => {
+                                            setShowAddField(false);
+                                            setNewKey("");
+                                        }}
+                                    >
+                                        Cancel
+                                    </Button>
+                                </div>
+                            ) : (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-xs"
+                                    onClick={() => setShowAddField(true)}
+                                >
+                                    <Plus className="h-3.5 w-3.5 mr-1" /> Add Field
+                                </Button>
+                            )}
+                        </div>
+                    )}
+
+                    {!editable && activeKeys.length === 0 && (
                         <div className="py-4 text-center text-sm text-muted-foreground italic w-full">
                             Empty payload
                         </div>

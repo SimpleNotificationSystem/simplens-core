@@ -6,6 +6,7 @@ import axios, { AxiosError } from 'axios';
 import { getBasePath } from './utils';
 import {
   Notification,
+  EditNotificationPayload,
   DashboardStats,
   DashboardTrendsResponse,
   PaginatedResponse,
@@ -116,6 +117,8 @@ export const notificationService = {
     apiClient.get(`/api/notifications/${id}`),
   retry: (id: string): Promise<{ success: boolean; message: string }> => 
     apiClient.post(`/api/notifications/${id}/retry`),
+  updateAndRequeue: (id: string, payload: EditNotificationPayload): Promise<{ success: boolean; message: string; data: Notification }> =>
+    apiClient.put(`/api/notifications/${id}`, payload),
   send: (payload: Record<string, unknown>): Promise<unknown> => 
     apiClient.post('/api/notification', payload),
   sendBatch: (payload: Record<string, unknown>): Promise<unknown> => 

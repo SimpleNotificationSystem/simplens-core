@@ -18,7 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { pluginService, templateService, notificationService, storageService } from "@/lib/api-client";
-import { withBasePath, showErrorToast } from "@/lib/utils";
+import { withBasePath, showErrorToast, pruneEmptyValues } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getMissingRequiredCsvFields, importCsvRecipients as createCsvRecipients, mapCsvHeaders, parseCsv, flattenRecipientFieldsForCsv } from "@/lib/csv-import";
 
@@ -449,7 +449,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
             selectedChannels.forEach((channel) => {
                 const isTemplate = (contentModeByChannel[channel] || "content") === "template";
                 if (!isTemplate) {
-                    payload.content[channel] = contentData[channel] || {};
+                    payload.content[channel] = (pruneEmptyValues(contentData[channel]) || {}) as Record<string, unknown>;
                 } else if (contentData[channel]?.attachments?.length) {
                     payload.content[channel] = {
                         attachments: contentData[channel].attachments,

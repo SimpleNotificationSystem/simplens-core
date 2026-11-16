@@ -53,6 +53,16 @@ export interface Notification {
   updated_at: Date;
 }
 
+export interface EditNotificationPayload {
+  provider?: string | null;
+  template_id?: string | null;
+  recipient?: Record<string, unknown>;
+  content?: Record<string, unknown>;
+  variables?: Record<string, string> | null;
+  webhook_url?: string;
+  scheduled_at?: string | null;
+}
+
 export interface DashboardStats {
   total: number;
   pending: number;
@@ -153,7 +163,8 @@ export type FieldType =
   | "enum"
   | "array"
   | "object"
-  | "attachment";
+  | "attachment"
+  | "date";
 
 export interface FieldDefinition {
   name: string;
