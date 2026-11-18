@@ -117,6 +117,17 @@ vi.mock("../../../src/api/utils/utils.js", () => {
     }
   }
 
+  class MissingTemplateVariablesError extends Error {
+    public missingVariables: string[];
+    constructor(missingVariables: string[]) {
+      super(
+        `Missing values for template variable(s): ${missingVariables.join(", ")}`,
+      );
+      this.name = "MissingTemplateVariablesError";
+      this.missingVariables = missingVariables;
+    }
+  }
+
   return {
     process_notifications: vi.fn().mockResolvedValue(undefined),
     convert_notification_request_to_notification_schema: vi
@@ -129,6 +140,7 @@ vi.mock("../../../src/api/utils/utils.js", () => {
     InvalidProviderChannelError,
     InvalidContentSchemaError,
     ProviderNotFoundError,
+    MissingTemplateVariablesError,
     updateApiKeyNotificationUsage: vi.fn(),
     formatZodErrorResponse: (error: any, customPrefix?: string) => {
       const issues = error?.issues

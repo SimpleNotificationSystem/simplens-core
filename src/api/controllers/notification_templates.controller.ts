@@ -15,50 +15,13 @@ import {
 import { PluginRegistry } from "@src/plugins/index.js";
 import { MongoServerError } from "mongodb";
 import mongoose from "mongoose";
-import { pruneEmptyValues, formatZodErrorResponse } from "@src/api/utils/utils.js";
+import {
+  pruneEmptyValues,
+  formatZodErrorResponse,
+  validateTemplateContent,
+} from "@src/api/utils/utils.js";
+import { normalizeTemplateContentVariables } from "@src/utils/template-renderer.utils.js";
 import type { ValidationErrorDetail } from "@src/types/types.js";
-
-const normalizeTemplateVariablesInString = (value: string): string => {
-  let res = value.replace(
-    /\$\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g,
-    "{{$1}}",
-  );
-  res = res.replace(
-    /\$\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}/g,
-    "{{$1}}",
-  );
-  res = res.replace(
-    /(?<![{$])\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}(?!\})/g,
-    "{{$1}}",
-  );
-  res = res.replace(
-    /\$(?![{\d\s])([a-zA-Z_][a-zA-Z0-9_]*)/g,
-    "{{$1}}",
-  );
-  return res;
-};
-
-const normalizeTemplateContentVariables = (value: unknown): unknown => {
-  if (typeof value === "string") {
-    return normalizeTemplateVariablesInString(value);
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => normalizeTemplateContentVariables(item));
-  }
-
-  if (value && typeof value === "object") {
-    const normalizedObject: Record<string, unknown> = {};
-    Object.entries(value as Record<string, unknown>).forEach(
-      ([key, nestedValue]) => {
-        normalizedObject[key] = normalizeTemplateContentVariables(nestedValue);
-      },
-    );
-    return normalizedObject;
-  }
-
-  return value;
-};
 
 const validatePackageAndContentSchema = (
   packageName: string,
@@ -95,7 +58,10 @@ const validatePackageAndContentSchema = (
   const provider = PluginRegistry.get(providerId);
   const providerContentSchema = provider!.getContentSchema();
   const sanitizedContent = (pruneEmptyValues(content) || {}) as Record<string, unknown>;
-  const contentSchemaValidationRes = providerContentSchema.safeParse(sanitizedContent);
+  const contentSchemaValidationRes = validateTemplateContent(
+    sanitizedContent,
+    providerContentSchema,
+  );
   if (!contentSchemaValidationRes.success) {
     const formatted = formatZodErrorResponse(
       contentSchemaValidationRes.error,

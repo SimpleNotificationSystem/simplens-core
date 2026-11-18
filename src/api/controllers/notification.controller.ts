@@ -7,6 +7,7 @@ import {
   InvalidProviderChannelError,
   InvalidContentSchemaError,
   ProviderNotFoundError,
+  MissingTemplateVariablesError,
   process_notifications,
   updateApiKeyNotificationUsage,
   formatZodErrorResponse,
@@ -54,6 +55,17 @@ export const notification_controller = async (req: Request, res: Response)=>{
         if(err instanceof ProviderNotFoundError){
             res.status(400).json({
                 message: err.message
+            });
+            return;
+        }
+        if(err instanceof MissingTemplateVariablesError){
+            res.status(400).json({
+                error: err.message,
+                message: err.message,
+                errors: err.missingVariables.map((name) => ({
+                    path: name,
+                    message: `Missing value for template variable '${name}'`
+                }))
             });
             return;
         }
@@ -114,6 +126,17 @@ export const batch_notification_controller = async (req: Request, res: Response)
         if(err instanceof ProviderNotFoundError){
             res.status(400).json({
                 message: err.message
+            });
+            return;
+        }
+        if(err instanceof MissingTemplateVariablesError){
+            res.status(400).json({
+                error: err.message,
+                message: err.message,
+                errors: err.missingVariables.map((name) => ({
+                    path: name,
+                    message: `Missing value for template variable '${name}'`
+                }))
             });
             return;
         }

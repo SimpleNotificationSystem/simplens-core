@@ -7,7 +7,12 @@
 /**
  * Replace template variables in a string
  * Supports {{variable_name}} syntax with optional whitespace
- * 
+ *
+ * SimpleNS core renders template variables once, immediately before dispatch,
+ * and removes the `variables` object from the payload. Plugins therefore
+ * receive already-rendered content and should not need this helper. It remains
+ * exported for plugins that also run against older cores.
+ *
  * @param template - String with {{variable}} placeholders
  * @param variables - Key-value pairs for substitution
  * @returns String with variables replaced
@@ -25,7 +30,8 @@ export function replaceVariables(
     for (const [key, value] of Object.entries(variables)) {
         // Match {{key}} with optional whitespace inside braces
         const pattern = new RegExp(`\\{\\{\\s*${escapeRegex(key)}\\s*\\}\\}`, 'g');
-        result = result.replace(pattern, value);
+        // Use a replacer function so `$&`, `$1` and `$$` in values stay literal
+        result = result.replace(pattern, () => value);
     }
 
     return result;

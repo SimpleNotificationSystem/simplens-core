@@ -410,6 +410,120 @@ describe('PUT /api/notifications/:id (Edit and Requeue Failed Notification)', ()
     );
   });
 
+  it('should validate content against rendered variables while persisting raw content', async () => {
+    const mockDoc = createMockFailedDoc('email');
+    mockNotificationFindById.mockResolvedValueOnce(mockDoc);
+
+    const rawContent = {
+      subject: 'Hi {{name}}',
+      message: 'Body',
+      sender: { reply_to: '{{reply_to}}' },
+    };
+
+    const updatedDoc = {
+      ...mockDoc,
+      status: 'pending',
+      retry_count: 0,
+      error_message: null,
+      content: rawContent,
+      toObject() {
+        return { ...this };
+      }
+    };
+    mockNotificationFindByIdAndUpdate.mockResolvedValueOnce(updatedDoc);
+
+    const res = await request(app)
+      .put(`/api/notifications/${validId}`)
+      .send({
+        recipient: { email: 'newrecipient@example.com' },
+        content: rawContent,
+        variables: { name: 'Ada', reply_to: 'ada@example.com' },
+      });
+
+    expect(res.status).toBe(200);
+
+    // Raw content is persisted; the rendered copy is only used for validation.
+    expect(mockNotificationFindByIdAndUpdate).toHaveBeenCalledWith(
+      validId,
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          content: rawContent,
+          variables: { name: 'Ada', reply_to: 'ada@example.com' },
+        })
+      }),
+      expect.any(Object)
+    );
+
+    // The outbox payload carries raw content plus a plain variables record
+    // (never a Mongoose Map, which JSON.stringify would turn into {}).
+    expect(mockOutboxCreate).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            content: rawContent,
+            variables: { name: 'Ada', reply_to: 'ada@example.com' },
+          })
+        })
+      ]),
+      expect.any(Object)
+    );
+  });
+
+  it('should reject edit when a supplied variable breaks the provider schema', async () => {
+    const mockDoc = createMockFailedDoc('email');
+    mockNotificationFindById.mockResolvedValueOnce(mockDoc);
+
+    const res = await request(app)
+      .put(`/api/notifications/${validId}`)
+      .send({
+        recipient: { email: 'newrecipient@example.com' },
+        content: {
+          subject: 'Hi',
+          message: 'Body',
+          sender: { reply_to: '{{reply_to}}' },
+        },
+        variables: { reply_to: 'not-an-email' },
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('Content validation failed');
+    expect(mockOutboxCreate).not.toHaveBeenCalled();
+  });
+
+  it('should allow placeholders when no variables are supplied on edit', async () => {
+    const mockDoc = createMockFailedDoc('email');
+    mockNotificationFindById.mockResolvedValueOnce(mockDoc);
+
+    const updatedDoc = {
+      ...mockDoc,
+      status: 'pending',
+      retry_count: 0,
+      content: {
+        subject: 'Hi {{name}}',
+        message: 'Body',
+        sender: { reply_to: '{{reply_to}}' },
+      },
+      toObject() {
+        return { ...this };
+      }
+    };
+    mockNotificationFindByIdAndUpdate.mockResolvedValueOnce(updatedDoc);
+
+    const res = await request(app)
+      .put(`/api/notifications/${validId}`)
+      .send({
+        recipient: { email: 'newrecipient@example.com' },
+        content: {
+          subject: 'Hi {{name}}',
+          message: 'Body',
+          sender: { reply_to: '{{reply_to}}' },
+        },
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
   it('should successfully edit with manual content and unset provider (reverting to channel default)', async () => {
     const mockDoc = createMockFailedDoc('email');
     mockNotificationFindById.mockResolvedValueOnce(mockDoc);

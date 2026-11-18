@@ -5,6 +5,7 @@ import outbox_model from '@src/database/models/outbox.models.js';
 import { NOTIFICATION_STATUS, OUTBOX_STATUS, getTopicForChannel, ALERT_TYPE } from '@src/types/types.js';
 import mongoose from 'mongoose';
 import { apiLogger as logger } from '@src/workers/utils/logger.js';
+import { toVariablesRecord } from '@src/api/utils/utils.js';
 
 // Helper to extract channel-specific content for plugins
 // Dashboard stores: content: { mock: { message: "..." } }
@@ -173,7 +174,7 @@ export const resolveAlert = async (req: Request, res: Response): Promise<void> =
           provider: notification.provider,
           recipient: notification.recipient,
           content: extractedContent,
-          variables: notification.variables,
+          variables: toVariablesRecord(notification.variables),
           webhook_url: notification.webhook_url,
           retry_count: notification.retry_count,
           created_at: new Date(),
@@ -274,7 +275,7 @@ export const bulkResolveAlerts = async (req: Request, res: Response): Promise<vo
             provider: notification.provider,
             recipient: notification.recipient,
             content: extractedContent,
-            variables: notification.variables,
+            variables: toVariablesRecord(notification.variables),
             webhook_url: notification.webhook_url,
             retry_count: notification.retry_count,
             created_at: new Date(),

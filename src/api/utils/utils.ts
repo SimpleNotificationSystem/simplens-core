@@ -26,8 +26,46 @@ import { ApiKeyUsageAggregator } from "./api-key-cache.js";
 import { apiLogger as logger } from "@src/workers/utils/logger.js";
 import { PluginRegistry } from "@src/plugins/index.js";
 import notification_template_model from "@src/database/models/notification-template.models.js";
-import { ZodError } from "zod";
+import { ZodError, type ZodType } from "zod";
 import { resolveFileAttachmentConfig } from "@src/types/schemas.js";
+import {
+  containsPlaceholderToken,
+  findUnresolvedTemplateVariables,
+  maskTemplatePlaceholders,
+  renderTemplateVariables,
+  templatePropertyPathKey,
+} from "@src/utils/template-renderer.utils.js";
+
+/**
+ * Normalise a variables value (plain object, Mongoose Map, or undefined) into a
+ * plain string record. Returns undefined when there is nothing to apply.
+ */
+export const toVariablesRecord = (
+  value: unknown,
+): Record<string, string> | undefined => {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  let entries: [string, unknown][];
+  if (value instanceof Map) {
+    entries = Array.from(value.entries()) as [string, unknown][];
+  } else if (typeof value === "object") {
+    entries = Object.entries(value as Record<string, unknown>);
+  } else {
+    return undefined;
+  }
+
+  const record: Record<string, string> = {};
+  for (const [key, entryValue] of entries) {
+    if (entryValue === null || entryValue === undefined) {
+      continue;
+    }
+    record[key] = typeof entryValue === "string" ? entryValue : String(entryValue);
+  }
+
+  return Object.keys(record).length > 0 ? record : undefined;
+};
 
 const preloadTemplatesByIds = async (
   templateIds?: (string | null | undefined)[],
@@ -126,7 +164,7 @@ export const convert_notification_request_to_notification_schema = async (
     }
 
     const sanitizedContent = (pruneEmptyValues(content) || {}) as Record<string, unknown>;
-    validateContentSchema(channel, sanitizedContent, provider);
+    validateContentSchema(channel, sanitizedContent, provider, data.variables);
 
     const base_notification: notification = {
       request_id: data.request_id,
@@ -219,7 +257,7 @@ export const convert_batch_notification_schema_to_notification_schema = async (
 
       const resolvedContent = content || data.content;
       const sanitizedContent = (pruneEmptyValues(resolvedContent) || {}) as Record<string, unknown>;
-      validateContentSchema(channel, sanitizedContent, provider);
+      validateContentSchema(channel, sanitizedContent, provider, recipient.variables);
 
       const notification_obj: notification = {
         request_id: recipient.request_id,
@@ -605,6 +643,91 @@ export class ProviderNotFoundError extends Error {
 }
 
 /**
+ * Error class for content placeholders that the supplied variables do not cover.
+ */
+export class MissingTemplateVariablesError extends Error {
+  public missingVariables: string[];
+
+  constructor(missingVariables: string[]) {
+    super(
+      `Missing values for template variable(s): ${missingVariables.join(", ")}`,
+    );
+    this.name = "MissingTemplateVariablesError";
+    this.missingVariables = missingVariables;
+  }
+}
+
+const TEMPLATE_VALUE_ISSUE_CODES = new Set([
+  // Value-level issues (not shape/type) that a placeholder may satisfy later.
+  // Plugins may bundle their own Zod, so both v3 and v4 vocabularies are listed.
+  // Zod 4
+  "custom",
+  "invalid_format",
+  "invalid_value",
+  "invalid_union",
+  "invalid_date",
+  // Zod 3 (e.g. plugins that ship zod@3)
+  "invalid_string",
+  "invalid_enum_value",
+  "invalid_literal",
+  // Shared across v3 and v4
+  "too_small",
+  "too_big",
+]);
+
+/**
+ * Validate template content against a provider content schema while allowing
+ * placeholders in otherwise strictly validated fields.
+ *
+ * Zod has no structure-only mode, so placeholders are masked with a sentinel and
+ * only value-level issues (format/refinement/length) on masked leaves are
+ * ignored. Shape errors (missing fields, wrong types, unknown keys) always fail.
+ */
+export const validateTemplateContent = (
+  content: Record<string, unknown>,
+  schema: ZodType<unknown>,
+): { success: true } | { success: false; error: ZodError } => {
+  const direct = schema.safeParse(content);
+  if (direct.success) {
+    return { success: true };
+  }
+
+  if (!containsPlaceholderToken(content)) {
+    return { success: false, error: direct.error };
+  }
+
+  const maskedPaths = new Set<string>();
+  const masked = maskTemplatePlaceholders(content, maskedPaths) as Record<
+    string,
+    unknown
+  >;
+
+  let maskedResult: ReturnType<typeof schema.safeParse>;
+  try {
+    maskedResult = schema.safeParse(masked);
+  } catch {
+    // Fail closed when masking upsets a transform.
+    return { success: false, error: direct.error };
+  }
+
+  if (maskedResult.success) {
+    return { success: true };
+  }
+
+  const remainingIssues = maskedResult.error.issues.filter((issue) => {
+    const pathKey = templatePropertyPathKey(issue.path);
+    return !(
+      maskedPaths.has(pathKey) &&
+      TEMPLATE_VALUE_ISSUE_CODES.has(issue.code)
+    );
+  });
+
+  return remainingIssues.length === 0
+    ? { success: true }
+    : { success: false, error: new ZodError(remainingIssues) };
+};
+
+/**
  * Formats Zod errors or validation issue lists into a uniform API error response.
  * Guarantees both `error` and `message` contain the multi-line human-readable summary,
  * and `errors` contains structured `{ path, message }` items.
@@ -684,6 +807,7 @@ export const validateContentSchema = (
   channel: string,
   content: Record<string, unknown>,
   provider_id?: string,
+  variables?: Record<string, string>,
 ): void => {
   let provider: SimpleNSProvider | undefined;
   if (!provider_id) {
@@ -732,7 +856,28 @@ export const validateContentSchema = (
   }
 
   const providerContentSchema = provider.getContentSchema();
-  const validationResult = providerContentSchema.safeParse(sanitizedContent);
+
+  // When the request supplies variables, explicit placeholders must be covered.
+  // Omitting `variables` entirely keeps backward compatibility.
+  if (variables !== undefined) {
+    const missingVariables = findUnresolvedTemplateVariables(
+      sanitizedContent,
+      variables,
+    );
+    if (missingVariables.length > 0) {
+      throw new MissingTemplateVariablesError(missingVariables);
+    }
+  }
+
+  const hasVariables =
+    variables !== undefined && Object.keys(variables).length > 0;
+
+  // Validate a transient rendered copy; the caller persists the raw content.
+  const validationTarget = hasVariables
+    ? renderTemplateVariables(sanitizedContent, variables)
+    : sanitizedContent;
+
+  const validationResult = providerContentSchema.safeParse(validationTarget);
   if (!validationResult.success) {
     throw new InvalidContentSchemaError(
       resolvedProviderId,

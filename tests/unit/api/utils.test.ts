@@ -589,7 +589,7 @@ describe("API Utility Functions", () => {
             user_id: "user-1",
             email: "user1@example.com",
             phone: "+1111111111",
-            variables: { alert_type: "critical" },
+            variables: { alert_type: "critical", name: "Alice" },
           },
         ],
         webhook_url: "https://webhook.example.com/callback",

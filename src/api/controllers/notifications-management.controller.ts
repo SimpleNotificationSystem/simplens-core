@@ -5,7 +5,8 @@ import outbox_model from '@src/database/models/outbox.models.js';
 import { NOTIFICATION_STATUS, OUTBOX_STATUS, getTopicForChannel, type notification } from '@src/types/types.js';
 import { safeValidateEditFailedNotificationRequest, resolveFileAttachmentConfig, createFileAttachmentArraySchema } from '@src/types/schemas.js';
 import { PluginRegistry } from '@src/plugins/index.js';
-import { convert_notification_schema_to_outbox_schema, pruneEmptyValues, formatZodErrorResponse } from '../utils/utils.js';
+import { convert_notification_schema_to_outbox_schema, pruneEmptyValues, formatZodErrorResponse, toVariablesRecord, validateTemplateContent } from '../utils/utils.js';
+import { renderTemplateVariables } from '@src/utils/template-renderer.utils.js';
 import mongoose from 'mongoose';
 import { apiLogger as logger } from '@src/workers/utils/logger.js';
 
@@ -294,7 +295,7 @@ export const retryNotification = async (req: Request, res: Response): Promise<vo
           provider: notification.provider,
           recipient: notification.recipient,
           content: extractedContent,
-          variables: notification.variables,
+          variables: toVariablesRecord(notification.variables),
           webhook_url: notification.webhook_url,
           retry_count: 0,
           provider_history: notification.provider_history ?? [],
@@ -452,7 +453,14 @@ export const editAndRequeueNotification = async (req: Request, res: Response): P
 
     resolvedContent = (pruneEmptyValues(resolvedContent) || {}) as Record<string, unknown>;
 
-    // 4. Validate Recipient
+    // 4. Resolve variables before content validation so validation sees the
+    // values that will actually be delivered.
+    const resolvedVariablesSource = variables !== undefined
+      ? (variables === null ? undefined : variables)
+      : notification.variables;
+    const resolvedVariables = toVariablesRecord(resolvedVariablesSource);
+
+    // 5. Validate Recipient
     const rawRecipient = recipient !== undefined ? recipient : (notification.recipient as Record<string, unknown>);
     const resolvedRecipient = (pruneEmptyValues(rawRecipient) || {}) as Record<string, unknown>;
     const recipientSchema = effectiveProvider.getRecipientSchema();
@@ -467,7 +475,7 @@ export const editAndRequeueNotification = async (req: Request, res: Response): P
       return;
     }
 
-    // 5. Validate Content & File Attachments
+    // 6. Validate File Attachments
     const rawAttachments = resolvedContent.attachments;
     if (Array.isArray(rawAttachments) && rawAttachments.length > 0) {
       if (!effectiveAttachment || effectiveAttachment.enabled === false) {
@@ -490,7 +498,14 @@ export const editAndRequeueNotification = async (req: Request, res: Response): P
       }
     }
 
-    const contentValidation = effectiveProvider.getContentSchema().safeParse(resolvedContent);
+    // 7. Validate content against the rendered copy. Without variables we accept
+    // placeholders in strict fields so placeholder-only templates stay editable.
+    const contentSchema = effectiveProvider.getContentSchema();
+    const contentValidation = resolvedVariables
+      ? contentSchema.safeParse(
+          renderTemplateVariables(resolvedContent, resolvedVariables)
+        )
+      : validateTemplateContent(resolvedContent, contentSchema);
     if (!contentValidation.success) {
       res.status(400).json(
         formatZodErrorResponse(
@@ -501,12 +516,11 @@ export const editAndRequeueNotification = async (req: Request, res: Response): P
       return;
     }
 
-    // 6. Variables, Webhook URL, Scheduled At
-    const resolvedVariables = variables !== undefined ? (variables === null ? undefined : variables) : notification.variables;
+    // 8. Webhook URL, Scheduled At
     const resolvedWebhookUrl = webhook_url !== undefined ? webhook_url : notification.webhook_url;
     const resolvedScheduledAt = scheduled_at !== undefined ? (scheduled_at === null ? undefined : new Date(scheduled_at)) : notification.scheduled_at;
 
-    // 7. Atomic Transaction: Update notification and enqueue in outbox
+    // 9. Atomic Transaction: Update notification and enqueue in outbox
     const session = await mongoose.startSession();
 
     try {
@@ -559,12 +573,19 @@ export const editAndRequeueNotification = async (req: Request, res: Response): P
           throw new Error('Notification not found during update');
         }
 
-        const notificationObj = (typeof (updatedDoc as { toObject?: () => unknown }).toObject === 'function')
+        const notificationObj = ((typeof (updatedDoc as { toObject?: () => unknown }).toObject === 'function')
           ? (updatedDoc as { toObject: () => unknown }).toObject()
-          : updatedDoc;
+          : updatedDoc) as Record<string, unknown>;
+
+        // Mongoose Maps do not survive JSON serialisation, so enqueue a plain
+        // variables record (the worker renders from it and then strips it).
+        const outboxSource = {
+          ...notificationObj,
+          variables: resolvedVariables,
+        };
 
         const outboxEntry = convert_notification_schema_to_outbox_schema(
-          notificationObj as unknown as notification,
+          outboxSource as unknown as notification,
           updatedDoc._id as mongoose.Types.ObjectId
         );
 
