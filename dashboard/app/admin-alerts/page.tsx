@@ -180,6 +180,7 @@ export default function AdminAlertsPage() {
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
+                            variant="destructive"
                             onClick={() => deleteChannelId && handleDelete(deleteChannelId)}
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >

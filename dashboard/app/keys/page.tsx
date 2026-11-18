@@ -584,7 +584,7 @@ export default function ApiKeysPage() {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700">
+                            <AlertDialogAction onClick={handleDelete} variant="destructive">
                                 Delete Permanently
                             </AlertDialogAction>
                         </AlertDialogFooter>

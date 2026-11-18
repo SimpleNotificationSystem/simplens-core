@@ -451,7 +451,7 @@ export function BatchNotificationForm({ onSuccess }: BatchNotificationFormProps)
 
             await notificationService.sendBatch(payload);
 
-            toast.success(`Batch notification sent to ${recipients.length} recipients!`);
+            toast.success(`Batch notification queued to ${recipients.length} recipients!`);
             onSuccess?.();
 
             // Reset

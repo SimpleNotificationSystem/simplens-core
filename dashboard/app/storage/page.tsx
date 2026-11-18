@@ -184,7 +184,6 @@ export default function StoragePage() {
                                                     onClick={() => setDeleteProviderId(provider._id)}
                                                 >
                                                     <Trash2 className="h-3.5 w-3.5" />
-                                                    Delete
                                                 </Button>
                                             </div>
                                         </div>
@@ -215,6 +214,7 @@ export default function StoragePage() {
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
+                            variant="destructive"
                             className="bg-destructive hover:bg-destructive/90"
                             onClick={() => deleteProviderId && handleDelete(deleteProviderId)}
                         >

@@ -382,7 +382,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
 
             await notificationService.send(payload);
 
-            toast.success("Notification sent successfully!");
+            toast.success("Notification queued successfully!");
             onSuccess?.();
 
             // Reset form
@@ -393,7 +393,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
             setSelectedTemplatesByChannel({});
             setTemplateVariablesByChannel({});
         } catch (error) {
-            showErrorToast(error, "Failed to send notification");
+            showErrorToast(error, "Failed to queue notification");
         } finally {
             setIsLoading(false);
         }

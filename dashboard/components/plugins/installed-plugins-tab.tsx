@@ -405,7 +405,7 @@ export function InstalledPluginsTab() {
                     <Button
                       variant="destructive"
                       size="icon"
-                      className="h-9 w-9 bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 text-white shadow-xs shrink-0"
+                      className="h-9 w-9 shadow-xs shrink-0"
                       onClick={() => {
                         setPluginToUninstall(plugin.name);
                         setUninstallDialogOpen(true);
@@ -925,6 +925,7 @@ export function InstalledPluginsTab() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={uninstalling}>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              variant="destructive"
               onClick={(e) => {
                 e.preventDefault();
                 handleUninstall();
