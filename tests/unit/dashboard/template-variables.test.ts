@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractTemplateVariables, pruneEmptyValues } from "../../../dashboard/lib/utils";
+import { extractTemplateVariables, pruneEmptyValues } from "../../../dashboard/lib/template-variables";
 
 describe("Dashboard template variables and pruning utilities", () => {
     describe("extractTemplateVariables", () => {
