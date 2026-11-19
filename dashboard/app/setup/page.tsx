@@ -203,7 +203,7 @@ export default function SetupPage() {
 
         try {
             await authService.signup({ username: trimmedUser, password });
-            
+
             // Check if any plugins are already installed
             try {
                 const installedRes = await pluginService.listInstalled();
@@ -419,9 +419,9 @@ export default function SetupPage() {
                                     <div
                                         className={`h-9 w-9 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 transition-all duration-300 ${
                                             isCompleted
-                                                ? "bg-primary text-primary-foreground shadow-sm shadow-primary/30"
+                                                ? "bg-blue-600 text-white shadow-sm shadow-primary/30"
                                                 : isActive
-                                                ? "bg-primary/20 text-primary border-2 border-primary ring-4 ring-primary/10"
+                                                ? "bg-blue-400/20 text-primary border-2 border-blue-600"
                                                 : "bg-muted text-muted-foreground border border-border"
                                         }`}
                                     >
@@ -439,7 +439,7 @@ export default function SetupPage() {
                                                 {step.title}
                                             </span>
                                             {isActive && (
-                                                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-primary/15 text-primary">
+                                                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-blue-600 text-white">
                                                     Current
                                                 </span>
                                             )}
@@ -452,37 +452,6 @@ export default function SetupPage() {
                             );
                         })}
                     </div>
-
-                    {/* Step Highlight Preview Box */}
-                    <div className="p-4 rounded-xl bg-card/60 backdrop-blur-xs border border-border/60 space-y-2">
-                        <div className="flex items-center gap-2 text-xs font-semibold text-primary">
-                            {currentStep === 1 && <Sparkles className="h-4 w-4" />}
-                            {currentStep === 2 && <Zap className="h-4 w-4" />}
-                            {currentStep === 3 && <Lock className="h-4 w-4" />}
-                            {currentStep === 4 && <Puzzle className="h-4 w-4" />}
-                            <span>
-                                {currentStep === 1 && "Orchestration, Not Delivery"}
-                                {currentStep === 2 && "Modular, Scalable & Extensible"}
-                                {currentStep === 3 && "Secure Master Account"}
-                                {currentStep === 4 && "Optional Provider Connectors"}
-                            </span>
-                        </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                            {currentStep === 1 &&
-                                "SimpleNS manages the complex notification lifecycle (retries, rate limiting, and recovery) while delegating actual sending to lightweight plugins."}
-                            {currentStep === 2 &&
-                                "Enjoy complete data sovereignty, AI integration via Model Context Protocol (MCP), independent channel scaling, and zero per-notification vendor fees."}
-                            {currentStep === 3 &&
-                                "Master administrator credentials are cryptographically protected and stored securely in MongoDB for complete operational authority."}
-                            {currentStep === 4 &&
-                                "Install delivery provider plugins now or explore the full catalog at any time inside the dashboard."}
-                        </p>
-                    </div>
-                </div>
-
-                {/* Bottom Footer Note */}
-                <div className="relative z-10 text-xs text-muted-foreground">
-                    SimpleNS &bull; Fast, Resilient, Open Architecture
                 </div>
             </div>
 
@@ -498,12 +467,9 @@ export default function SetupPage() {
                         priority
                         className="object-contain"
                     />
-                    <div className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary">
-                        Step {currentStep} of 4
-                    </div>
                 </div>
 
-                <div className="my-auto max-w-2xl w-full mx-auto py-6">
+                <div className="my-auto max-w-2xl w-full mx-auto">
                     <AnimatePresence mode="wait">
                         {/* ================= STEP 1: WHAT IS SIMPLENS ================= */}
                         {currentStep === 1 && (
@@ -516,11 +482,11 @@ export default function SetupPage() {
                                 className="space-y-8"
                             >
                                 <div className="space-y-3">
-                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-blue-600 text-white">
                                         <ShieldCheck className="h-3.5 w-3.5" />
                                         Step 1 of 4 &bull; Introduction
                                     </div>
-                                    <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight">
+                                    <h1 className="text-2xl sm:text-2xl font-extrabold tracking-tight leading-tight">
                                         What is SimpleNS?
                                     </h1>
                                     <p className="text-muted-foreground text-sm sm:text-base leading-relaxed">
@@ -604,11 +570,11 @@ export default function SetupPage() {
                                 className="space-y-8"
                             >
                                 <div className="space-y-3">
-                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-blue-600 text-white">
                                         <Zap className="h-3.5 w-3.5" />
                                         Step 2 of 4 &bull; Core Features
                                     </div>
-                                    <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight">
+                                    <h1 className="text-2xl sm:text-2xl font-extrabold tracking-tight leading-tight">
                                         What Can SimpleNS Do?
                                     </h1>
                                     <p className="text-muted-foreground text-sm sm:text-base leading-relaxed">
@@ -736,11 +702,11 @@ export default function SetupPage() {
                                 className="space-y-6"
                             >
                                 <div className="space-y-2">
-                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-blue-600 text-white">
                                         <Lock className="h-3.5 w-3.5" />
                                         Step 3 of 4 &bull; Master Account
                                     </div>
-                                    <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight">
+                                    <h1 className="text-2xl sm:text-2xl font-extrabold tracking-tight leading-tight">
                                         Create Administrator
                                     </h1>
                                     <p className="text-muted-foreground text-sm leading-relaxed">
@@ -922,9 +888,9 @@ export default function SetupPage() {
                             >
                                 {/* Top Banner with Skip button */}
                                 <div className="flex items-center justify-between pb-2 border-b border-border/50">
-                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-green-600 text-white">
                                         <CheckCircle2 className="h-3.5 w-3.5" />
-                                        Admin Created &bull; Optional Setup
+                                        Admin Created
                                     </div>
                                     <Button
                                         type="button"
@@ -1048,7 +1014,7 @@ export default function SetupPage() {
                                                     {currentConfiguringPlugin.manifest?.displayName || currentConfiguringPlugin.name}
                                                 </span>
                                             </div>
-                                            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+                                            <h1 className="text-2xl sm:text-2xl font-extrabold tracking-tight">
                                                 Configure Provider Credentials
                                             </h1>
                                             <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
@@ -1208,9 +1174,9 @@ export default function SetupPage() {
                             key={s.number}
                             className={`h-2 rounded-full transition-all duration-300 ${
                                 currentStep === s.number
-                                    ? "w-6 bg-primary"
+                                    ? "w-6 bg-blue-600"
                                     : currentStep > s.number
-                                    ? "w-2 bg-primary/50"
+                                    ? "w-2 bg-blue-600/50"
                                     : "w-2 bg-muted"
                             }`}
                         />

@@ -77,15 +77,15 @@ const navCategories: NavCategory[] = [
         items: [
             { title: "Plugins", href: "/plugins", icon: Puzzle },
             { title: "Templates", href: "/templates", icon: FileText },
-            { title: "Payload Studio", href: "/payload-studio", icon: Code },
-            { title: "Admin Alerts", href: "/admin-alerts", icon: BellRing },
             { title: "Storage", href: "/storage", icon: HardDrive },
+            { title: "Admin Alerts", href: "/admin-alerts", icon: BellRing },
+            { title: "Payload Studio", href: "/payload-studio", icon: Code },
         ],
     },
     {
         label: "System",
         items: [
-            { title: "API Keys", href: "/keys", icon: Key },  
+            { title: "API Keys", href: "/keys", icon: Key },
         ],
     },
 ];

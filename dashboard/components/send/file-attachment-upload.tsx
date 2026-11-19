@@ -32,7 +32,14 @@ export function FileAttachmentUpload({
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const maxCount = config?.maxCount || 10;
-    const maxFileSize = 10 * 1024 * 1024; // 10MB default for next.js proxy
+    const defaultMaxFileSize = 10 * 1024 * 1024; // 10MB ceiling for dashboard / Next.js proxy
+    const providerMaxFileSize =
+        typeof config?.maxFileSize === "number" && Number.isFinite(config.maxFileSize) && config.maxFileSize > 0
+            ? config.maxFileSize
+            : undefined;
+    const maxFileSize = providerMaxFileSize
+        ? Math.min(defaultMaxFileSize, providerMaxFileSize)
+        : defaultMaxFileSize;
 
     const handleFiles = async (files: FileList | File[]) => {
         const fileList = Array.from(files);
@@ -45,7 +52,11 @@ export function FileAttachmentUpload({
 
         for (const file of fileList) {
             if (file.size > maxFileSize) {
-                toast.error(`File '${file.name}' exceeds the maximum dashboard file size limit of ${formatBytes(maxFileSize)}`);
+                const limitLabel =
+                    providerMaxFileSize && providerMaxFileSize < defaultMaxFileSize
+                        ? "provider"
+                        : "dashboard";
+                toast.error(`File '${file.name}' exceeds the maximum ${limitLabel} file size limit of ${formatBytes(maxFileSize)}`);
                 return;
             }
         }
@@ -81,8 +92,8 @@ export function FileAttachmentUpload({
         }
     };
 
-    const handleRemove = (id: string) => {
-        const updated = attachments.filter((att) => att.id !== id);
+    const handleRemove = (indexToRemove: number) => {
+        const updated = attachments.filter((_, idx) => idx !== indexToRemove);
         onChange(updated);
     };
 
@@ -163,9 +174,9 @@ export function FileAttachmentUpload({
             {/* Uploaded attachments list */}
             {attachments.length > 0 && (
                 <div className="space-y-2">
-                    {attachments.map((att) => (
+                    {attachments.map((att, idx) => (
                         <div
-                            key={att.id}
+                            key={att.id || (att as unknown as Record<string, unknown>).file_id as string || idx}
                             className="flex items-center justify-between p-2 rounded-md bg-muted/60 border text-xs"
                         >
                             <div className="flex items-center gap-2 overflow-hidden pr-2">
@@ -187,7 +198,7 @@ export function FileAttachmentUpload({
                                 variant="ghost"
                                 size="icon"
                                 className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
-                                onClick={() => handleRemove(att.id)}
+                                onClick={() => handleRemove(idx)}
                             >
                                 <X className="h-3.5 w-3.5" />
                             </Button>

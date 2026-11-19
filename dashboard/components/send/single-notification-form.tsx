@@ -18,7 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { pluginService, templateService, notificationService, storageService } from "@/lib/api-client";
-import { withBasePath, showErrorToast } from "@/lib/utils";
+import { withBasePath, showErrorToast, pruneEmptyValues, extractTemplateVariables } from "@/lib/utils";
 
 // Generate a UUIDv4
 function generateUUID(): string {
@@ -63,34 +63,6 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
     const [templateDetailsByChannel, setTemplateDetailsByChannel] = useState<Record<string, NotificationTemplateDetail | null>>({});
     const [templateVariablesByChannel, setTemplateVariablesByChannel] = useState<Record<string, Record<string, string>>>({});
     const [templateVariableNamesByChannel, setTemplateVariableNamesByChannel] = useState<Record<string, string[]>>({});
-
-    const extractTemplateVariables = (input: unknown): string[] => {
-        const variables = new Set<string>();
-        const regex = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
-
-        const visit = (value: unknown) => {
-            if (typeof value === "string") {
-                for (const match of value.matchAll(regex)) {
-                    if (match[1]) {
-                        variables.add(match[1]);
-                    }
-                }
-                return;
-            }
-
-            if (Array.isArray(value)) {
-                value.forEach(visit);
-                return;
-            }
-
-            if (value && typeof value === "object") {
-                Object.values(value).forEach(visit);
-            }
-        };
-
-        visit(input);
-        return Array.from(variables).sort((left, right) => left.localeCompare(right));
-    };
 
     const getTemplatePreviewHtml = (content: Record<string, unknown> | undefined): string => {
         if (!content) return "";
@@ -331,7 +303,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
                 request_id: requestId,
                 client_id: clientId,
                 channel: selectedChannels,
-                recipient: { ...recipientData },
+                recipient: (pruneEmptyValues(recipientData) || {}) as Record<string, unknown>,
                 webhook_url: typeof window !== "undefined"
                     ? `${window.location.origin}${withBasePath("/api/webhook")}`
                     : "http://localhost:3000/api/webhook",
@@ -380,7 +352,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
             selectedChannels.forEach((channel) => {
                 const isTemplate = (contentModeByChannel[channel] || "content") === "template";
                 if (!isTemplate) {
-                    payload.content[channel] = contentData[channel] || {};
+                    payload.content[channel] = (pruneEmptyValues(contentData[channel]) || {}) as Record<string, unknown>;
                 } else if (contentData[channel]?.attachments?.length) {
                     payload.content[channel] = {
                         attachments: contentData[channel].attachments,
@@ -410,7 +382,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
 
             await notificationService.send(payload);
 
-            toast.success("Notification sent successfully!");
+            toast.success("Notification queued successfully!");
             onSuccess?.();
 
             // Reset form
@@ -421,7 +393,7 @@ export function SingleNotificationForm({ onSuccess }: SingleNotificationFormProp
             setSelectedTemplatesByChannel({});
             setTemplateVariablesByChannel({});
         } catch (error) {
-            showErrorToast(error, "Failed to send notification");
+            showErrorToast(error, "Failed to queue notification");
         } finally {
             setIsLoading(false);
         }

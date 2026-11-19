@@ -7,12 +7,24 @@ interface HtmlPreviewProps {
 
 /**
  * Replace template variables in HTML with actual values.
+ * Supports: {{var_name}}, {var_name}, $var_name, ${var_name}, ${{var_name}}
  */
 function replaceVariables(html: string, variables: Record<string, string>): string {
     let result = html;
     for (const [key, value] of Object.entries(variables)) {
-        const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, "g");
-        result = result.replace(regex, value);
+        const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        // Use a replacer function so `$&`, `$1` and `$$` in values stay literal
+        const substitute = () => value;
+        // 1. ${{ key }}
+        result = result.replace(new RegExp(`\\$\\{\\{\\s*${escapedKey}\\s*\\}\\}`, "g"), substitute);
+        // 2. {{ key }}
+        result = result.replace(new RegExp(`\\{\\{\\s*${escapedKey}\\s*\\}\\}`, "g"), substitute);
+        // 3. ${ key }
+        result = result.replace(new RegExp(`\\$\\{\\s*${escapedKey}\\s*\\}`, "g"), substitute);
+        // 4. { key } (standalone, not preceded by { or $)
+        result = result.replace(new RegExp(`(?<![{$])\\{\\s*${escapedKey}\\s*\\}(?!\\})`, "g"), substitute);
+        // 5. $key (not followed by alphanumeric or underscore)
+        result = result.replace(new RegExp(`\\$${escapedKey}(?![a-zA-Z0-9_])`, "g"), substitute);
     }
     return result;
 }

@@ -135,15 +135,19 @@ vi.mock('../../../src/database/models/outbox.models.js', () => ({
   }
 }));
 
-vi.mock('../../../src/workers/utils/logger.js', () => ({
-  apiLogger: {
+vi.mock('../../../src/workers/utils/logger.js', () => {
+  const dummyLogger = {
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
     success: vi.fn(),
     debug: vi.fn(),
-  },
-}));
+  };
+  return {
+    apiLogger: dummyLogger,
+    createLogger: vi.fn().mockReturnValue(dummyLogger),
+  };
+});
 
 // Mock Key Manager & Registry
 vi.mock('../../../src/admin-alerts/key-manager.js', () => ({

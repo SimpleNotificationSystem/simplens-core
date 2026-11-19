@@ -339,10 +339,16 @@ await axios.post('https://api.vendor.com/v1/send', formData);
 
 ### 6. Handling Template Variables
 
+> **SimpleNS core renders variables before dispatch.** Core replaces every
+> supported placeholder (`{{var}}`, `${var}`, `${{var}}`, `{var}`, `$var`) once,
+> immediately before calling `provider.send()`, then removes `variables` from the
+> payload. Plugins therefore receive already-rendered content and
+> `notification.variables` may be `undefined`; do not re-render it.
+
 SimpleNS notifications support dynamic variables submitted via `notification.variables` (`Record<string, string>`).
 
-#### Using `replaceVariables`
-The SDK provides `replaceVariables(template, variables)` which replaces `{{var}}` placeholders:
+#### Using `replaceVariables` (legacy cores only)
+The SDK provides `replaceVariables(template, variables)` which replaces `{{var}}` placeholders. Keep this only if your plugin must also run against a core version that does not render variables itself:
 
 ```typescript
 import { replaceVariables } from '@simplens/sdk';
@@ -352,8 +358,8 @@ const rendered = replaceVariables(text, { name: "Alice", code: "123456" });
 // Result: "Hello Alice, your code is 123456."
 ```
 
-#### Multi-Pattern Substitution Helper
-For maximum flexibility, plugins can support multiple templating conventions (`{{var}}`, `${var}`, `{var}`, and `$var`):
+#### Multi-Pattern Substitution Helper (legacy cores only)
+For older cores that pass `variables` through, plugins may support multiple templating conventions (`{{var}}`, `${var}`, `{var}`, and `$var`):
 
 ```typescript
 export function replaceAllVariables(template: string, variables: Record<string, string>): string {

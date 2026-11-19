@@ -8,6 +8,7 @@ import request from "supertest";
 import express from "express";
 import { randomUUID } from "crypto";
 import { MongoServerError } from "mongodb";
+import z from "zod";
 
 // Create a minimal express app for testing
 const createTestApp = async () => {
@@ -155,6 +156,95 @@ describe("Notification Templates Controller", () => {
           package: "gmail",
         }),
       );
+    });
+
+    it("should accept placeholders in strictly validated content fields", async () => {
+      const { PluginRegistry } = await import("../../../src/plugins/index.js");
+      (PluginRegistry.get as ReturnType<typeof vi.fn>).mockReturnValue({
+        getContentSchema: vi.fn().mockReturnValue(
+          z.object({
+            subject: z.string().min(1),
+            html: z
+              .string()
+              .refine((value) => /<[a-z][\s\S]*>/i.test(value), "html must contain a tag"),
+            reply_to: z.string().email().optional(),
+            website: z.string().url().optional(),
+            order_id: z.string().uuid().optional(),
+            phone: z.string().regex(/^\+?[1-9]\d{1,14}$/).optional(),
+            sent_at: z.string().datetime().optional(),
+          }),
+        ),
+      });
+
+      const notification_template_model = (
+        await import("../../../src/database/models/notification-template.models.js")
+      ).default;
+      (
+        notification_template_model.insertOne as ReturnType<typeof vi.fn>
+      ).mockResolvedValue({ _id: "template-id-placeholder" });
+
+      const response = await request(app)
+        .post("/api/templates")
+        .set("Authorization", "Bearer test-api-key")
+        .send({
+          template_id: "resend-template-1",
+          name: "Resend Receipt",
+          package: "resend",
+          content: {
+            subject: "Order {{order_id}}",
+            html: "{{html_body}}",
+            reply_to: "{{reply_to}}",
+            website: "{{website}}",
+            order_id: "{{order_id}}",
+            phone: "{{phone}}",
+            sent_at: "{{sent_at}}",
+          },
+        });
+
+      expect(response.status).toBe(201);
+      expect(notification_template_model.insertOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.objectContaining({
+            subject: "Order {{order_id}}",
+            html: "{{html_body}}",
+            reply_to: "{{reply_to}}",
+            website: "{{website}}",
+            order_id: "{{order_id}}",
+            phone: "{{phone}}",
+            sent_at: "{{sent_at}}",
+          }),
+        }),
+      );
+    });
+
+    it("should still reject genuinely invalid content", async () => {
+      const { PluginRegistry } = await import("../../../src/plugins/index.js");
+      (PluginRegistry.get as ReturnType<typeof vi.fn>).mockReturnValue({
+        getContentSchema: vi.fn().mockReturnValue(
+          z.object({
+            subject: z.string().min(1),
+            html: z
+              .string()
+              .refine((value) => /<[a-z][\s\S]*>/i.test(value), "html must contain a tag"),
+          }),
+        ),
+      });
+
+      const response = await request(app)
+        .post("/api/templates")
+        .set("Authorization", "Bearer test-api-key")
+        .send({
+          template_id: "resend-template-invalid",
+          name: "Broken Template",
+          package: "resend",
+          content: {
+            subject: "Hello",
+            html: "plain text without tags",
+          },
+        });
+
+      expect(response.status).toBe(400);
+      expect(JSON.stringify(response.body)).toContain("html");
     });
 
     it("should auto-generate template_id when not provided in request", async () => {

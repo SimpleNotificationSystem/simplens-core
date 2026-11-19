@@ -46,6 +46,10 @@ import { handleSchemaValidationFailure } from '../shared/schema-failure-handler.
 import { AdminAlertService } from '@src/admin-alerts/admin-alert.service.js';
 import status_outbox_model from '@src/database/models/status-outbox.models.js';
 import { resolveFileAttachmentConfig } from '@src/types/schemas.js';
+import {
+    findUnresolvedTemplateVariables,
+    renderNotificationContent,
+} from '@src/utils/template-renderer.utils.js';
 
 // Re-export consumer health types
 export type { ConsumerHealthState, ConsumerHealthCheckResult, ConsumerHealthDetails };
@@ -320,6 +324,27 @@ const processMessage = async (
         }
 
         const rawData = JSON.parse(message.value.toString());
+
+        // Render template variables exactly once, then strip them so plugins,
+        // retries and fallback handoffs never re-expand placeholders.
+        const templateVariables = rawData.variables as
+            | Record<string, unknown>
+            | undefined;
+        const renderedData = renderNotificationContent(rawData, templateVariables);
+        Object.assign(rawData, renderedData);
+        delete rawData.variables;
+
+        const unresolvedVariables = findUnresolvedTemplateVariables(
+            rawData.content,
+            templateVariables
+        );
+        if (unresolvedVariables.length > 0) {
+            const shown = unresolvedVariables.slice(0, 10);
+            logger.warn(
+                `[${channel}] Unresolved template variable(s) for ${rawData?.notification_id ?? 'unknown'}: ${shown.join(', ')}` +
+                (unresolvedVariables.length > shown.length ? ` (+${unresolvedVariables.length - shown.length} more)` : '')
+            );
+        }
 
         // 2. Validate with plugin schema
         const providerId = rawData.provider || PluginRegistry.getDefaultProviderId(channel);

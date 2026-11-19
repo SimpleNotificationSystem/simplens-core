@@ -105,13 +105,14 @@ describe('MCP Server Integration Tests', () => {
 
     it('should register all expected tools', async () => {
         const toolsResult = await client.listTools();
-        expect(toolsResult.tools.length).toBe(66);
+        expect(toolsResult.tools.length).toBe(67);
 
         const toolNames = toolsResult.tools.map(t => t.name);
         expect(toolNames).toContain('send_notification');
         expect(toolNames).toContain('create_template');
         expect(toolNames).toContain('list_notifications');
         expect(toolNames).toContain('delete_alert'); // Renamed from resolve_alert
+        expect(toolNames).toContain('edit_failed_notification');
         expect(toolNames).toContain('resolve_alert_with_retry');
         expect(toolNames).toContain('get_dashboard_stats');
         expect(toolNames).toContain('list_admin_channel_providers');
@@ -199,5 +200,127 @@ describe('MCP Server Integration Tests', () => {
         expect(response.isError).toBeUndefined();
         const content = response.content[0] as { text: string };
         expect(JSON.parse(content.text)).toEqual({ success: true });
+    });
+
+    it('should route edit_failed_notification tool call to PUT /api/notifications/:id', async () => {
+        mockAxios.mockResolvedValueOnce({
+            status: 200,
+            data: {
+                success: true,
+                message: 'Notification updated and queued for reprocessing',
+                data: { _id: '60d5ec48f83c2c2e88a53820' }
+            }
+        });
+
+        const response = await client.callTool({
+            name: 'edit_failed_notification',
+            arguments: {
+                notification_id: '60d5ec48f83c2c2e88a53820',
+                content: { message: 'Updated message' },
+                variables: { name: 'Ada' },
+                provider: null,
+                webhook_url: 'http://localhost:4000/webhook',
+                scheduled_at: '2026-11-19T09:00:00.000Z'
+            }
+        });
+
+        expect(mockAxios).toHaveBeenCalledWith(expect.objectContaining({
+            url: 'http://localhost:3000/api/notifications/60d5ec48f83c2c2e88a53820',
+            method: 'PUT',
+            data: {
+                content: { message: 'Updated message' },
+                variables: { name: 'Ada' },
+                provider: null,
+                webhook_url: 'http://localhost:4000/webhook',
+                scheduled_at: '2026-11-19T09:00:00.000Z'
+            },
+            headers: expect.objectContaining({
+                'Authorization': 'Bearer test-api-key'
+            })
+        }));
+
+        expect(response.isError).toBeUndefined();
+        const responseContent = response.content[0] as { text: string };
+        expect(JSON.parse(responseContent.text)).toEqual({
+            success: true,
+            message: 'Notification updated and queued for reprocessing',
+            data: { _id: '60d5ec48f83c2c2e88a53820' }
+        });
+    });
+
+    it('should forward explicit nulls that clear or revert fields', async () => {
+        mockAxios.mockResolvedValueOnce({
+            status: 200,
+            data: { success: true }
+        });
+
+        await client.callTool({
+            name: 'edit_failed_notification',
+            arguments: {
+                notification_id: '60d5ec48f83c2c2e88a53820',
+                provider: null,
+                variables: null,
+                scheduled_at: null
+            }
+        });
+
+        expect(mockAxios).toHaveBeenCalledWith(expect.objectContaining({
+            method: 'PUT',
+            data: { provider: null, variables: null, scheduled_at: null }
+        }));
+    });
+
+    it('should omit unsupplied fields from the edit_failed_notification payload', async () => {
+        mockAxios.mockResolvedValueOnce({
+            status: 200,
+            data: { success: true }
+        });
+
+        await client.callTool({
+            name: 'edit_failed_notification',
+            arguments: {
+                notification_id: '60d5ec48f83c2c2e88a53820',
+                content: { message: 'Only content' }
+            }
+        });
+
+        expect(mockAxios).toHaveBeenCalledWith(expect.objectContaining({
+            method: 'PUT',
+            data: { content: { message: 'Only content' } }
+        }));
+    });
+
+    it('should surface edit_failed_notification API errors', async () => {
+        mockAxios.mockResolvedValueOnce({
+            status: 400,
+            data: { error: 'Only failed notifications can be edited and requeued' }
+        });
+
+        const response = await client.callTool({
+            name: 'edit_failed_notification',
+            arguments: {
+                notification_id: '60d5ec48f83c2c2e88a53820',
+                content: { message: 'Updated message' }
+            }
+        });
+
+        expect(response.isError).toBe(true);
+        const errorContent = response.content[0] as { text: string };
+        expect(errorContent.text).toContain('Error (400)');
+        expect(errorContent.text).toContain('Only failed notifications can be edited and requeued');
+    });
+
+    it('should reject edit_failed_notification without any editable fields', async () => {
+        const response = await client.callTool({
+            name: 'edit_failed_notification',
+            arguments: {
+                notification_id: '60d5ec48f83c2c2e88a53820'
+            }
+        });
+
+        expect(mockAxios).not.toHaveBeenCalled();
+        expect(response.isError).toBe(true);
+        const guardContent = response.content[0] as { text: string };
+        expect(guardContent.text).toContain('No editable fields provided');
     });
 });

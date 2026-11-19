@@ -117,6 +117,17 @@ vi.mock("../../../src/api/utils/utils.js", () => {
     }
   }
 
+  class MissingTemplateVariablesError extends Error {
+    public missingVariables: string[];
+    constructor(missingVariables: string[]) {
+      super(
+        `Missing values for template variable(s): ${missingVariables.join(", ")}`,
+      );
+      this.name = "MissingTemplateVariablesError";
+      this.missingVariables = missingVariables;
+    }
+  }
+
   return {
     process_notifications: vi.fn().mockResolvedValue(undefined),
     convert_notification_request_to_notification_schema: vi
@@ -129,7 +140,31 @@ vi.mock("../../../src/api/utils/utils.js", () => {
     InvalidProviderChannelError,
     InvalidContentSchemaError,
     ProviderNotFoundError,
+    MissingTemplateVariablesError,
     updateApiKeyNotificationUsage: vi.fn(),
+    formatZodErrorResponse: (error: any, customPrefix?: string) => {
+      const issues = error?.issues
+        ? error.issues.map((i: any) => ({
+            path: i.path && i.path.length > 0 ? i.path.join('.') : '',
+            message: i.message,
+          }))
+        : Array.isArray(error)
+          ? error.map((i: any) => ({
+              path: Array.isArray(i.path) ? i.path.join('.') : String(i.path || ''),
+              message: i.message,
+            }))
+          : [];
+      const bulletList = issues
+        .map((i: any) => (i.path ? `• ${i.path}: ${i.message}` : `• ${i.message}`))
+        .join('\n');
+      const prefix = customPrefix ? `${customPrefix}:\n` : 'Validation failed:\n';
+      const summary = bulletList ? `${prefix}${bulletList}` : (customPrefix || 'Validation failed');
+      return {
+        error: summary,
+        message: summary,
+        errors: issues,
+      };
+    },
   };
 });
 

@@ -15,39 +15,13 @@ import {
 import { PluginRegistry } from "@src/plugins/index.js";
 import { MongoServerError } from "mongodb";
 import mongoose from "mongoose";
-
-const normalizeTemplateVariablesInString = (value: string): string => {
-  const normalizedDollarBraces = value.replace(
-    /\$\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}/g,
-    "{{$1}}",
-  );
-  return normalizedDollarBraces.replace(
-    /(?<!\{)\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}(?!\})/g,
-    "{{$1}}",
-  );
-};
-
-const normalizeTemplateContentVariables = (value: unknown): unknown => {
-  if (typeof value === "string") {
-    return normalizeTemplateVariablesInString(value);
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => normalizeTemplateContentVariables(item));
-  }
-
-  if (value && typeof value === "object") {
-    const normalizedObject: Record<string, unknown> = {};
-    Object.entries(value as Record<string, unknown>).forEach(
-      ([key, nestedValue]) => {
-        normalizedObject[key] = normalizeTemplateContentVariables(nestedValue);
-      },
-    );
-    return normalizedObject;
-  }
-
-  return value;
-};
+import {
+  pruneEmptyValues,
+  formatZodErrorResponse,
+  validateTemplateContent,
+} from "@src/api/utils/utils.js";
+import { normalizeTemplateContentVariables } from "@src/utils/template-renderer.utils.js";
+import type { ValidationErrorDetail } from "@src/types/types.js";
 
 const validatePackageAndContentSchema = (
   packageName: string,
@@ -59,6 +33,7 @@ const validatePackageAndContentSchema = (
       statusCode: number;
       message: string;
       error?: unknown;
+      errors?: ValidationErrorDetail[];
     } => {
   const metadata = PluginRegistry.getPluginMetadata();
   let isavailable: boolean = false;
@@ -82,13 +57,20 @@ const validatePackageAndContentSchema = (
 
   const provider = PluginRegistry.get(providerId);
   const providerContentSchema = provider!.getContentSchema();
-  const contentSchemaValidationRes = providerContentSchema.safeParse(content);
+  const sanitizedContent = (pruneEmptyValues(content) || {}) as Record<string, unknown>;
+  const contentSchemaValidationRes = validateTemplateContent(
+    sanitizedContent,
+    providerContentSchema,
+  );
   if (!contentSchemaValidationRes.success) {
+    const formatted = formatZodErrorResponse(
+      contentSchemaValidationRes.error,
+      `Invalid content schema for the package: ${packageName}`
+    );
     return {
       success: false,
       statusCode: 400,
-      message: `Invalid content schema for the package: ${packageName}`,
-      error: contentSchemaValidationRes.error,
+      ...formatted,
     };
   }
 
@@ -107,16 +89,9 @@ export const createTemplate = async (
     const validationResult =
       safeValidateNotificationTemplateRequestSchema(reqBody);
     if (!validationResult.success) {
-      const validationErrors = validationResult.error.issues.map((i) => ({
-        path: i.path.join("."),
-        message: i.message,
-      }));
-      const errmsg = validationErrors.map((e) => e.message).join("\n");
-      res.status(400).json({
-        message: errmsg,
-        errors: validationErrors,
-      });
-      logger.error(`Error in creating template request validation :${errmsg}`);
+      const formatted = formatZodErrorResponse(validationResult.error);
+      res.status(400).json(formatted);
+      logger.error(`Error in creating template request validation: ${formatted.message}`);
       return;
     }
     const normalizedContent = normalizeTemplateContentVariables(
@@ -128,8 +103,9 @@ export const createTemplate = async (
     );
     if (!packageValidation.success) {
       res.status(packageValidation.statusCode).json({
+        error: packageValidation.error || packageValidation.message,
         message: packageValidation.message,
-        error: packageValidation.error,
+        errors: packageValidation.errors,
       });
       logger.error(packageValidation.message);
       return;
@@ -141,10 +117,12 @@ export const createTemplate = async (
         ? rawTemplateId
         : new mongoose.Types.ObjectId().toString();
 
+    const sanitizedContent = (pruneEmptyValues(normalizedContent) || {}) as Record<string, unknown>;
+
     await notification_template_model.insertOne({
       ...validationResult.data,
       template_id,
-      content: normalizedContent,
+      content: sanitizedContent,
     });
     logger.success(`Successfully added template to db with template_id: ${template_id}`);
     res.status(201).json({
@@ -194,16 +172,9 @@ export const updateTemplate = async (
     const validationResult =
       safeValidateNotificationTemplateUpdateRequestSchema(req.body);
     if (!validationResult.success) {
-      const validationErrors = validationResult.error.issues.map((i) => ({
-        path: i.path.join("."),
-        message: i.message,
-      }));
-      const errmsg = validationErrors.map((e) => e.message).join("\n");
-      res.status(400).json({
-        message: errmsg,
-        errors: validationErrors,
-      });
-      logger.error(`Error in updating template request validation :${errmsg}`);
+      const formatted = formatZodErrorResponse(validationResult.error);
+      res.status(400).json(formatted);
+      logger.error(`Error in updating template request validation: ${formatted.message}`);
       return;
     }
 
@@ -227,19 +198,22 @@ export const updateTemplate = async (
     );
     if (!packageValidation.success) {
       res.status(packageValidation.statusCode).json({
+        error: packageValidation.error || packageValidation.message,
         message: packageValidation.message,
-        error: packageValidation.error,
+        errors: packageValidation.errors,
       });
       logger.error(packageValidation.message);
       return;
     }
+
+    const sanitizedContent = (pruneEmptyValues(normalizedContent) || {}) as Record<string, unknown>;
 
     await notification_template_model.updateOne(
       { template_id },
       {
         $set: {
           ...validationResult.data,
-          content: normalizedContent,
+          content: sanitizedContent,
         },
       },
     );

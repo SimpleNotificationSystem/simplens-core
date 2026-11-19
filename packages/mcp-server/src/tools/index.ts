@@ -12,6 +12,7 @@ import { registerSendBatchNotification } from './send-batch-notification.js';
 import { registerListPlugins } from './list-plugins.js';
 import { registerFindFailures } from './find-failures.js';
 import { registerRetryFailure } from './retry-failure.js';
+import { registerEditFailedNotification } from './edit-failed-notification.js';
 import { registerListAlerts } from './list-alerts.js';
 import { registerDeleteAlert } from './delete-alert.js';
 import { registerGetSendSchema } from './get-send-schema.js';
@@ -35,6 +36,7 @@ export function registerAllTools(server: McpServer, getCredentials: () => UserCr
     registerListPlugins(server, getCredentials);
     registerFindFailures(server, getCredentials);
     registerRetryFailure(server, getCredentials);
+    registerEditFailedNotification(server, getCredentials);
     registerListAlerts(server, getCredentials);
     registerDeleteAlert(server, getCredentials);
     registerGetSendSchema(server);

@@ -997,6 +997,22 @@ export const notificationTemplateRequestSchema = z.object({
 
 export const notificationTemplateUpdateRequestSchema = z.object(notificationTemplateFields);
 
+/**
+ * Edit and requeue failed notification request schema
+ * Only allows editing the 7 permitted fields; all other fields are blocked.
+ */
+export const editFailedNotificationSchema = z
+  .object({
+    provider: z.string().nullable().optional(),
+    template_id: z.string().nullable().optional(),
+    recipient: z.record(z.string(), z.unknown()).optional(),
+    content: z.record(z.string(), z.unknown()).optional(),
+    variables: variablesSchema.nullable().optional(),
+    webhook_url: z.url().optional(),
+    scheduled_at: z.coerce.date().nullable().optional(),
+  })
+  .strict();
+
 // ============================================================================
 // VALIDATION FUNCTIONS
 // ============================================================================
@@ -1020,6 +1036,8 @@ export const validateNotificationTemplateRequestSchema = (data: unknown) =>
   notificationTemplateRequestSchema.parse(data);
 export const validateNotificationTemplateUpdateRequestSchema = (data: unknown) =>
   notificationTemplateUpdateRequestSchema.parse(data);
+export const validateEditFailedNotificationRequest = (data: unknown) =>
+  editFailedNotificationSchema.parse(data);
 
 export const safeValidateBaseNotification = (data: unknown) =>
   baseNotificationSchema.safeParse(data);
@@ -1041,6 +1059,8 @@ export const safeValidateNotificationTemplateRequestSchema = (data: unknown) =>
   notificationTemplateRequestSchema.safeParse(data);
 export const safeValidateNotificationTemplateUpdateRequestSchema = (data: unknown) =>
   notificationTemplateUpdateRequestSchema.safeParse(data);
+export const safeValidateEditFailedNotificationRequest = (data: unknown) =>
+  editFailedNotificationSchema.safeParse(data);
 
 // ============================================================================
 // DYNAMIC OPERATIONAL SETTINGS & ADMIN AUTH SCHEMAS

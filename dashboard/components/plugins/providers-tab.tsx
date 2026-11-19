@@ -55,7 +55,7 @@ import {
   RefreshCw,
   Trash2,
   Edit2,
-  KeyRound,
+  ShieldCheck,
   TestTube2,
   CheckCircle2,
   AlertCircle,
@@ -947,15 +947,12 @@ export function ProvidersTab() {
                       onReset={() => handleResetRateLimit(p.id)}
                       isResetting={resettingProviderId === p.id}
                     />
-                    <Badge variant={p.enabled ? "default" : "secondary"} className="text-xs">
-                      {p.enabled ? "Enabled" : "Disabled"}
-                    </Badge>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap text-xs">
-                  <Badge variant="outline">Channel: {p.channel}</Badge>
-                  <Badge variant="outline">Priority: {p.options?.priority || 0}</Badge>
+                  <Badge variant="default" className="bg-blue-600 text-white">Channel: {p.channel}</Badge>
+                  <Badge variant="default">Priority: {p.options?.priority || 0}</Badge>
                   {(() => {
                     const plugin = installedPlugins.find((pl) => pl.name === p.plugin_name);
                     if (!plugin?.manifest?.fileAttachment?.enabled) return null;
@@ -969,7 +966,7 @@ export function ProvidersTab() {
                           : true;
 
                     return isAttEnabled ? (
-                      <Badge variant="outline" className="text-emerald-500 border-emerald-500/30 gap-1">
+                      <Badge variant="default" className="bg-green-600 text-white">
                         <Paperclip className="h-3 w-3" />
                         Attachments Enabled
                       </Badge>
@@ -981,8 +978,8 @@ export function ProvidersTab() {
                     );
                   })()}
                   <div className="flex items-center gap-1 text-muted-foreground">
-                    <KeyRound className="h-3.5 w-3.5 text-emerald-500" />
-                    <span>Encrypted (RSA-OAEP)</span>
+                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+                    <span>Encrypted</span>
                   </div>
                 </div>
 
@@ -1573,8 +1570,8 @@ export function ProvidersTab() {
                     {editingProvider ? "Update Credentials (Optional)" : "Credentials"}
                   </Label>
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <KeyRound className="h-3 w-3 text-emerald-500" />
-                    Envelope Encrypted
+                    <ShieldCheck className="h-3 w-3 text-emerald-500" />
+                    Encrypted
                   </span>
                 </div>
                 {editingProvider && (
@@ -1664,7 +1661,7 @@ export function ProvidersTab() {
               </div>
             </ScrollArea>
 
-            <DialogFooter className="shrink-0 pt-4 border-t mt-4 flex sm:justify-between items-center gap-2">
+            <DialogFooter className={`shrink-0 pt-4 border-t mt-4 flex sm:${editingProvider == null ? "justify-end" : "justify-between"} items-center gap-2`}>
               {editingProvider && (
                 <Button
                   type="button"
@@ -1678,8 +1675,7 @@ export function ProvidersTab() {
                   {testing ? "Testing..." : "Test Connection"}
                 </Button>
               )}
-
-              <div className="flex items-center gap-2">
+              <div className="flex flex-row items-center gap-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -1711,6 +1707,7 @@ export function ProvidersTab() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              variant="destructive"
               onClick={(e) => {
                 e.preventDefault();
                 handleDelete();

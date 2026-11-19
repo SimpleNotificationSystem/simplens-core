@@ -317,6 +317,41 @@ describe('processMessage via consumer run loop', () => {
             success: true,
             data: notification,
         }));
+        pluginRegistryGetDefaultProviderIdMock.mockReturnValue('primary');
+        pluginRegistryGetMock.mockReturnValue({
+            getNotificationSchema: providerGetNotificationSchemaMock,
+        });
+    });
+
+    it('should render template variables once and strip them before send', async () => {
+        await startAndProcess(createNotification({
+            content: {
+                subject: 'Hi {{name}}',
+                message: 'Token is {{secret}}',
+            },
+            variables: {
+                name: 'Ada',
+                secret: '{{name}}',
+            },
+        }));
+
+        expect(sendWithFallbackMock).toHaveBeenCalledTimes(1);
+        const [, sent] = sendWithFallbackMock.mock.calls[0];
+        expect(sent.content).toEqual({
+            subject: 'Hi Ada',
+            message: 'Token is {{name}}',
+        });
+        expect(sent.variables).toBeUndefined();
+    });
+
+    it('should leave literal content unchanged when no variables are supplied', async () => {
+        await startAndProcess(createNotification({
+            content: { message: 'Cost $100, use {color: red}' },
+        }));
+
+        const [, sent] = sendWithFallbackMock.mock.calls[0];
+        expect(sent.content).toEqual({ message: 'Cost $100, use {color: red}' });
+        expect(sent.variables).toBeUndefined();
     });
 
     it('should set failed, publish failure status, and alert for non-retryable provider errors', async () => {

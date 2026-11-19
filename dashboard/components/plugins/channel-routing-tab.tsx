@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { channelRoutingService, providerService } from "@/lib/api-client";
-import type { ChannelRoutingDto, ProviderDto } from "@/lib/types";
+import { channelRoutingService, pluginService, providerService } from "@/lib/api-client";
+import type { ChannelRoutingDto, PluginMetadata, ProviderDto } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -52,6 +62,11 @@ export function ChannelRoutingTab() {
     providerService.list()
   );
 
+  const { data: pluginMetadata, isLoading: channelsLoading, error: channelsError } = useSWR<PluginMetadata>(
+    "/api/plugins",
+    () => pluginService.getMetadata()
+  );
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRouting, setEditingRouting] = useState<ChannelRoutingDto | null>(null);
 
@@ -61,10 +76,25 @@ export function ChannelRoutingTab() {
   const [fallbackIds, setFallbackIds] = useState<string[]>([]);
   const [partitions, setPartitions] = useState<number>(6);
   const [saving, setSaving] = useState(false);
-  const [deletingChannel, setDeletingChannel] = useState<string | null>(null);
+
+  // Delete State
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [channelToDelete, setChannelToDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const allProviders = providersData?.providers || [];
   const routings = routingData?.routings || [];
+
+  // Channels are discovered from plugin metadata so administrators can only pick
+  // channels that actually have an installed provider.
+  const availableChannels = Object.keys(pluginMetadata?.channels || {}).sort();
+  const configuredChannels = new Set(routings.map((r) => r.channel));
+  // A channel has exactly one routing (unique index), so only offer channels
+  // that are not configured yet. Editing keeps the routing's current channel.
+  const unconfiguredChannels = availableChannels.filter((ch) => !configuredChannels.has(ch));
+  const channelOptions = editingRouting ? [editingRouting.channel] : unconfiguredChannels;
+  const channelsReady = !channelsLoading && !routingLoading;
+  const canAddRouting = unconfiguredChannels.length > 0;
 
   // Filter providers by selected channel
   const channelProviders = allProviders.filter((p) => !channel || p.channel === channel);
@@ -92,6 +122,15 @@ export function ChannelRoutingTab() {
     setFallbackIds([...fallbackIds, provId]);
   };
 
+  // Providers are channel-scoped, so clear the provider selection when the
+  // channel changes to avoid pairing a provider with the wrong channel.
+  const handleChannelChange = (value: string) => {
+    if (value === channel) return;
+    setChannel(value);
+    setDefaultProviderId("");
+    setFallbackIds([]);
+  };
+
   const handleRemoveFallback = (index: number) => {
     setFallbackIds(fallbackIds.filter((_, i) => i !== index));
   };
@@ -99,7 +138,7 @@ export function ChannelRoutingTab() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!channel.trim()) {
-      toast.error("Channel name is required");
+      toast.error("Select a channel");
       return;
     }
     if (!defaultProviderId.trim()) {
@@ -126,19 +165,20 @@ export function ChannelRoutingTab() {
     }
   };
 
-  const handleDelete = async (route: ChannelRoutingDto) => {
-    if (!window.confirm(`Delete the routing for channel '${route.channel}'?`)) return;
-
-    setDeletingChannel(route.channel);
+  const handleDelete = async () => {
+    if (!channelToDelete) return;
+    setDeleting(true);
     try {
-      await channelRoutingService.delete(route.channel);
-      toast.success(`Routing for channel '${route.channel}' deleted`);
+      await channelRoutingService.delete(channelToDelete);
+      toast.success(`Routing for channel '${channelToDelete}' deleted`);
+      setDeleteDialogOpen(false);
+      setChannelToDelete(null);
       mutateRouting();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to delete channel routing";
       toast.error(message);
     } finally {
-      setDeletingChannel(null);
+      setDeleting(false);
     }
   };
 
@@ -163,7 +203,19 @@ export function ChannelRoutingTab() {
             <RefreshCw className={`h-4 w-4 ${routingLoading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          <Button size="sm" onClick={handleOpenCreate} className="gap-2">
+          <Button
+            size="sm"
+            onClick={handleOpenCreate}
+            className="gap-2"
+            disabled={!channelsReady || !canAddRouting}
+            title={
+              !channelsReady
+                ? "Loading available channels..."
+                : !canAddRouting
+                  ? "Every available channel already has routing configured. Edit an existing routing instead."
+                  : undefined
+            }
+          >
             <Plus className="h-4 w-4" />
             Configure Channel
           </Button>
@@ -193,7 +245,18 @@ export function ChannelRoutingTab() {
                 Map channels to primary and cascading fallback providers.
               </p>
             </div>
-            <Button onClick={handleOpenCreate} className="gap-2">
+            <Button
+              onClick={handleOpenCreate}
+              className="gap-2"
+              disabled={!channelsReady || !canAddRouting}
+              title={
+                !channelsReady
+                  ? "Loading available channels..."
+                  : !canAddRouting
+                    ? "Every available channel already has routing configured."
+                    : undefined
+              }
+            >
               <Plus className="h-4 w-4" />
               Configure First Channel
             </Button>
@@ -255,19 +318,17 @@ export function ChannelRoutingTab() {
                     <Edit2 className="h-3.5 w-3.5" />
                   </Button>
                   <Button
-                    variant="outline"
+                    variant="destructive"
                     size="icon"
-                    className="h-8 w-8 text-destructive hover:text-destructive"
+                    className="h-8 w-8"
                     title={`Delete ${route.channel} routing`}
                     aria-label={`Delete ${route.channel} routing`}
-                    onClick={() => handleDelete(route)}
-                    disabled={deletingChannel === route.channel}
+                    onClick={() => {
+                      setChannelToDelete(route.channel);
+                      setDeleteDialogOpen(true);
+                    }}
                   >
-                    {deletingChannel === route.channel ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-3.5 w-3.5" />
-                    )}
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </CardContent>
@@ -289,22 +350,55 @@ export function ChannelRoutingTab() {
 
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="route-channel">Channel Name</Label>
-                <Input
-                  id="route-channel"
-                  placeholder="e.g. email, sms, mock"
+                <Label htmlFor="route-channel">Channel</Label>
+                <Select
                   value={channel}
-                  onChange={(e) => setChannel(e.target.value.toLowerCase())}
-                  disabled={!!editingRouting}
-                  required
-                />
+                  onValueChange={handleChannelChange}
+                  disabled={!!editingRouting || channelsLoading || channelOptions.length === 0}
+                >
+                  <SelectTrigger id="route-channel">
+                    <SelectValue
+                      placeholder={
+                        channelsLoading
+                          ? "Loading channels..."
+                          : channelOptions.length === 0
+                            ? "No channels available"
+                            : "Select a channel"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {channelOptions.map((ch) => (
+                      <SelectItem key={ch} value={ch}>
+                        {ch}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {channelsError ? (
+                  <p className="text-[11px] text-destructive">
+                    Failed to load channels. Refresh the page and try again.
+                  </p>
+                ) : !channelsLoading && channelOptions.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    {availableChannels.length === 0
+                      ? "No channels available. Install or enable a plugin to configure routing."
+                      : "All available channels already have routing configured. Edit an existing routing instead."}
+                  </p>
+                ) : null}
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="default-provider">Primary Default Provider</Label>
-                <Select value={defaultProviderId} onValueChange={setDefaultProviderId}>
+                <Select
+                  value={defaultProviderId}
+                  onValueChange={setDefaultProviderId}
+                  disabled={!channel}
+                >
                   <SelectTrigger id="default-provider">
-                    <SelectValue placeholder="Select primary provider" />
+                    <SelectValue
+                      placeholder={channel ? "Select primary provider" : "Select a channel first"}
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {channelProviders.map((p) => (
@@ -349,6 +443,7 @@ export function ChannelRoutingTab() {
 
                 <div className="flex items-center gap-2">
                   <Select
+                    disabled={!channel}
                     onValueChange={(val) => {
                       handleAddFallback(val);
                     }}
@@ -403,7 +498,7 @@ export function ChannelRoutingTab() {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={saving || !defaultProviderId} className="gap-2">
+              <Button type="submit" disabled={saving || !channel || !defaultProviderId} className="gap-2">
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                 {saving ? "Saving..." : "Save Routing"}
               </Button>
@@ -411,6 +506,32 @@ export function ChannelRoutingTab() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Channel Routing</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the routing configuration for channel &apos;{channelToDelete}&apos;? This will remove its primary provider and any cascading fallback chain.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? "Deleting..." : "Delete Routing"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

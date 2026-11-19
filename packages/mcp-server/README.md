@@ -8,7 +8,7 @@ A Model Context Protocol (MCP) server for the SimpleNS notification orchestratio
 
 - **Streamable HTTP Transport**: Connect remote or local MCP clients via HTTP (`/mcp`).
 - **Stdio Transport**: Local execution via command line (`--stdio`).
-- **Full Tool Suite (66 Tools)**: Comprehensive coverage for notifications, templates, alerts, logs, metrics, channel routing, providers, rate limits, dynamic settings, plugin lifecycle, admin configuration, storage providers, and file attachments
+- **Full Tool Suite (67 Tools)**: Comprehensive coverage for notifications, templates, alerts, logs, metrics, channel routing, providers, rate limits, dynamic settings, plugin lifecycle, admin configuration, storage providers, and file attachments
 
 ---
 
@@ -87,7 +87,7 @@ Add to your MCP Client configuration:
 
 ---
 
-## Complete Tools Reference (71 Tools)
+## Complete Tools Reference (67 Tools)
 
 ### 1. Notification Dispatch
 | Tool | Description |
@@ -117,6 +117,7 @@ Add to your MCP Client configuration:
 | `get_recent_notifications` | Fetch a quick snapshot of the most recent notification dispatches. |
 | `get_notification_by_id` | Inspect execution details, logs, and status of a specific notification. |
 | `delete_notification` | Delete a notification record from history. |
+| `edit_failed_notification` | Edit a failed notification's provider, template, recipient, content, variables, webhook, or schedule, then atomically re-queue it. |
 
 ### 5. Alerts, Failures & DLQ Management
 | Tool | Description |
