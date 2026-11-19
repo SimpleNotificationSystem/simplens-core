@@ -226,6 +226,15 @@ export class ApiClient {
         });
     }
 
+    /** PUT /api/notifications/:id - Edit a failed notification and requeue it */
+    async editFailedNotification(id: string, payload: unknown): Promise<ApiResponse> {
+        return request(this.baseUrl, `api/notifications/${id}`, {
+            method: 'PUT',
+            headers: this.authHeader,
+            body: payload,
+        });
+    }
+
     /** POST /api/notifications/:id/retry - Retry a failed notification */
     async retryFailure(notificationId: string): Promise<ApiResponse> {
         return request(this.baseUrl, `api/notifications/${notificationId}/retry`, {
