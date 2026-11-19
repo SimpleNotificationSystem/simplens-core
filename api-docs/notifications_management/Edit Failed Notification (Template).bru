@@ -1,0 +1,27 @@
+meta {
+  name: Edit Failed Notification (Template)
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{process.env.BASE_URL}}/api/notifications/{{process.env.NOTIFICATION_ID}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "template_id": "{{process.env.TEMPLATE_ID}}",
+    "variables": {
+      "name": "Ada",
+      "company": "SimpleNS"
+    },
+    "scheduled_at": null
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

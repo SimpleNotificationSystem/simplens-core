@@ -104,11 +104,26 @@ Notification dispatch and status.
 - **Check Notification Endpoint**: `GET /api/notification` - Check notification service status.
 
 ### 4. `notifications_management` (Protected)
-Query, inspect, retry, and delete notification records.
+Query, inspect, retry, edit, and delete notification records.
 - **List Notifications**: `GET /api/notifications` - Paginated, sorted, and filtered notification listing.
 - **Get Recent Notifications**: `GET /api/notifications/recent` - Live activity feed of latest notifications.
 - **Get Notification by Id**: `GET /api/notifications/:id` - Fetch details for a specific notification.
 - **Retry Notification**: `POST /api/notifications/:id/retry` - Reset a failed notification to pending for re-execution.
+- **Edit Failed Notification**: `PUT /api/notifications/:id` - Update editable fields on a failed notification and atomically re-queue it.
+  - Editable fields: `provider`, `template_id`, `recipient`, `content`, `variables`, `webhook_url`, `scheduled_at`.
+  - The request body is strict: unknown keys (for example `retry_count` or `status`) are rejected with `400`.
+  - Only notifications with `failed` status can be edited.
+  - `content` is stored as-is and rendered once at dispatch, so `{{placeholders}}` are allowed and are resolved from `variables`. Provide `template_id` instead to replace `content` with a template's content (its package must match the provider package).
+  - `provider: null` reverts to the channel's default provider. `variables: null` (or `{}`) clears stored variables. `scheduled_at: null` clears the schedule; omit `webhook_url` to keep the current value.
+  ```json
+  {
+    "recipient": { "user_id": "user1234" },
+    "content": { "message": "Hi Ada, your order 42 has shipped" },
+    "variables": { "name": "Ada", "order_id": "42" }
+  }
+  ```
+  `200` returns `{ "success": true, "message": "Notification updated and queued for reprocessing", "data": <notification> }`.
+- **Edit Failed Notification (Template)**: `PUT /api/notifications/:id` - Same endpoint using `template_id` + `variables` instead of inline `content`.
 - **Delete Notification**: `DELETE /api/notifications/:id` - Delete a notification record.
 
 ### 5. `notification_templates` (Protected)
